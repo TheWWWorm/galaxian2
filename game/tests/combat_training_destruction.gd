@@ -15,6 +15,12 @@ func run():
 
 func after_second_return(args: PackedStringArray):
 	await super.after_second_return(args)
+	var before: Dictionary=host.session.snapshot()
+	var equipment: RefCounted=host.session._world.equipment_owner()
+	verify_training_destruction(args,equipment)
+	check(host.session.snapshot()==before and not host.request_departure(),"Detached destruction changed station progress or exposed an unfinished flight")
+
+func verify_training_destruction(args: PackedStringArray, equipment: RefCounted):
 	var cat:=Catalogues.new()
 	if not cat.open(lib):check(false,cat.error);return
 	var resources:=TrainingDeathResources.new()
@@ -35,8 +41,6 @@ func after_second_return(args: PackedStringArray):
 	check(resources.configure_combat_training(lib,bindings),resources.error)
 	if resources.snapshot().is_empty():return
 	check(resources.snapshot().cargo_models.map(func(row):return row.model_id)==[16993,16993,16993,16990],"Gunant inherited the pirate container")
-	var equipment: RefCounted=host.session._world.equipment_owner()
-	var station_before: Dictionary=host.session.snapshot()
 	var world:=TrainingWorld.new()
 	check(world.configure_combat_training(bindings,cat,equipment,Vector3(10,10,10000),{"companions_empty":true,"location_match":false,"special_placement":false}),world.error)
 	check(not world.generate({"state":int(TRAINING_GOLDEN[0].input_state)}).is_empty(),world.error)
@@ -45,8 +49,7 @@ func after_second_return(args: PackedStringArray):
 	verify_training_death_pass(cat,world,resources)
 	verify_initial_gunant_death(cat,world,resources)
 	verify_training_projectile_death(cat,world,resources,equipment)
-	check(world.snapshot()==world_before and host.session.snapshot()==station_before,"Detached destruction changed construction or station progress")
-	check(not host.request_departure(),"Detached destruction exposed an unfinished combat flight")
+	check(world.snapshot()==world_before,"Detached destruction changed construction or station progress")
 
 func training_death_seed(world: RefCounted, id: int) -> Dictionary:
 	var row: Dictionary=world.snapshot().npc_construction.actors[id].duplicate(true)

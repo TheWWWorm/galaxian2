@@ -13,4 +13,3 @@ static func make() -> Array:
 	for id in 12:catalogues.tables.items.append({"arrays":[[],[],[0,id,1,4,2,23,3,1,4,mini(id,9)]]})
 	bindings.scenery_population={"count_base":10,"count_bound":4,"provenance":{}}
 	return [bindings,catalogues]
-

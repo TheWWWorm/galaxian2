@@ -17,6 +17,12 @@ func run():
 
 func after_second_return(args: PackedStringArray):
 	await super.after_second_return(args)
+	var before: Dictionary=host.session.snapshot()
+	var equipment: RefCounted=host.session._world.equipment_owner()
+	verify_training_control(args,equipment)
+	check(host.session.snapshot()==before and not host.request_departure(),"Detached control changed station progress or exposed an unfinished flight")
+
+func verify_training_control(args: PackedStringArray, equipment: RefCounted):
 	var cat:=Catalogues.new()
 	if not cat.open(lib):check(false,cat.error);return
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
@@ -32,9 +38,8 @@ func after_second_return(args: PackedStringArray):
 	for key in LiveRules.SPANS:
 		var bad:=data.duplicate(true);bad.provenance[key].offset+=1
 		check(not LiveRules.validate(bad,header.source_executable_bytes,"x86_64",bindings.arrival_staging,bindings.combat_training,bindings.opening_actors).is_empty(),"Changed training control extent accepted: "+key)
-	var station_before: Dictionary=host.session.snapshot()
 	var world:=TrainingWorld.new()
-	check(world.configure_combat_training(bindings,cat,host.session._world.equipment_owner(),Vector3(10,10,10000),{"companions_empty":true,"location_match":false,"special_placement":false}),world.error)
+	check(world.configure_combat_training(bindings,cat,equipment,Vector3(10,10,10000),{"companions_empty":true,"location_match":false,"special_placement":false}),world.error)
 	check(not world.generate({"state":int(TRAINING_GOLDEN[0].input_state)}).is_empty(),world.error)
 	var retained:=world.snapshot()
 	var live:=LiveTraining.new()
@@ -69,7 +74,7 @@ func after_second_return(args: PackedStringArray):
 	verify_mixed_targets(cat,world)
 	verify_training_route_end(cat,world)
 	verify_training_random(cat,world)
-	check(world.snapshot()==retained and world.route(3).snapshot().index==0 and host.session.snapshot()==station_before,"Live controller modified retained construction or station progress")
+	check(world.snapshot()==retained and world.route(3).snapshot().index==0,"Live controller modified retained construction or station progress")
 
 func training_player(position: Vector3) -> Dictionary:
 	return {"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"pose":Transform3D(Basis.IDENTITY,position),

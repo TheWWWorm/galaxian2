@@ -18,10 +18,15 @@ func run():
 
 func after_second_return(args: PackedStringArray):
 	await super.after_second_return(args)
+	var before: Dictionary=host.session.snapshot()
+	var equipment: RefCounted=host.session._world.equipment_owner()
+	verify_training_weapons(args,equipment)
+	check(host.session.snapshot()==before and not host.request_departure(),"Detached weapons changed station progress or exposed an unfinished flight")
+
+func verify_training_weapons(args: PackedStringArray, equipment: RefCounted):
 	var cat:=Catalogues.new()
 	if not cat.open(lib):check(false,cat.error);return
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
-	var equipment: RefCounted=host.session._world.equipment_owner()
 	var rules: Dictionary=bindings.combat_training_weapons
 	if header.reader=="resource-registration-v119":check(TrainingWeaponRules.parameters(rules),"Current pack omitted combat-training weapons")
 	if not TrainingWeaponRules.parameters(rules):
@@ -37,7 +42,7 @@ func after_second_return(args: PackedStringArray):
 	for key in TrainingWeaponRules.SPANS:
 		var bad:=rules.duplicate(true);bad.provenance[key].offset+=1
 		check(not TrainingWeaponRules.validate(bad,header.source_executable_bytes,"x86_64",bindings.arrival_staging,bindings.combat_training,bindings.combat_training_control,bindings.station_equipment,bindings.opening_actors,bindings.weapon_parameters).is_empty(),"Disconnected weapon source span accepted: "+key)
-	var station_before: Dictionary=host.session.snapshot();var gear_before: Dictionary=equipment.snapshot()
+	var gear_before: Dictionary=equipment.snapshot()
 	var world:=TrainingWorld.new()
 	check(world.configure_combat_training(bindings,cat,equipment,Vector3(10,10,10000),{"companions_empty":true,"location_match":false,"special_placement":false}),world.error)
 	check(not world.generate({"state":int(TRAINING_GOLDEN[0].input_state)}).is_empty(),world.error)
@@ -74,8 +79,7 @@ func after_second_return(args: PackedStringArray):
 	for id in 3:check(guns.snapshot().actors[id].projectiles.weapon.kind==1 and guns.snapshot().actors[id].audio.source_id==61,"Pirate weapon identity or sound changed")
 	verify_mixed_training_contacts(cat,world,equipment,mounts)
 	verify_training_fire_poses(cat,world,guns)
-	check(world.snapshot()==retained and equipment.snapshot()==gear_before and host.session.snapshot()==station_before,"Detached weapons changed world construction or station ownership")
-	check(not host.request_departure(),"Weapon ownership exposed an unfinished combat mission")
+	check(world.snapshot()==retained and equipment.snapshot()==gear_before,"Detached weapons changed world construction or station ownership")
 
 func verify_upgraded_primary(cat: RefCounted, mounts: RefCounted, player: RefCounted):
 	var primary:=TrainingPrimary.new();check(primary.configure(bindings,cat,mounts,player.loadout()),primary.error)

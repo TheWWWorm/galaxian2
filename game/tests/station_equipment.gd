@@ -2,6 +2,7 @@ extends "res://tests/second_flight_session.gd"
 ## Exercise the actual application after two earned mining returns. Trading,
 ## installed-slot ownership, failed preparation and acknowledged progression
 ## are checked through the same station session used by players.
+const EquipmentScenario=preload("res://tests/fixtures/equipment_scenario.gd")
 const EquipmentRules=preload("res://src/content/station_equipment_definitions.gd")
 
 func run():
@@ -13,6 +14,7 @@ func run():
 
 func after_second_return(args: PackedStringArray):
 	var before: Dictionary=host.session.snapshot()
+	var scenario_before:=before.duplicate(true)
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
 	if header.reader=="resource-registration-v116":check(EquipmentRules.parameters(bindings.station_equipment),"Current Mac pack omitted the equipment tutorial")
 	if not EquipmentRules.parameters(bindings.station_equipment):
@@ -90,6 +92,10 @@ func after_second_return(args: PackedStringArray):
 	before=state
 	check(not host.equipment_action("buy",0) and not host.equipment_action("open") and not host.session.navigate("next",host.station_panel) and host.session.snapshot()==before,"Completed tutorial repeated actions or advanced twice")
 	if args.size()==4:await capture(args[3],"equipment-completed-action-rejection")
+	var scenario_path:=OS.get_environment("GOF2_SCENARIO_OUTPUT")
+	if not scenario_path.is_empty() and failures==0:
+		var problem:=EquipmentScenario.capture(scenario_path,bindings,scenario_before,state,host.session._world.equipment_owner())
+		check(problem.is_empty(),problem)
 
 func death_branch(_args: PackedStringArray, _packet: Dictionary):pass
 

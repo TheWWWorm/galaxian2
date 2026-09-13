@@ -104,12 +104,15 @@ func verify_definitions(pack: String, library: RefCounted, bindings: RefCounted)
 			"no_arrival":changed.arrival_staging={}
 			"empty","departure_without_context":
 				changed.opening_actors.player_initialization.flight_cache={}
-				# A capability can be explicitly unsupported only when its
-				# consumers are unsupported too. Include later rescue/station
-				# owners when exercising a current pack with this older test.
-				for key in ["arrival_environment","arrival_actor_motion","arrival_actor_construction","arrival_world_initialization","opening_handoff","arrival_session","station_entry","station_presentation"]:
-					if changed.has(key):changed[key]={}
-				if scenario=="empty" and changed.has("station_departure"):changed.station_departure={}
+				# Remove the complete dependent progression branch. Retaining new
+				# mining or combat declarations would make this an inconsistent
+				# pack instead of an explicitly unsupported-cache fixture.
+				var departure: Dictionary=changed.get("station_departure",{}).duplicate(true)
+				for key in changed:
+					if key in ["opening_handoff","arrival_session","arrival_environment","arrival_actor_motion","arrival_actor_construction","arrival_world_initialization","player_destruction","game_over_presentation","flight_notices"] or str(key).begins_with("station_") or str(key).begins_with("first_flight") or str(key).begins_with("mining_") or str(key).begins_with("full_hold_") or str(key).begins_with("combat_training"):
+						changed[key]={}
+				if scenario=="departure_without_context":changed.station_departure=departure
+
 		var serialized:=JSON.stringify(changed,"",true,true)
 		metadata.records_sha256=serialized.sha256_text();metadata.records_bytes=serialized.to_utf8_buffer().size()
 		metadata.binding_id=("gof2-bindings-v1\n%s\n%s\n%s\n%s\n"%[metadata.base_content_id,metadata.source_executable_sha256,metadata.architecture,metadata.records_sha256]).sha256_text()

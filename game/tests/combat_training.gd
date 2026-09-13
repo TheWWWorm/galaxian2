@@ -17,17 +17,22 @@ func run():
 
 func after_second_return(args: PackedStringArray):
 	await super.after_second_return(args)
+	var before: Dictionary=host.session.snapshot()
+	if TrainingRules.parameters(bindings.combat_training):
+		check(before.campaign_cursor==7 and before.phase=="combat_departure_required","Encounter fixture did not reach acknowledged equipment completion")
+	var equipment: RefCounted=host.session._world.equipment_owner()
+	verify_training_construction(args,equipment)
+	check(host.session.snapshot()==before and not host.request_departure(),"Detached construction changed station progress or exposed an unfinished flight")
+
+func verify_training_construction(args: PackedStringArray, equipment: RefCounted):
 	var catalogues:=Catalogues.new()
 	if not catalogues.open(lib):check(false,catalogues.error);return
-	var before: Dictionary=host.session.snapshot()
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
 	if header.reader=="resource-registration-v117":check(TrainingRules.parameters(bindings.combat_training),"Current Mac pack omitted combat-training construction")
 	if not TrainingRules.parameters(bindings.combat_training):
 		check(not TrainingNPC.new().configure_combat_training(bindings,catalogues,null,Vector3.ZERO) and not TrainingRoute.new().configure_training_generated(bindings,0),"Older pack invented combat-training actors")
 		check(not TrainingWorld.new().configure_combat_training(bindings,catalogues,null,Vector3.ZERO,{}),"Older pack invented combat-training world setup")
 		return
-	check(before.campaign_cursor==7 and before.phase=="combat_departure_required","Encounter fixture did not reach acknowledged equipment completion")
-	var equipment: RefCounted=host.session._world.equipment_owner()
 	check(equipment!=null and equipment.requirements().satisfied,"Completed tutorial lost its equipment owner")
 	if equipment==null:return
 	check(TrainingRules.validate(bindings.combat_training,header.source_executable_bytes,"x86_64",bindings.arrival_staging,bindings.station_equipment,bindings.opening_actors).is_empty(),"Training declarations refused their source context")
@@ -40,7 +45,7 @@ func after_second_return(args: PackedStringArray):
 	check(not TrainingNPC.new().configure_combat_training(bindings,catalogues,EmptyEquipment.new(),Vector3.ZERO),"Empty equipment could construct combat training")
 	var detached: RefCounted=equipment.fork()
 	check(detached.transact("unmount",55) and not TrainingNPC.new().configure_combat_training(bindings,catalogues,detached,Vector3.ZERO),"Cargo armor satisfied the installed-equipment prerequisite")
-	check(equipment.requirements().satisfied and host.session.snapshot()==before,"Detached inventory mutation escaped into station ownership")
+	check(equipment.requirements().satisfied,"Detached inventory mutation escaped into station ownership")
 	check(not TrainingNPC.new().configure_combat_training(bindings,catalogues,equipment,Vector3(INF,0,0)),"Non-finite companion placement was accepted")
 	var route:=TrainingRoute.new()
 	for bad_id in [-1,4,0.0,true]:check(not route.configure_training_generated(bindings,bad_id),"Invalid route owner accepted")
@@ -98,7 +103,6 @@ func after_second_return(args: PackedStringArray):
 	detached=equipment.fork();check(detached.transact("unmount",22) and detached.transact("mount",0),detached.error)
 	var alternate:=TrainingNPC.new();check(alternate.configure_combat_training(bindings,catalogues,detached,position),alternate.error)
 	check(alternate.generate({"state":int(TRAINING_GOLDEN[0].input_state)}).random_state.state==TRAINING_GOLDEN[0].npc_state,"Supported primary swap changed NPC construction draws")
-	check(host.session.snapshot()==before and not host.request_departure(),"Detached construction advanced campaign state or exposed an unfinished flight")
 
 func verify_authored_route(route: RefCounted):
 	check(route!=null,"Gunant route owner was not retained")

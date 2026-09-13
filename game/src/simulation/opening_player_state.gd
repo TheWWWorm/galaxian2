@@ -15,10 +15,7 @@ const Repair = preload("res://src/simulation/equipment_repair.gd")
 const RepairDefinitions = preload("res://src/content/player_repair_definitions.gd")
 const FlightCache = preload("res://src/simulation/flight_player_cache.gd")
 const CacheDefinitions = preload("res://src/content/flight_player_cache_definitions.gd")
-const DepartureDefinitions = preload("res://src/content/station_departure_definitions.gd")
-const FullHoldDeparture = preload("res://src/content/full_hold_departure_definitions.gd")
-const FullHoldPirate = preload("res://src/content/full_hold_pirate_definitions.gd")
-const TrainingWeapons = preload("res://src/content/combat_training_weapon_definitions.gd")
+const Entry = preload("res://src/content/player_entry_definitions.gd")
 const StationEquipment = preload("res://src/simulation/station_equipment.gd")
 var error := ""
 var _state := {}
@@ -45,23 +42,21 @@ func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, equ
 func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previous_cache: Variant, equipment: RefCounted=null) -> bool:
 	clear()
 	if bindings==null or catalogues==null: return reject("Player initialization requires content definitions")
-	if cursor not in [0,1,2,4,7]:return reject("Unsupported player entry")
-	var arrival:=cursor==1
-	var departure:=cursor in [2,4,7]
-	if departure and not DepartureDefinitions.parameters(bindings.station_departure):return reject("This profile has no supported first departure")
-	if cursor==4 and (not FullHoldDeparture.parameters(bindings.full_hold_departure) or not FullHoldDeparture.StationReturn.parameters(bindings.station_return)):return reject("This profile has no supported second mining departure")
-	if cursor==7 and (not TrainingWeapons.parameters(bindings.combat_training_weapons) or not equipment is StationEquipment):return reject("Combat-training player requires the actual equipped tutorial ship")
-	var departure_rules: Dictionary=bindings.full_hold_departure if cursor==4 else bindings.station_departure
+	var entry:=Entry.new()
+	if not entry.configure(bindings,cursor):return reject(entry.error)
+	var arrival:=entry.is_arrival
+	var departure:=entry.is_departure
+	if entry.uses_equipment and not equipment is StationEquipment:return reject("Combat-training player requires the actual equipped tutorial ship")
 	var parameters: Dictionary=bindings.opening_actors.get("player_initialization",{})
 	if not Definitions.parameters(parameters) or not Actors.parameters(bindings.opening_actors):
 		return reject("This profile has no supported fresh player initialization")
 	var seed: Dictionary
-	if cursor==7:
+	if entry.uses_equipment:
 		if not equipment.requirements().satisfied:return reject("Install the required weapon and armor before combat training")
 		seed=equipment.snapshot().loadout
 		if seed.get("base_content_id")!=bindings.base_content_id or seed.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id:return reject("Equipped player belongs to another source identity")
 		for key in ["ship_id","station_id","system_id"]:
-			if seed.get(key)!=int(bindings.combat_training_weapons.player_entry[key]):return reject("Equipped player has an unsupported ship or location")
+			if seed.get(key)!=int(entry.equipped_entry[key]):return reject("Equipped player has an unsupported ship or location")
 		seed.campaign_cursor=cursor
 	else:
 		var loadout := Loadout.new()
@@ -102,12 +97,10 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 	var current:={"hull":int(bindings.opening_actors.player_current_hull_override),"armor":capacities.armor,"shield":capacities.shield}
 	var next_cache:={}
 	if not cache_parameters.is_empty():
-		if cursor==7:next_cache=FlightCache.combat_training_cache(cache_parameters,bindings.combat_training_weapons,seed,base_hull,capacities)
-		elif departure:next_cache=FlightCache.departure_cache(cache_parameters,departure_rules,seed,base_hull,capacities)
-		else:next_cache=FlightCache.base_cache(cache_parameters,seed,base_hull,capacities,cursor)
+		next_cache=entry.player_cache(cache_parameters,seed,base_hull,capacities)
 		if next_cache.is_empty():return reject("Flight cache lacks verified ship capacities or location")
 	if departure:
-		var reset:=FlightCache.combat_training_cache(cache_parameters,bindings.combat_training_weapons,seed,base_hull,capacities,true) if cursor==7 else FlightCache.departure_cache(cache_parameters,departure_rules,seed,base_hull,capacities,true)
+		var reset:=entry.player_cache(cache_parameters,seed,base_hull,capacities,true)
 		if reset.is_empty():return reject("First departure lacks its cleared pool cache")
 		current=FlightCache.restore_values(cache_parameters,base_hull,capacities,reset.values)
 		if current.is_empty():return reject("Unsupported first-departure player capacities")
@@ -132,10 +125,9 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 		var ordinary: Variant=bindings.weapon_parameters.get("ordinary_hit_policy",{})
 		if not HitDefinitions.parameters(policy) or not NPCWeapons.parameters(npc) or not OrdinaryHits.parameters(ordinary) or ordinary.is_empty():
 			return reject("Player contact requires verified NPC weapons and hit declarations")
-		if cursor==4 and not bindings.full_hold_pirate.is_empty():
-			if not FullHoldPirate.parameters(bindings.full_hold_pirate):return reject("Unsupported second-trip pirate weapon")
-			npc=bindings.full_hold_pirate.primary_weapon
-		var candidates: Array=bindings.combat_training_weapons.npc_weapons if cursor==7 else [npc]
+		var contacts:=entry.contact_weapons(npc)
+		if contacts.is_empty():return reject(entry.error)
+		var candidates: Array=contacts.candidates
 		for candidate in candidates:
 			if int(candidate.item_id)>=catalogues.tables.items.size(): return reject("Player contact weapon is absent from this catalogue")
 			var properties: Variant=catalogues.tables.items[int(candidate.item_id)].get("properties")
@@ -144,9 +136,9 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 			if not extra is int or extra!=int(ordinary.missing_additional_damage): return reject("NPC contact requires an unsupported additional damage path")
 			var weapon:={"base_content_id":seed.base_content_id,"binding_id":seed.binding_id,"launch_mode":"ordinary"}
 			for key in ["item_id","category","kind","damage"]: weapon[key]=int(candidate[key])
-			if cursor==7:weapon.campaign_cursor=cursor;weapon.nonplayer_source=true
+			weapon.merge(contacts.context)
 			weapons.append(weapon)
-		if cursor==4 and bindings.full_hold_pirate.is_empty():weapons=[]
+		if not contacts.enabled:weapons=[]
 	_state={"base_content_id":seed.base_content_id,"binding_id":seed.binding_id,"ship_id":seed.ship_id,
 		"equipment_ids":seed.equipment_ids.duplicate(),"vitals":pools.snapshot(),"capacities":capacities,
 		"half_extent":int(parameters.half_extent),"active":parameters.initial_active,
