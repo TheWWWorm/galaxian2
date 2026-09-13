@@ -203,15 +203,20 @@ func capture(directory: String,name: String):
 	for i in 8:await process_frame
 	await RenderingServer.frame_post_draw
 	check(root.get_texture().get_image().save_png(directory.path_join(name+".png"))==OK,"Could not capture "+name)
-func capture_phone(directory: String):
+func capture_phone(directory: String, name: String="app-mining-phone"):
 	var canvas:=SubViewport.new();canvas.size=Vector2i(420,800);canvas.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(canvas)
 	host.reparent(canvas);host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);host.set_mobile_layout(true);host.set_touch_controls(true)
 	for i in 8:await process_frame
+	host.present_session()
+	if host.session.has_method("present_current"):check(host.session.present_current(),host.session.error)
 	await RenderingServer.frame_post_draw
 	check(Rect2(Vector2.ZERO,canvas.size).encloses(host._flight_actions.get_global_rect()),"Phone flight action buttons escape the viewport")
-	check(canvas.get_texture().get_image().save_png(directory.path_join("app-mining-phone.png"))==OK,"Could not capture phone controls")
+	check(canvas.get_texture().get_image().save_png(directory.path_join(name+".png"))==OK,"Could not capture phone controls")
 	host.reparent(root);host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);host.set_mobile_layout(false);host.set_touch_controls(false)
 	canvas.free();host.session.rebase_time(now_us)
+	root.grab_focus()
+	for i in 3:await process_frame
+	if host.session.has_method("present_current"):check(host.session.present_current(),host.session.error)
 func check(value: bool,message: String):
 	checks+=1
 	if not value:failures+=1;printerr("FAIL ",checks,": ",message)

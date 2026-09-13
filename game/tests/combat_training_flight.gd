@@ -5,12 +5,39 @@ const TrainingBriefing=preload("res://src/simulation/mining_briefing.gd")
 const PreparedBodies=preload("res://src/content/scenery_body_resources.gd")
 const PreparedEffects=preload("res://src/content/scenery_effect_resources.gd")
 const TrainingSession=preload("res://src/presentation/first_flight_session.gd")
+const PreparedCargo=preload("res://src/simulation/flight_cargo.gd")
+const PreparedTargeting=preload("res://src/simulation/mining_targeting.gd")
+const PreparedApproach=preload("res://src/simulation/mining_approach.gd")
+const PreparedMining=preload("res://src/simulation/mining_session.gd")
+const PreparedDrill=preload("res://src/simulation/mining_drill.gd")
+const PreparedNotices=preload("res://src/simulation/flight_notices.gd")
+const PreparedStation=preload("res://src/content/station_exterior_resources.gd")
+const PreparedAutopilot=preload("res://src/simulation/station_autopilot.gd")
+const PreparedTargetArt=preload("res://src/presentation/flight_target_frame.gd")
+const PreparedScanArt=preload("res://src/presentation/flight_scan_animation.gd")
+const PreparedPlayerDeath=preload("res://src/simulation/player_destruction.gd")
+const PreparedDeathResources=preload("res://src/content/npc_destruction_resources.gd")
+const PreparedEncounter=preload("res://src/simulation/full_hold_encounter.gd")
+const PreparedParticles=preload("res://src/simulation/full_hold_particles.gd")
+const PreparedFrame=preload("res://src/simulation/first_flight_frame.gd")
+const PreparedGeometry=preload("res://src/presentation/full_hold_encounter_geometry.gd")
+const PreparedScene=preload("res://src/presentation/first_flight_scene.gd")
+const PreparedAudio=preload("res://src/presentation/opening_audio.gd")
+var training_scene: Node3D
+var training_sound: Node3D
 
 func run():
 	var args:=OS.get_cmdline_user_args()
-	check(args.size()==3,"Expected content, bindings and visuals")
-	if args.size()==3:verify(args)
-	print("Combat-training flight preparation: %d checks; %d failures"%[checks,failures])
+	check(args.size() in [3,4],"Expected content, bindings, visuals and optional captures")
+	if args.size() in [3,4]:
+		verify(args.slice(0,3))
+		if is_instance_valid(training_scene):training_scene.free()
+		if is_instance_valid(training_sound):training_sound.free()
+		if failures==0:await verify_training_application(args)
+	if is_instance_valid(training_scene):training_scene.free()
+	if is_instance_valid(training_sound):training_sound.free()
+	if is_instance_valid(host):host.free()
+	print("Combat-training flight: %d checks; %d failures"%[checks,failures])
 	quit(1 if failures else 0)
 
 func verify_training_destruction(args: PackedStringArray, equipment: RefCounted):
@@ -50,6 +77,10 @@ func verify_training_destruction(args: PackedStringArray, equipment: RefCounted)
 		var broken:=packet.duplicate(true);broken[key]=-1 if key=="cargo_used" else {}
 		check(not flight.prepare(bindings,cat,broken,1789100000,1789100000,true,bodies,effects,equipment) and flight.snapshot()==state,"Rejected departure changed the previous prepared world: "+key)
 	check(not flight.prepare(bindings,cat,packet,1789100000,1789100000,true,bodies,effects) and flight.snapshot()==state,"Missing native equipment was reconstructed from packet data")
+	verify_training_services(cat,flight,packet)
+	verify_training_player_death(cat,flight,packet)
+	verify_training_particles(cat,flight,packet)
+	verify_training_frame(cat,flight,packet)
 	var briefing:=TrainingBriefing.new();check(briefing.configure(bindings,lib,flight,"Space"),briefing.error)
 	if briefing.snapshot().is_empty():return
 	for i in 46:check(briefing.advance(150),briefing.error)
@@ -64,4 +95,472 @@ func verify_training_destruction(args: PackedStringArray, equipment: RefCounted)
 	check(briefing.navigate("next") and briefing.snapshot().dialogue.text_id==1728 and briefing.snapshot().dialogue.desktop_text_id==1729,"Training fire controls were substituted twice")
 	check(briefing.navigate("previous") and briefing.navigate("next") and briefing.navigate("next"),briefing.error)
 	check(briefing.snapshot().acknowledged and not briefing.snapshot().dialogue.visible and briefing.snapshot().mission==packet.mission and briefing.snapshot().progress==packet.progress,"Briefing acknowledgement completed the combat mission")
-	check(not TrainingSession.supported(bindings,7),"Preparation exposed the unfinished training application scene")
+	check(TrainingSession.supported(bindings,7)==not StoryRules.station_return(bindings).is_empty(),"Training availability omitted its complete return requirement")
+
+func verify_training_services(cat: RefCounted, flight: RefCounted, packet: Dictionary):
+	var cargo:=PreparedCargo.new();check(cargo.configure_departure(bindings,cat,flight),cargo.error)
+	check(cargo.snapshot()==packet.cargo and cargo.snapshot().free_space==24,"Training cargo was treated as a fresh empty mining hold")
+	var copied: RefCounted=cargo.fork_for_frame()
+	check(copied.add_entries([{"item_id":0,"quantity":1}]) and copied.snapshot().used==2 and cargo.snapshot()==packet.cargo,"Training cargo merges changed the original hold")
+	var frame:=PreparedTargetArt.source_geometry(lib,bindings)
+	var animation:=PreparedScanArt.source_geometry(lib,bindings,bindings.mining_targeting)
+	check(not frame.has("error") and not animation.has("error"),"Training acquisition art is unavailable")
+	if frame.has("error") or animation.has("error"):return
+	var selection:=PreparedTargeting.new()
+	check(selection.configure(bindings,cat,flight,PreparedTargetArt.logical_radii(frame.quarter_size,false),animation.frames),selection.error)
+	var approach:=PreparedApproach.new();check(approach.configure(bindings,cat,flight),approach.error)
+	var mining:=PreparedMining.new();check(mining.configure(bindings,cat,flight,false),mining.error)
+	var scenery: RefCounted=flight.scenery_owner();var index:=-1
+	for body in scenery.snapshot().bodies.objects:
+		if body.source_size_value>=4:index=int(body.index);break
+	check(index>=0,"Prepared source field has no mining candidate")
+	if index>=0:
+		var drill:=PreparedDrill.new()
+		check(drill.configure_for_scenery(bindings,cat,packet.loadout.equipment_ids,scenery,index,Vector2.ZERO),drill.error)
+	var notices:=PreparedNotices.new();check(notices.configure(bindings,lib,flight,cat),notices.error)
+	var station:=PreparedStation.new();check(station.configure(lib,bindings,cat,flight),station.error)
+	var autopilot:=PreparedAutopilot.new();check(autopilot.configure(bindings,cat,flight,station),autopilot.error)
+	check(station.snapshot().station_id==78 and not autopilot.snapshot().active,"Training lost its station or started autopilot on entry")
+
+func verify_training_player_death(cat: RefCounted, flight: RefCounted, packet: Dictionary):
+	var reference: Dictionary=flight.snapshot()
+	var resources:=PreparedDeathResources.new()
+	check(resources.configure_combat_training(lib,bindings),resources.error)
+	var death:=PreparedPlayerDeath.new();check(death.configure(bindings,resources,flight),death.error)
+	if death.snapshot().is_empty():return
+	var player: RefCounted=flight.player_owner();var pose: Transform3D=reference.player_pose
+	check(not death.start(player,pose,Vector3.ZERO,reference.camera_view.pose,7),"Living training player began destruction")
+	var guns:=TrainingGuns.new()
+	check(guns.configure_combat_training(bindings,cat,flight.scenery_owner().world_initialization_owner(),int(packet.progress.rank),.5),guns.error)
+	var weapon: Dictionary=guns.snapshot().actors[0].projectiles.weapon
+	check(player.set_permissions(true,true),player.error)
+	# Explicit lethal-contact fixture: feed the actual pirate weapon through
+	# normal player damage. This does not claim a complete flight playthrough.
+	var hits:=0
+	while player.snapshot().vitals.hull>0 and hits<100:
+		check(not player.weapon_hit(weapon,true,true,false).is_empty(),player.error);hits+=1
+	check(player.snapshot().vitals.hull==0 and player.snapshot().vitals.armor==0,"Pirate contact did not exhaust the equipped training pools")
+	check(not death.start(player,pose,Vector3.ZERO,reference.camera_view.pose,9),"Training death accepted an unsupported later mission")
+	check(death.start(player,pose,Vector3.ZERO,reference.camera_view.pose,7),death.error)
+	var initial:=death.snapshot()
+	check(initial.departure_cursor==7 and initial.campaign_cursor==7 and initial.equipment_ids==packet.loadout.equipment_ids and not initial.statistics_active and not initial.camera_follow_enabled,"Training death lost its equipped player or camera handoff")
+	var random: Dictionary=reference.random_state
+	check(not death.advance(150,pose,random,true).is_empty() and death.snapshot()==initial,"Paused training death advanced")
+	for i in 30:
+		var step: Dictionary=death.advance(100,pose,random)
+		check(not step.is_empty(),death.error)
+		if step.is_empty():return
+		random=step.random_state
+	check(death.snapshot().elapsed_ms==3000 and death.snapshot().events.breakup and not death.snapshot().body_visible and death.snapshot().effect.active,"Training player breakup lost the shared 3000ms boundary")
+	check(death.snapshot().events.sound_events.size()==1 and death.snapshot().events.sound_events[0] in [18,19],"Training player used NPC tumble sound")
+	var returning:=PreparedPlayerDeath.new();check(returning.configure(bindings,resources,flight),returning.error)
+	check(returning.start(player,pose,Vector3.ZERO,reference.camera_view.pose,8),"Source training return cursor lost player death support")
+	check(flight.snapshot()==reference and flight.equipment_owner().snapshot()==packet.equipment,"Detached lethal fixture changed the earned departure")
+
+func verify_training_particles(cat: RefCounted, flight: RefCounted, packet: Dictionary):
+	var reference: Dictionary=flight.snapshot()
+	var player: RefCounted=flight.player_owner();var scenery: RefCounted=flight.scenery_owner()
+	var encounter:=PreparedEncounter.new()
+	check(encounter.configure_combat_training(bindings,cat,lib,player,scenery,int(packet.progress.rank),.5),encounter.error)
+	var death:=PreparedPlayerDeath.new();check(death.configure(bindings,encounter.destruction_resources(),flight),death.error)
+	var particles:=PreparedParticles.new()
+	check(particles.configure(bindings,encounter.snapshot().combat,death,1789100000),particles.error)
+	var initial:=particles.snapshot()
+	if initial.is_empty():return
+	check(initial.owners.keys()==["player","npc0","npc1","npc2","npc3","world"] and initial.owners.npc3.mode==0,"Training particles lost Gunant's initial ordinary mode or actor order")
+	for id in 4:
+		var row: Dictionary=initial.owners["npc%d"%id]
+		check(not row.trail.enabled and not row.smoke.enabled and not row.fire.enabled,"Healthy training NPC emitted damage effects")
+	check(particles.advance(reference.player_pose,0) and particles.snapshot()==initial,"Zero-time training particles consumed an emitter step")
+	# Move only the fixture player close enough for the normal zero-time NPC
+	# activation, then apply normal damage. Inactive NPCs ignore weapon hits.
+	var pose:=Transform3D(Basis.IDENTITY,Vector3(10000,7000,160000))
+	var activated: Dictionary=encounter.evaluate_world(player,pose,0,reference.random_state)
+	check(not activated.is_empty(),encounter.error)
+	if activated.is_empty():return
+	check(particles.finish_npc_pass(encounter.snapshot().combat,activated.encounter.snapshot().combat,activated.encounter.snapshot().actor_events,0,1.0),particles.error)
+	encounter=activated.encounter
+	# Explicit lethal fixture through normal NPC damage. The retained encounter
+	# still owns all guidance, tumble, breakup and actor ordering; no mission or
+	# complete-flight coverage is implied by placing these hits here.
+	for id in 3:check(not encounter._combat.normal_hit(id,9999999).is_empty(),encounter._combat.error)
+	var random: Dictionary=activated.random_state
+	for tick in 22:
+		var before: Dictionary=encounter.snapshot().combat
+		check(particles.advance(reference.player_pose,150),particles.error)
+		var previous:=particles.snapshot()
+		var result: Dictionary=encounter.evaluate_world(player,pose,150,random)
+		check(not result.is_empty(),encounter.error)
+		if result.is_empty():return
+		var after: Dictionary=result.encounter.snapshot()
+		var broken: Array=after.actor_events.duplicate(true);broken[3].movement.root_pose="invalid"
+		check(not particles.finish_npc_pass(before,after.combat,broken,150,1.0) and particles.snapshot()==previous,"Last-actor particle failure retained earlier flags or roots")
+		check(particles.finish_npc_pass(before,after.combat,after.actor_events,150,1.0),particles.error)
+		encounter=result.encounter;random=result.random_state
+		var state:=particles.snapshot()
+		if tick==0:
+			for id in 3:
+				var key:="npc%d"%id
+				check(state.owners[key].trail.enabled and state.owners[key].smoke.enabled and state.owners[key].fire.enabled and state.owners[key].trail.cursor==0,"NPC death emitted before the next early manager pass")
+		if tick==1:
+			for id in 3:
+				var key:="npc%d"%id
+				check(state.owners[key].trail.cursor==1 and state.owners[key].trail.baseline==previous.owners[key].trail.baseline and state.owners[key].trail.baseline!=state.owners.npc3.trail.baseline,"Training trails shared another ship's retained root")
+	var final:=particles.snapshot()
+	for id in 3:
+		var row: Dictionary=final.owners["npc%d"%id]
+		check(row.death_phase=="explosion" and not row.trail.enabled and not row.smoke.enabled and not row.fire.enabled,"Pirate breakup did not stop its independent emitters")
+	check(not final.owners.npc3.damaged and not final.owners.npc3.trail.enabled and final.owners.npc3.trail.cursor==0 and final.owners.npc3.root_pose!=initial.owners.npc3.root_pose,"Gunant's healthy moving emitter root was replaced by a pirate's death state")
+	check(final.elapsed_ms==3300 and flight.snapshot()==reference,"Particle fixture changed its construction or advanced the wrong clock")
+
+func verify_training_frame(cat: RefCounted, flight: RefCounted, packet: Dictionary):
+	var world:=PreparedFrame.new()
+	check(world.configure(bindings,cat,lib,flight,"E",.5),world.error)
+	if world.snapshot().is_empty():return
+	var initial:=world.snapshot()
+	check(initial.actors.size()==4 and initial.ship_detail.selections.size()==5 and initial.radio.started==[false,false],"Training frame omitted an actor, LOD owner or radio")
+	check(initial.npc_scanner.equipment_id==81 and initial.npc_scanner.duration_ms==4000 and not initial.npc_scanner.visible,"Training scanner did not use the equipped source device")
+	verify_training_scanner(world)
+	training_scene=PreparedScene.new();root.add_child(training_scene)
+	check(training_scene.build(lib,bindings,visuals,cat,world),training_scene.error)
+	if training_scene.camera==null:return
+	training_sound=PreparedAudio.new();root.add_child(training_sound)
+	check(training_sound.configure_full_hold(lib,bindings,world,42),training_sound.error)
+	if not accept_training_presentation(world):return
+	check(world.evaluate(150,Vector2.ZERO,1,true).snapshot()==initial,"Paused training flight advanced")
+	for i in 47:
+		world=training_frame_step(world,150)
+		if world==null:return
+	check(world.snapshot().entry_released and not world.snapshot().dialogue.visible and world.snapshot().player.damage_allowed,"Shared training entry did not release control and damage")
+	while not world.dialogue_visible():
+		world=training_frame_step(world,150)
+		if world==null:return
+	check(world.snapshot().dialogue.text_id==1726,"Shared training frame omitted the briefing")
+	var before:=world.snapshot()
+	var modal: RefCounted=world.evaluate(150,Vector2.ONE,1,false,Vector2i.ZERO,Vector2.ZERO,true)
+	check(modal!=null,world.error)
+	if modal==null:return
+	check(modal.snapshot().random_state==before.random_state and modal.snapshot().player_pose==before.player_pose and modal.snapshot().encounter.elapsed_ms==before.encounter.elapsed_ms and modal.snapshot().encounter.primary_fire.is_empty(),"Modal training frame moved, fired or consumed world time")
+	for i in 3:
+		var next: RefCounted=world.navigate("next");check(next!=null,world.error)
+		if next==null:return
+		world=next
+		if not accept_training_presentation(world):return
+	check(world.snapshot().campaign_cursor==7 and not world.dialogue_visible() and not world.snapshot().combat_objective_acknowledged,"Briefing completed training")
+	verify_training_route_frame(world)
+	# Disclosed close-placement fixture, preserving all source NPC construction,
+	# loadout and normal activation. This is not an unmodified playthrough.
+	world._pose=Transform3D(Basis.IDENTITY,Vector3(10000,7000,160000));world._statistics_pose=world._pose
+	world=training_frame_step(world,0)
+	if world==null:return
+	var activated:=world.snapshot()
+	check(activated.actors.slice(0,3).all(func(actor):return actor.active) and activated.radio.started==[true,false],"Accepted NPC activation was not visible to this frame's radio")
+	var fired: RefCounted=world.evaluate(150,Vector2.ZERO,0,false,Vector2i.ZERO,Vector2.ZERO,true)
+	check(fired!=null,world.error)
+	if fired==null:return
+	var shooting: Dictionary=fired.snapshot()
+	check(not shooting.encounter.primary_fire.is_empty() and shooting.encounter.primary_fire.weapons[0].result.fired and shooting.encounter.primaries.guns[0].projectiles.available_slots==24,"Late training input did not fire the mounted weapon")
+	check(world.snapshot()==activated,"Prospective training fire changed its accepted input world")
+	world=fired
+	if not accept_training_presentation(world):return
+	# Normal damage feeds the real tumble/breakup owners. Mission completion
+	# must wait for their mode4 transitions and the HUD poll, then acknowledgement.
+	for id in 3:check(not world._encounter._combat.normal_hit(id,9999999).is_empty(),world._encounter._combat.error)
+	world=training_frame_step(world,0)
+	if world==null:return
+	check(not world.snapshot().combat_objective_satisfied and world.snapshot().campaign_cursor==7,"Zero hull skipped pirate tumble and mission polling")
+	var frames:=0
+	while not world.dialogue_visible() and frames<80:
+		world=training_frame_step(world,150);frames+=1
+		if world==null:return
+	var completion:=world.snapshot()
+	check(completion.dialogue.visible and completion.dialogue.text_id==1733 and completion.combat_objective_satisfied and completion.campaign_cursor==7,"Training did not offer its five completion lines after the three explosions")
+	check(completion.progress.player_kills==packet.progress.player_kills+3 and completion.progress.pirate_kills==packet.progress.pirate_kills+3,"Training lost earned pirate kill attribution")
+	check(not completion.equipment.get("training_inventory_released",false),"Showing completion dialogue released protected inventory")
+	if not completion.dialogue.visible:return
+	for i in 5:
+		var next: RefCounted=world.navigate("next");check(next!=null,world.error)
+		if next==null:return
+		world=next
+		if not accept_training_presentation(world):return
+	var returning:=world.snapshot()
+	check(returning.get("player_route",{}).is_empty() and (training_scene.waypoint_marker==null or not training_scene.waypoint_marker.visible),"Acknowledged completion retained the player route")
+	check(returning.campaign_cursor==8 and returning.mission=={"kind":11,"station_id":78,"reward":0,"bonus":0} and returning.combat_objective_acknowledged and not returning.cargo_objective_acknowledged,"Training acknowledgement changed cargo progress or selected the wrong return")
+	check(returning.equipment.training_inventory_released and returning.equipment.protected_item_ids==[] and returning.equipment.cargo==packet.cargo,"Training acknowledgement discarded cargo or failed to release protected items")
+	var prices: Array=returning.equipment.prices.installed
+	for index in prices.size():
+		if prices[index]!=null:
+			var values: Array=cat.tables.items[index].arrays[2]
+			check(prices[index].unit_price==int(values[15])+int((int(values[17])-int(values[15]))/2.0),"Installed price used item identity instead of the actual slot position")
+	var geometry:=PreparedGeometry.new();root.add_child(geometry)
+	check(geometry.build(world.encounter_owner(),lib,visuals,bindings),geometry.error)
+	if geometry.actors.size()==4:
+		var prepared: Dictionary=geometry.prepare_world(world.encounter_owner(),returning.camera_view.pose,returning.ship_detail)
+		check(not prepared.is_empty(),geometry.error)
+		if not prepared.is_empty():
+			geometry.commit_world(prepared)
+			check(geometry.actors[3].hull.get_meta("source_ship_id")==30 and geometry.actors[3].engine.get_meta("source_resource_id")==18030,"Gunant used the pirate hull or engine")
+			var invalid: Dictionary=returning.ship_detail.duplicate(true);invalid.selections.erase(3)
+			var pose: Transform3D=geometry.actors[0].hull.transform
+			check(geometry.prepare_world(world.encounter_owner(),returning.camera_view.pose,invalid).is_empty() and geometry.actors[0].hull.transform==pose,"Last-actor presentation failure changed an accepted hull")
+	geometry.free()
+	# Close placement at the actual station only reduces travel time. Normal
+	# autopilot selection, the pre-motion contact and station volume gate remain.
+	world._pose=Transform3D(Basis.IDENTITY,Vector3(0,0,10000));world._statistics_pose=world._pose
+	world=training_frame_step(world,0)
+	if world==null:return
+	var inbound: RefCounted=world.start_station_autopilot();check(inbound!=null,world.error)
+	if inbound==null:return
+	world=training_frame_step(inbound,0)
+	if world==null:return
+	var arrival:=world.prepare_station();check(not arrival.is_empty(),world.error)
+	if arrival.is_empty():return
+	check(arrival.campaign_cursor==8 and arrival.loadout==packet.loadout and arrival.cargo==packet.cargo and arrival.equipment==returning.equipment,"Training docking lost its loadout, cargo or released inventory")
+	check(arrival.progress==returning.progress and arrival.mission==returning.mission,"Training docking granted unearned progress or rewards")
+	if not StoryRules.station_return(bindings).is_empty():verify_training_station_return(cat,world)
+
+func verify_training_station_return(cat: RefCounted, world: RefCounted):
+	var station:=preload("res://src/simulation/station_entry.gd").new()
+	check(station.configure_return(bindings,cat,lib,world),station.error)
+	if station.snapshot().is_empty():return
+	var before: Dictionary=station.snapshot()
+	check(before.campaign_cursor==8 and before.cargo==world.snapshot().cargo and before.equipment==world.equipment_owner().snapshot() and before.source_marked_item_ids==[],"Training station return discarded or reprotected the earned equipment")
+	var reload:=preload("res://src/simulation/station_entry.gd").new()
+	check(not reload.configure_reload(bindings,cat,lib,station),"Station reloaded before the return was acknowledged")
+	for i in 9:
+		check(station.snapshot().dialogue.text_id==1738+i and station.snapshot().campaign_cursor==8,"Training station conversation skipped a line or advanced early")
+		check(station.acknowledge(),station.error)
+	var accepted: Dictionary=station.snapshot()
+	check(accepted.phase=="station_reload_required" and accepted.campaign_cursor==9 and accepted.cargo==before.cargo and accepted.equipment==before.equipment and accepted.reward_credits==0,"Station acknowledgement lost cargo, changed equipment or skipped the reload")
+	check(accepted.progress.rank_score==before.progress.rank_score+int(bindings.opening_handoff.cursor_weight) and accepted.progress.player_kills==before.progress.player_kills,"Return acknowledgement changed kill credit or counted its cursor twice")
+	check(reload.configure_reload(bindings,cat,lib,station),reload.error)
+	var restored: Dictionary=reload.snapshot()
+	check(restored.phase=="station_followup_required" and restored.boundary=="station_followup_required" and restored.station_reloaded and restored.campaign_cursor==9 and restored.player_cache==accepted.player_cache and restored.cargo==accepted.cargo and restored.equipment==accepted.equipment,"Station reload lost the retained player or inventory")
+	check(not reload.acknowledge() and reload.prepare_departure(bindings,cat).is_empty() and reload.snapshot()==restored,"Unsupported station follow-up advanced or launched")
+
+func verify_training_scanner(world: RefCounted):
+	var scanner: RefCounted=world._scanner.fork_for_frame()
+	var combat: Dictionary=world.snapshot().encounter.combat.duplicate(true)
+	for actor in combat.actors:
+		actor.active=true;actor.pose=Transform3D(Basis.IDENTITY,Vector3(0,0,-1000))
+	var aim:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"point":Vector3(400,300,-1000),"viewport_size":Vector2i(800,600)}
+	check(scanner.advance(combat,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,4000,true),scanner.error)
+	check(scanner.snapshot().candidate_actor_id==0 and scanner.snapshot().selected_actor_id==-1 and scanner.snapshot().elapsed_ms==4000,"Training scanner skipped source population order or acquired at equality")
+	check(scanner.advance(combat,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,1,true),scanner.error)
+	check(scanner.snapshot().selected_actor_id==0 and scanner.snapshot().events==[{"kind":"sound","source_id":26,"actor_id":0}],"Starter scanner invented cargo inspection or lost acquisition audio")
+	for id in 3:combat.actors[id].actor_mode=4
+	check(scanner.advance(combat,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,4001,true),scanner.error)
+	check(scanner.snapshot().selected_actor_id==3 and scanner.snapshot().markers.size()==1 and not scanner.snapshot().markers[0].hostile,"Friendly mode-zero Gunant was omitted after pirate destruction")
+	var held: Dictionary=scanner.snapshot()
+	combat.actors[3].hull_catalogue_id=2
+	check(not scanner.advance(combat,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and scanner.snapshot()==held,"Training scanner accepted a pirate hull for Gunant")
+
+func verify_training_application(args: PackedStringArray):
+	if not TrainingSession.supported(bindings,7):return
+	# Restore the prerequisite captured by the actual equipment tutorial. All
+	# subsequent input and transitions use the application's normal session.
+	var cat:=Catalogues.new();check(cat.open(lib),cat.error)
+	var scenario:=Scenario.new();check(scenario.open(OS.get_environment("GOF2_SCENARIO_INPUT"),bindings,cat)!=null,scenario.error)
+	var owner: RefCounted=scenario.station_owner(bindings,cat)
+	if owner==null:check(false,scenario.error);return
+	root.size=Vector2i(1280,720)
+	host=Host.new();root.add_child(host);host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	host.set_context(lib,bindings,visuals);host.set_process(false)
+	for i in 3:await process_frame
+	var station:=Station.new();host.viewport.add_child(station);host.session=station;station._world=owner
+	now_us=0
+	if not station._build_scene(lib,bindings,visuals,cat,now_us,42) or not host.station_panel.configure(lib,bindings,visuals) or not station.activate():check(false,station.error+host.station_panel.error);return
+	station._dialogue_started=true
+	host.present_session()
+	var accepted: Dictionary=station.snapshot()
+	check(host._launch_button.visible and not host._pause_button.visible and host.request_departure(),"Ready training station did not offer its normal departure confirmation")
+	var packet: Dictionary=host._launch_packet.duplicate(true)
+	host.cancel_departure()
+	check(station.snapshot()==accepted and not host.enter_first_flight(now_us),"Cancelled training departure changed the station")
+	var textures: Dictionary=visuals.textures;visuals.textures={}
+	check(host.request_departure() and not host.enter_first_flight(now_us,1789100000,1789100000) and host.session==station and station.snapshot()==accepted,"Failed training preparation lost the equipped station")
+	visuals.textures=textures
+	check(host.retry_transition() and host.enter_first_flight(now_us,1789100000,1789100000),host.status.text)
+	if not host.session is TrainingSession:return
+	host.session.rebase_time(now_us)
+	check(not is_instance_valid(station) and host.session.snapshot().equipment==packet.equipment and host.session.flight_audio!=null,"Training departure lost its native equipment or audio")
+	for i in 140:
+		if host.session.snapshot().dialogue.visible:break
+		if not training_app_step():return
+	check(host.session.snapshot().dialogue.text_id==1726 and host.session.briefing_audio.snapshot().history.back().source_id==189,"Training session omitted its source briefing and voice")
+	if args.size()==4:
+		await capture(args[3],"training-app-briefing")
+		await capture_phone(args[3],"training-app-briefing-phone")
+	for i in 3:
+		key(KEY_ENTER)
+		check(host.session.error.is_empty(),host.session.error)
+		if not host.session.error.is_empty():return
+	check(host.session.can_control() and host.session.snapshot().campaign_cursor==7,"Training briefing failed to release the actual controls")
+	if not host.session.can_control():return
+	key_down(KEY_SPACE)
+	check(host._controls.snapshot().held.fire and host.session.snapshot().mining_approach.phase=="idle","Primary input was consumed as a mining action")
+	if not training_app_step():return
+	check(host.session.snapshot().encounter.primary_fire.weapons[0].result.fired,"Held keyboard fire did not reach the training session")
+	key_up(KEY_SPACE)
+	key(KEY_ESCAPE);var paused: Dictionary=host.session.snapshot()
+	if not training_app_step():return
+	check(host.session.snapshot()==paused and not host._controls.snapshot().held.fire,"Paused training advanced or kept fire held")
+	key(KEY_ESCAPE);host.session.rebase_time(now_us)
+	# Actual trigger input, then a disclosed close placement for activation.
+	var event:=InputEventJoypadMotion.new();event.device=7;event.axis=JOY_AXIS_TRIGGER_RIGHT;event.axis_value=.9;host._unhandled_input(event)
+	for i in 3:
+		if not training_app_step():return
+	check(host.session.snapshot().encounter.primary_fire.weapons[0].result.fired,"Held controller trigger did not fire after the source cooldown")
+	event=InputEventJoypadMotion.new();event.device=7;event.axis=JOY_AXIS_TRIGGER_RIGHT;event.axis_value=0;host._unhandled_input(event)
+	var flight: RefCounted=host.session.flight_owner()
+	flight._pose=Transform3D(Basis.IDENTITY,Vector3(10000,7000,160000));flight._statistics_pose=flight._pose
+	check(host.session._commit(flight,false),host.session.error)
+	if not training_app_step():return
+	check(host.session.snapshot().radio.started[0] and host.session.snapshot().actors.slice(0,3).all(func(actor):return actor.active),"Training session did not activate its native encounter or radio")
+	# Allow the source follow camera to settle after this disclosed placement.
+	for i in 20:
+		if not training_app_step():return
+	if args.size()==4:
+		await capture(args[3],"training-app-encounter")
+		await capture_phone(args[3],"training-app-encounter-phone")
+	flight=host.session.flight_owner()
+	for id in 3:check(not flight._encounter._combat.normal_hit(id,9999999).is_empty(),flight._encounter._combat.error)
+	check(host.session._commit(flight,false),host.session.error)
+	for i in 100:
+		if host.session.snapshot().dialogue.visible:break
+		if not training_app_step():return
+	check(host.session.snapshot().dialogue.text_id==1733 and host.session.snapshot().campaign_cursor==7,"Training session did not wait for native deaths and completion instructions")
+	if not host.session.snapshot().dialogue.visible:return
+	for i in 5:
+		check(host.session.objective_audio.snapshot().history.back().source_id==439+i,"Training completion used the wrong acknowledged voice")
+		key(KEY_ENTER)
+	check(host.session.snapshot().campaign_cursor==8 and host.session.snapshot().equipment.training_inventory_released,"Application completion did not release the earned inventory")
+	# Mining remains available on the return trip. The ordinary drill earns
+	# ore into the same equipped hold without repricing retained inventory.
+	var prices: Dictionary=host.session.snapshot().equipment.prices.duplicate(true)
+	if not start_second_drill():return
+	for i in 500:
+		var drill: Dictionary=host.session.snapshot().mining_session.drill
+		if drill.is_empty():break
+		var desired: Vector2=-(drill.point+(drill.input+drill.drift)*5.0)*.2-drill.drift
+		var command:=Vector2.ZERO
+		for axis in 2:command[axis]=signf(desired[axis])*sqrt(minf(1,absf(desired[axis])/3.0))
+		if not step(command):return
+	var mined: Dictionary=host.session.snapshot()
+	check(mined.cargo.used==25 and mined.cargo.entries[0]=={"item_id":0,"quantity":1} and mined.equipment.cargo==mined.cargo and mined.scenery.mined_count==1,"Post-training mining lost the spare weapon or desynchronized equipment cargo")
+	check(mined.equipment.prices.installed==prices.installed and mined.equipment.prices.cargo[0]==prices.cargo[0],"Post-training mining repeated the inventory price reset")
+	flight=host.session.flight_owner();flight._pose=Transform3D(Basis.IDENTITY,Vector3(0,0,10000));flight._statistics_pose=flight._pose
+	check(host.session._commit(flight,false),host.session.error)
+	button(JOY_BUTTON_Y)
+	if not training_app_step():return
+	check(host.session.status=="station_transition_required","Training application did not accept the normal station contact gate")
+	if host.session.status!="station_transition_required":return
+	var arrived: Dictionary=host.session.snapshot();var previous: Node=host.session
+	textures=visuals.textures;visuals.textures={}
+	check(not host.enter_station(now_us,42) and host.session==previous and host.session.snapshot().cargo==arrived.cargo,"Failed training return destroyed the accepted flight")
+	visuals.textures=textures
+	check(host.retry_transition(),host.status.text)
+	if not host.session is Station:return
+	host.session.rebase_time(now_us)
+	for i in 10:
+		if not training_app_step():return
+	if args.size()==4:
+		await capture(args[3],"training-app-return")
+		await capture_phone(args[3],"training-app-return-phone")
+	for i in 9:
+		check(host.session.snapshot().dialogue.text_id==1738+i and host.session.audio.snapshot().history.back().source_id==444+i,"Training return lost its dialogue or original voice")
+		key(KEY_ENTER)
+	check(host.session.status=="station_reload_required" and host.session.snapshot().campaign_cursor==9,"Final return acknowledgement skipped source station reload")
+	var reloading: Node=host.session;var retained: Dictionary=reloading.snapshot()
+	textures=visuals.textures;visuals.textures={}
+	check(not host.enter_station(now_us,42) and host.session==reloading and reloading.snapshot()==retained,"Failed reload destroyed the acknowledged station")
+	visuals.textures=textures
+	check(host.retry_transition(),host.status.text)
+	var final: Dictionary=host.session.snapshot()
+	check(not is_instance_valid(reloading) and final.phase=="station_followup_required" and final.equipment==retained.equipment and final.player_cache==retained.player_cache and final.cargo==arrived.cargo,"Application reload lost the earned inventory or player state")
+	check(host.session.audio.snapshot().history.is_empty() and not host.request_departure() and not host.session.navigate("next",host.station_panel),"Unsupported follow-up played another visit's speech or advanced")
+	host.present_session()
+	if args.size()==4:await capture(args[3],"training-app-followup-boundary")
+	await verify_training_game_over(args,packet,owner.equipment_owner())
+
+func verify_training_game_over(args: PackedStringArray, packet: Dictionary, equipment: RefCounted):
+	# Separate death branch from the same earned departure; source projectile
+	# contact starts destruction after a disclosed reduction of the player pools.
+	host.reset()
+	var session:=TrainingSession.new();host.viewport.add_child(session);host.session=session
+	if not session.configure(lib,bindings,visuals,packet,true,now_us,1789100000,1789100000,false,equipment) or not session.activate():check(false,session.error);return
+	session.transition_rejected.connect(host.transition_error)
+	for i in 140:
+		if session.snapshot().dialogue.visible:break
+		if not training_app_step():return
+	for i in 3:key(KEY_ENTER)
+	var world: RefCounted=session.flight_owner()
+	world._pose=Transform3D(Basis.IDENTITY,Vector3(10000,7000,160000));world._statistics_pose=world._pose
+	check(session._commit(world,false),session.error)
+	if not training_app_step():return
+	var fixture:=DeathFixture.new();var dead: RefCounted=fixture.lethal(session.flight_owner())
+	check(dead!=null and fixture.failures==0,"Training source projectile did not start the application death branch")
+	fixture.free()
+	if dead==null:return
+	check(session._commit(dead,false),session.error);host.present_session()
+	var before: Dictionary=session.snapshot()
+	check(not session.can_control() and before.campaign_cursor==7 and not before.combat_objective_acknowledged,"Player destruction advanced training or retained control")
+	for reason in ["user","focus","hidden"]:
+		session.set_pause(reason,true,now_us)
+		check(training_app_step() and session.snapshot()==before and session.flight_audio.snapshot().paused and not session.request_game_over_exit(),"Pause advanced training death or accepted continuation: "+reason)
+		session.set_pause(reason,false,now_us)
+	var identity: Dictionary=session.scene.game_over._identity.duplicate(true)
+	var sound: Dictionary=session.flight_audio.snapshot()
+	session.scene.game_over._identity.binding_id="foreign"
+	check(not session.step(now_us+100000) and session.snapshot()==before and session.flight_audio.snapshot()==sound,"Rejected training death presentation committed state or sound")
+	session.scene.game_over._identity=identity
+	key_down(KEY_SPACE)
+	for i in 180:
+		if session.snapshot().player_destruction.phase=="game_over":break
+		if not training_app_step():return
+	check(session.snapshot().player_destruction.phase=="game_over" and session.status=="running","Training death did not wait at the game-over acknowledgement")
+	if args.size()==4:await capture(args[3],"training-app-game-over")
+	key_down(KEY_SPACE)
+	check(session.status=="running","Fire held through destruction acknowledged game over")
+	key_up(KEY_SPACE);key(KEY_ENTER)
+	check(session.status=="game_over_transition_required",session.error)
+	check(host.enter_game_over() and host.session==null and host.game_over_result().transition.campaign_cursor==7,"Training game over lost its source menu transition")
+
+func training_app_step() -> bool:
+	now_us+=100000
+	var controls: Dictionary=host._controls.snapshot()
+	if not host.session.step(now_us,controls.command,controls.held.fire):check(false,host.session.error);return false
+	host.present_session();return true
+
+func verify_training_route_frame(world: RefCounted) -> void:
+	if not world.snapshot().has("player_route"):return
+	var original: Dictionary=world.snapshot()
+	var branch: RefCounted=world.fork_for_frame()
+	var waypoint: Vector3=original.player_route.waypoints[0]
+	branch._pose=Transform3D(Basis.IDENTITY,waypoint+Vector3(0,0,-2010));branch._statistics_pose=branch._pose
+	var crossing: RefCounted=branch.evaluate(150,Vector2.ZERO,1)
+	check(crossing!=null,branch.error)
+	if crossing==null:return
+	check(absf(crossing.snapshot().player_pose.origin.z-waypoint.z)<2000,"Waypoint timing fixture did not cross its arrival box")
+	check(crossing.snapshot().player_route.index==0,"Waypoint used a post-motion position")
+	var reached: RefCounted=crossing.evaluate(0,Vector2.ZERO,0)
+	check(reached!=null,crossing.error)
+	if reached==null:return
+	check(reached.snapshot().player_route.index==1 and reached.snapshot().flight_notices.pending.any(func(row):return row.source_id==23 and row.text_ids==[532]),"Waypoint arrival omitted the next point or original notice")
+	check(world.snapshot()==original and reached.snapshot().progress==original.progress,"Prospective navigation changed the accepted world or earned progress")
+
+func training_frame_step(world: RefCounted, milliseconds: int) -> RefCounted:
+	var next: RefCounted=world.evaluate(milliseconds,Vector2.ZERO,0)
+	check(next!=null,world.error)
+	if next!=null and not accept_training_presentation(next):return null
+	return next
+
+func accept_training_presentation(world: RefCounted) -> bool:
+	var audio: Dictionary=training_sound.prepare_full_hold(world)
+	check(not audio.is_empty(),training_sound.error)
+	if audio.is_empty():return false
+	var accepted: bool=training_scene.present(world,false,int(world.snapshot().world_elapsed_ms))
+	check(accepted,training_scene.error)
+	if not accepted:return false
+	training_sound.commit_frame(audio)
+	return true

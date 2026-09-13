@@ -32,11 +32,11 @@ func build_arrival(library: RefCounted,visuals: RefCounted,bindings: RefCounted,
 	if not _owner.configure_arrival(bindings,catalogues,cache,quality):return reject(_owner.error)
 	return _build_models(library,visuals,bindings)
 
-func build_departure(library: RefCounted,visuals: RefCounted,bindings: RefCounted,catalogues: RefCounted,cache: Variant,quality:="high") -> bool:
+func build_departure(library: RefCounted,visuals: RefCounted,bindings: RefCounted,catalogues: RefCounted,cache: Variant,quality:="high", equipment: RefCounted=null) -> bool:
 	clear()
 	if library.manifest.get("content_id","")!=bindings.base_content_id or visuals.base_content_id!=bindings.base_content_id:return reject("Departure sun resources belong to another content identity")
 	_owner=Frame.new()
-	if not _owner.configure_departure(bindings,catalogues,cache,quality):return reject(_owner.error)
+	if not _owner.configure_departure(bindings,catalogues,cache,quality,equipment):return reject(_owner.error)
 	return _build_models(library,visuals,bindings)
 
 func _build_models(library: RefCounted,visuals: RefCounted,bindings: RefCounted) -> bool:

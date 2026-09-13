@@ -20,7 +20,7 @@ func after_second_return(args: PackedStringArray):
 	var before: Dictionary=host.session.snapshot()
 	var equipment: RefCounted=host.session._world.equipment_owner()
 	verify_training_control(args,equipment)
-	check(host.session.snapshot()==before and not host.request_departure(),"Detached control changed station progress or exposed an unfinished flight")
+	check_training_station_retained(before,"control")
 
 func verify_training_control(args: PackedStringArray, equipment: RefCounted):
 	var cat:=Catalogues.new()

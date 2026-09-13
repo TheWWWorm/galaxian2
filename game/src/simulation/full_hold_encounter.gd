@@ -160,6 +160,7 @@ func snapshot() -> Dictionary:
 	return result
 
 func projectile_visual_owner() -> RefCounted:return null if _projectiles==null else _projectiles.fork_for_frame()
+func combat_owner() -> RefCounted:return null if _combat==null else _combat.fork_for_frame()
 func impact_visual_owner() -> RefCounted:return null if _impacts==null else _impacts.fork_for_frame()
 func npc_destruction_owner(actor_id: int) -> RefCounted:return null if _control==null else _control.destruction_owner(actor_id)
 func destruction_resources() -> RefCounted:return null if _resources==null else _resources.fork_for_frame()

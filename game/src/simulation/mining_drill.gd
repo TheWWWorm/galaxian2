@@ -45,7 +45,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, equipment_ids: Arra
 		if not Numbers.integer(id,0,items.size()-1) or seen.has(int(id)):return reject("Invalid installed drill equipment")
 		seen[int(id)]=true
 		var properties: Dictionary=items[int(id)].properties
-		if properties.get(int(rules.item_kind_property))!=int(rules.equipment_kind):return reject("Installed item is not equipment")
+		if properties.get(int(rules.item_kind_property))!=int(rules.equipment_kind):continue
 		if properties.get(int(rules.item_category_property))==int(rules.drill_category):
 			if drill_id>=0:return reject("Multiple installed drills require an unverified equipment selection")
 			drill_id=int(id);selected=properties

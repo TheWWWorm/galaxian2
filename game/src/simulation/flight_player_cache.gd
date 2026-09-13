@@ -6,8 +6,7 @@ const Vitals=preload("res://src/simulation/combat_vitals.gd")
 const Library=preload("res://src/content/library.gd")
 const Departure=preload("res://src/content/station_departure_definitions.gd")
 const FullHoldDeparture=preload("res://src/content/full_hold_departure_definitions.gd")
-const StationReturn=preload("res://src/content/station_return_definitions.gd")
-const FullHoldReturn=preload("res://src/content/full_hold_return_definitions.gd")
+const FlightRules=preload("res://src/content/ordinary_flight_definitions.gd")
 const TrainingWeapons=preload("res://src/content/combat_training_weapon_definitions.gd")
 const IDENTITY_KEYS=["base_content_id","binding_id","ship_id","station_id","system_id","equipment_ids"]
 const POOL_KEYS=["hull","armor","shield","gamma"]
@@ -48,7 +47,7 @@ static func matches(cache: Variant, seed: Dictionary, cursor: int) -> bool:
 	return true
 
 static func station_arrival_cache(rules: Dictionary, seed: Dictionary, player: Dictionary) -> Dictionary:
-	if (not StationReturn.parameters(rules) and not FullHoldReturn.parameters(rules)) or not valid_seed(seed):return {}
+	if not FlightRules.docking_parameters(rules) or not valid_seed(seed):return {}
 	if seed.station_id!=int(rules.station_id) or seed.system_id!=int(rules.system_id):return {}
 	for key in ["base_content_id","binding_id","ship_id","equipment_ids"]:
 		if player.get(key)!=seed[key]:return {}

@@ -8,6 +8,7 @@ const Numbers=preload("res://src/content/opening_definitions.gd")
 const Vectors=preload("res://src/simulation/source_vectors.gd")
 const Flight=preload("res://src/simulation/npc_flight.gd")
 const FullHold=preload("res://src/content/full_hold_particle_definitions.gd")
+const Training=preload("res://src/content/combat_training_story_definitions.gd")
 var error:=""
 var _identity:={}
 var _rules:={}
@@ -42,7 +43,16 @@ func configure_full_hold(bindings: RefCounted,combat: Dictionary,seed_seconds: V
 	if combat.get("campaign_cursor")!=4 or not valid_combat(combat):clear();return reject("Second-flight smoke/fire requires its one initialized pirate")
 	return _configure_owners(bindings,combat,seed_seconds,["npc0"],5)
 
-func _configure_owners(bindings: RefCounted,combat: Dictionary,seed_seconds: int,keys: Array,initial_mode: int) -> bool:
+func configure_combat_training(bindings: RefCounted,combat: Dictionary,seed_seconds: Variant) -> bool:
+	clear()
+	if bindings==null or Training.flight(bindings).is_empty() or not FullHold.parameters(bindings.full_hold_particles) or not Definitions.parameters(bindings.damage_particles.get("owners",{})) or not seed_seconds is int:return reject("Training smoke/fire requires its ordinary particle owners and seed")
+	_rules=bindings.damage_particles.owners.duplicate(true)
+	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":7}
+	_npc_count=4
+	if not valid_combat(combat):clear();return reject("Training smoke/fire requires the complete initialized cast")
+	return _configure_owners(bindings,combat,seed_seconds,["npc0","npc1","npc2","npc3"],[5,5,5,0])
+
+func _configure_owners(bindings: RefCounted,combat: Dictionary,seed_seconds: int,keys: Array,initial_mode: Variant) -> bool:
 	for key in keys:
 		var pair:=[]
 		for preset in [15,42]:
@@ -52,7 +62,8 @@ func _configure_owners(bindings: RefCounted,combat: Dictionary,seed_seconds: int
 			pair.append(emitter)
 		_emitters[key]=pair
 	for actor in combat.actors:
-		if actor.actor_mode!=initial_mode:clear();return reject("Damage effects must join the fresh held NPCs")
+		var expected: int=initial_mode[int(actor.actor_id)] if initial_mode is Array else int(initial_mode)
+		if actor.actor_mode!=expected:clear();return reject("Damage effects must join the fresh held NPCs")
 		_roots.append(actor.pose);_damaged.append(false);_modes.append(int(actor.actor_mode));_death_phases.append("ready")
 	_presentation_identity=RefCounted.new()
 	return true
@@ -109,7 +120,7 @@ func finish_npc_pass(before: Dictionary,after: Dictionary,events: Array,delta_ms
 		if not event is Dictionary or event.get("actor_id")!=id or not event.get("decision") is Dictionary or not event.get("movement") is Dictionary or not event.get("destruction",{}) is Dictionary:return reject("Invalid NPC effect event")
 		var actor: Dictionary=before.actors[id];var result: Dictionary=after.actors[id]
 		var death: Dictionary=event.get("destruction",{})
-		var skipped: bool=event.decision.is_empty() and not death.is_empty()
+		var skipped: bool=(event.decision.is_empty() or event.decision.get("retired",false)) and not death.is_empty()
 		var key:="npc%d" % id
 		if not skipped:
 			var threshold:=Emitter.single(Emitter.single(float(actor.max_hull))*Emitter.single(float(_rules.npc_hull_fraction)))
@@ -152,9 +163,13 @@ func valid_combat(combat: Dictionary) -> bool:
 	if not actors is Array or actors.size()!=_npc_count:return false
 	for id in _npc_count:
 		var actor: Variant=actors[id]
-		if not actor is Dictionary or actor.get("actor_id")!=id or not Flight.rigid_pose(actor.get("pose")) or not Numbers.integer(actor.get("actor_mode"),1,9):return false
+		var minimum_mode:=0 if _identity.get("campaign_cursor")==7 and id==3 else 1
+		if not actor is Dictionary or actor.get("actor_id")!=id or not Flight.rigid_pose(actor.get("pose")) or not Numbers.integer(actor.get("actor_mode"),minimum_mode,9):return false
 		if not actor.get("vitals") is Dictionary or not Numbers.integer(actor.vitals.get("hull"),0,2147483647) or not Numbers.integer(actor.get("max_hull"),1,2147483647):return false
 	return true
+
+func npc_root(actor_id: int) -> Transform3D:
+	return _roots[actor_id] if actor_id>=0 and actor_id<_roots.size() else Transform3D.IDENTITY
 
 func snapshot() -> Dictionary:
 	if _identity.is_empty():return {}

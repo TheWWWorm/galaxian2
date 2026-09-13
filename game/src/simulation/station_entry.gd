@@ -14,6 +14,7 @@ const FullHoldReturn=preload("res://src/content/full_hold_return_definitions.gd"
 const Flight=preload("res://src/simulation/first_flight_frame.gd")
 const Equipment=preload("res://src/simulation/station_equipment.gd")
 const TrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 var error := ""
 var _state := {}
 var _lines := []
@@ -62,16 +63,23 @@ func configure_return(bindings: RefCounted, catalogues: RefCounted, library: Ref
 	var current: Dictionary=flight.snapshot()
 	var packet: Dictionary=flight.prepare_station()
 	if packet.is_empty():return fail(flight.error)
-	var rules:=FullHoldReturn.select(bindings,packet.get("campaign_cursor"))
+	var rules:=OrdinaryFlight.station_return(bindings,packet.get("campaign_cursor"))
 	if rules.is_empty():return fail("This pack has no supported conversation for the accepted station return")
 	if current.get("boundary")!="station_transition_required" or packet.get("base_content_id")!=bindings.base_content_id or packet.get("binding_id")!=bindings.binding_id or packet.get("campaign_cursor")!=int(rules.campaign_cursor) or packet.get("source_state")!=int(rules.source_state):return fail("Station return needs an accepted docking transition")
-	var loadout:=Loadout.new()
-	if not loadout.configure_station(bindings,catalogues,bindings.base_content_id):return fail(loadout.error)
-	var seed:=loadout.snapshot()
-	if packet.get("loadout")!=seed or packet.get("source_ship_configuration")!=int(bindings.station_entry.source_ship_configuration):return fail("Station return changed the mining ship or equipment")
+	var equipment: RefCounted=flight.equipment_owner()
+	var training: bool=int(rules.campaign_cursor)==8
+	var seed: Dictionary
+	if training:
+		if equipment==null or not equipment.snapshot().get("training_inventory_released",false) or packet.get("equipment")!=equipment.snapshot() or current.get("equipment")!=equipment.snapshot():return fail("Training return lost its released inventory owner")
+		seed=equipment.snapshot().loadout
+	else:
+		var loadout:=Loadout.new()
+		if not loadout.configure_station(bindings,catalogues,bindings.base_content_id):return fail(loadout.error)
+		seed=loadout.snapshot()
+	if packet.get("loadout")!=seed or packet.get("source_ship_configuration")!=int(bindings.station_entry.source_ship_configuration):return fail("Station return changed its ship or equipment")
 	for key in ["cargo","progress","mission","player"]:
 		if packet.get(key)!=current.get(key):return fail("Station return differs from its accepted flight: "+key)
-	if packet.mission!={"kind":int(rules.mission_kind),"station_id":int(rules.station_id),"reward":0,"bonus":0} or not current.cargo_objective_acknowledged:return fail("Station return has no acknowledged delivery mission")
+	if packet.mission!={"kind":int(rules.mission_kind),"station_id":int(rules.station_id),"reward":0,"bonus":0} or not current.get("combat_objective_acknowledged" if training else "cargo_objective_acknowledged",false):return fail("Station return has no acknowledged mission")
 	if not Cache.matches(packet.get("player_cache"),seed,int(rules.campaign_cursor)) or packet.player_cache!=Cache.station_arrival_cache(rules,seed,packet.player):return fail("Station return did not preserve current flight vitals")
 	var lines:=_read_lines(bindings,library,rules.events)
 	if lines.is_empty():return false
@@ -84,7 +92,30 @@ func configure_return(bindings: RefCounted, catalogues: RefCounted, library: Ref
 		"docking":packet.docking.duplicate(true),"flight_elapsed_ms":packet.world_elapsed_ms,
 		"return_visit":true,"delivery_acknowledged":false,"acknowledged":false,"reward_credits":0,"mining_completed":false}
 	_state=state;_lines=lines;_rules=bindings.station_entry.duplicate(true);_return_rules=rules.duplicate(true);_progress_rules=bindings.opening_handoff.duplicate(true)
-	_equipment=null;_equipment_rules={};_equipment_lines=[]
+	_equipment=equipment if training else null;_equipment_rules={};_equipment_lines=[]
+	if training:
+		_state.source_marked_item_ids=[];_state.training_return=true
+	return true
+
+func configure_reload(bindings: RefCounted, catalogues: RefCounted, library: RefCounted, previous: RefCounted) -> bool:
+	error=""
+	if bindings==null or catalogues==null or library==null or previous==null or previous.get_script()!=get_script():return fail("Station reload requires the acknowledged station owner")
+	var rules:=OrdinaryFlight.station_return(bindings,8)
+	if rules.is_empty() or not rules.get("restart_station_after_acknowledgement",false):return fail("This pack has no supported station reload")
+	var state: Dictionary=previous.snapshot()
+	if library.manifest.get("content_id")!=bindings.base_content_id or catalogues.content_id!=bindings.base_content_id or state.get("base_content_id")!=bindings.base_content_id or state.get("binding_id")!=bindings.binding_id or state.get("language")!=library.active_language:return fail("Station reload belongs to another content identity")
+	if previous._return_rules!=rules or previous._rules!=bindings.station_entry or previous._progress_rules!=bindings.opening_handoff:return fail("Station reload changed the accepted return definitions")
+	if state.get("phase")!="station_reload_required" or state.get("campaign_cursor")!=int(rules.cursor_after_acknowledgement) or not state.get("training_return_acknowledged",false) or not state.get("acknowledged",false):return fail("Acknowledge the complete return conversation before reloading the station")
+	var equipment: RefCounted=previous.equipment_owner()
+	if equipment==null or not equipment.snapshot().get("training_inventory_released",false) or equipment.snapshot().loadout!=state.get("loadout") or equipment.snapshot().cargo!=state.get("cargo"):return fail("Station reload lost the retained training inventory")
+	if not Cache.matches(state.get("player_cache"),state.loadout,int(rules.cursor_after_acknowledgement)) or state.progress.campaign_cursor!=state.campaign_cursor or state.mission!={"kind":int(rules.next_mission_kind),"station_id":int(rules.station_id),"reward":0,"bonus":0,"source_parameter":int(rules.next_mission_parameter)}:return fail("Station reload changed the accepted player or mission")
+	_state=previous._state.duplicate(true)
+	# The source reloads application state 5 after cursor 8's final line. The
+	# following conversation has its own mission and must not be acknowledged here.
+	_state.phase="station_followup_required";_state.station_reloaded=true
+	_state.line_index=0;_state.acknowledged=false
+	_lines=[];_rules=previous._rules.duplicate(true);_progress_rules=previous._progress_rules.duplicate(true)
+	_return_rules=rules.duplicate(true);_equipment=equipment;_equipment_rules={};_equipment_lines=[]
 	return true
 
 func _read_lines(bindings: RefCounted, library: RefCounted, events: Array) -> Array:
@@ -121,17 +152,19 @@ func acknowledge() -> bool:
 	var parameter:=int(_rules.mission.next_parameter) if _return_rules.is_empty() else int(_return_rules.next_mission_parameter)
 	_state.mission={"kind":next_kind,"station_id":_state.loadout.station_id,"reward":0,"bonus":0,"source_parameter":parameter}
 	if not _return_rules.is_empty():
-		# Both constructors remove cargo after the final line. The second uses
-		# list disposal, which retains cached used/free quantities at this point.
-		# A later inventory operation owns their refresh; never retain the items.
-		_state.cargo.entries=[]
-		if _return_rules.get("refresh_cargo_after_acknowledgement",true):
-			_state.cargo.used=0;_state.cargo.free_space=_state.cargo.capacity
-		else:
-			_state.cargo_cache_stale=true
-			_state.phase="station_equipment_required"
+		# Mining constructors remove cargo; the second retains cached quantities
+		# until the next inventory operation. The training return keeps its cargo.
+		if _return_rules.clear_cargo_after_acknowledgement:
+			_state.cargo.entries=[]
+			if _return_rules.get("refresh_cargo_after_acknowledgement",true):
+				_state.cargo.used=0;_state.cargo.free_space=_state.cargo.capacity
+			else:
+				_state.cargo_cache_stale=true
+				_state.phase="station_equipment_required"
 		_state.player_cache.campaign_cursor=_state.campaign_cursor
 		_state.delivery_acknowledged=true
+		if _return_rules.get("restart_station_after_acknowledgement",false):
+			_state.phase="station_reload_required";_state.training_return_acknowledged=true
 	return true
 
 func _advance_campaign(cursor: int) -> void:
@@ -249,6 +282,7 @@ func snapshot() -> Dictionary:
 	var result:=_state.duplicate(true)
 	if _state.phase=="station_equipment_required":result.boundary="station_equipment_required"
 	if _state.phase=="combat_departure_required":result.boundary="combat_departure_required"
+	if _state.phase in ["station_reload_required","station_followup_required"]:result.boundary=_state.phase
 	if _equipment!=null:result.equipment=_equipment.snapshot()
 	result.dialogue={"visible":_state.phase=="conversation","index":_state.line_index,"count":_lines.size(),"previous_available":_state.phase=="conversation" and _state.line_index>0}
 	if result.dialogue.visible:result.dialogue.merge(_lines[_state.line_index].duplicate(true))

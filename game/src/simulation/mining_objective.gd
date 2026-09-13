@@ -2,16 +2,18 @@ extends RefCounted
 ## Supported mining cargo checks and acknowledged return instructions. Reaching the
 ## cargo threshold offers dialogue; its last acknowledgement selects the return
 ## mission. The hold is preserved and station arrival remains a separate step.
-const Story=preload("res://src/content/full_hold_story_definitions.gd")
+const Story=preload("res://src/content/ordinary_flight_definitions.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Cargo=preload("res://src/simulation/flight_cargo.gd")
 const Scenery=preload("res://src/simulation/opening_scenery.gd")
+const Encounter=preload("res://src/simulation/full_hold_encounter.gd")
 var error:=""
 var _state:={}
 var _rules:={}
 var _progress_rules:={}
 var _lines:=[]
 var _field_identity: RefCounted
+var _initial_progress:={}
 
 func configure(bindings: RefCounted, library: RefCounted, construction: RefCounted, autopilot_key: String, dock_key: String) -> bool:
 	error=""
@@ -47,17 +49,48 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 		"cargo_objective_satisfied":false,"cargo_objective_acknowledged":false,"station_return_required":false,
 		"required_cargo":int(rules.required_cargo),"mission":mission.duplicate(true),"progress":flight.departure.progress.duplicate(true),
 		"reward_credits":0,"mining_completed":false}
+	_initial_progress=flight.departure.progress.duplicate(true)
+	if rules.has("defeat_condition"):
+		_state.combat_objective_satisfied=false;_state.combat_objective_acknowledged=false
 	return true
 
-func poll(cargo: RefCounted, scenery: RefCounted, player_alive:=true) -> bool:
+func poll(cargo: RefCounted, scenery: RefCounted, player_alive:=true, encounter: RefCounted=null) -> bool:
 	error=""
 	if _state.is_empty() or cargo==null or cargo.get_script()!=Cargo or scenery==null or scenery.get_script()!=Scenery:return reject("Mining objective needs its owned cargo and field")
 	var held: Dictionary=cargo.snapshot()
 	if held.get("base_content_id")!=_state.base_content_id or held.get("binding_id")!=_state.binding_id or cargo.field_identity()!=_field_identity or scenery.presentation_identity()!=_field_identity or not cargo.matches_mined_field(scenery.snapshot()):return reject("Mining objective cargo and field history do not match")
+	if _rules.has("defeat_condition"):
+		if not encounter is Encounter or encounter.snapshot().get("campaign_cursor")!=7:return reject("Training completion requires the retained four-actor encounter")
+		var combat: Dictionary=encounter.snapshot()
+		for key in ["base_content_id","binding_id"]:
+			if combat.get(key)!=_state[key]:return reject("Training completion belongs to another encounter")
+		if not observe_combat(encounter):return false
+		if _state.phase!="collecting" or not player_alive:return true
+		var condition: Dictionary=combat.controller.defeat_status
+		if condition!={"kind":18,"defeated":3,"required":3,"satisfied":true}:return true
+		_state.combat_objective_satisfied=true;_state.phase="return_instructions"
+		return true
 	if _state.phase!="collecting" or not player_alive:return true
 	_state.cargo_at_check=int(held.used)
 	if held.used>=int(_rules.required_cargo):
 		_state.cargo_objective_satisfied=true;_state.phase="return_instructions"
+	return true
+
+func observe_combat(encounter: RefCounted) -> bool:
+	error=""
+	if not _rules.has("defeat_condition") or not encounter is Encounter:return reject("Training progress requires its native encounter")
+	var state: Dictionary=encounter.snapshot()
+	for key in ["base_content_id","binding_id"]:
+		if state.get(key)!=_state[key]:return reject("Training progress belongs to another encounter")
+	if state.get("campaign_cursor")!=7:return reject("Training progress has another mission")
+	var counters: Dictionary=state.controller.accounting.counter_deltas
+	var progress:=_initial_progress.duplicate(true)
+	progress.player_kills+=int(counters.player_kills);progress.pirate_kills+=int(counters.pirate_kills)
+	progress.campaign_cursor=_state.campaign_cursor
+	progress.rank_score=progress.other_score+progress.player_kills*int(_progress_rules.player_kill_weight)+progress.pirate_kills*int(_progress_rules.pirate_kill_weight)+progress.campaign_cursor*int(_progress_rules.cursor_weight)
+	for i in _progress_rules.rank_thresholds.size():
+		if progress.rank_score>=int(_progress_rules.rank_thresholds[i]):progress.rank=i
+	_state.progress=progress
 	return true
 
 func navigate(action: String) -> bool:
@@ -68,7 +101,9 @@ func navigate(action: String) -> bool:
 		_state.line_index-=1
 	elif _state.line_index<_lines.size()-1:_state.line_index+=1
 	else:
-		_state.cargo_objective_acknowledged=true;_state.phase="return_required";_state.station_return_required=true
+		if _rules.has("defeat_condition"):_state.combat_objective_acknowledged=true
+		else:_state.cargo_objective_acknowledged=true
+		_state.phase="return_required";_state.station_return_required=true
 		_state.campaign_cursor=int(_rules.cursor_after_acknowledgement)
 		_state.progress.campaign_cursor=_state.campaign_cursor
 		_state.progress.rank_score+=int(_progress_rules.cursor_weight)
@@ -88,6 +123,7 @@ func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy._state=_state.duplicate(true);copy._rules=_rules.duplicate(true);copy._progress_rules=_progress_rules.duplicate(true)
 	copy._lines=_lines.duplicate(true);copy._field_identity=_field_identity
+	copy._initial_progress=_initial_progress.duplicate(true)
 	return copy
-func clear() -> void:error="";_state={};_rules={};_progress_rules={};_lines=[];_field_identity=null
+func clear() -> void:error="";_state={};_rules={};_progress_rules={};_lines=[];_field_identity=null;_initial_progress={}
 func reject(message: String) -> bool:error=message;return false

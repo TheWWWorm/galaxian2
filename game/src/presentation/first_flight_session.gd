@@ -1,5 +1,5 @@
 extends Node3D
-## Playable mining trips. The native frame owns gameplay; this session owns the
+## Playable ordinary flights. The native frame owns gameplay; this session owns the
 ## clock, acknowledged speech, accepted presentation and subsequent sound commit.
 signal transition_rejected(message: String)
 const Frame=preload("res://src/simulation/first_flight_frame.gd")
@@ -16,6 +16,7 @@ const SecondReturn=preload("res://src/content/full_hold_return_definitions.gd")
 const PlayerDeath=preload("res://src/content/player_destruction_definitions.gd")
 const GameOver=preload("res://src/content/game_over_definitions.gd")
 const Particles=preload("res://src/content/full_hold_particle_definitions.gd")
+const Training=preload("res://src/content/combat_training_story_definitions.gd")
 const BOUNDARIES=["station_transition_required","game_over_transition_required"]
 var error:=""
 var status:="idle"
@@ -35,20 +36,22 @@ var _presentation_ms:=0
 static func supported(bindings: RefCounted,campaign_cursor: int=2) -> bool:
 	if bindings==null:return false
 	if campaign_cursor==2:return Definitions.parameters(bindings.station_return)
-	return campaign_cursor==4 and bindings.source_architecture=="x86_64" and SecondReturn.parameters(bindings.full_hold_return) and PlayerDeath.parameters(bindings.player_destruction) and GameOver.parameters(bindings.game_over_presentation) and Particles.parameters(bindings.full_hold_particles) and not bindings.audio.is_empty()
+	if bindings.source_architecture!="x86_64" or not PlayerDeath.parameters(bindings.player_destruction) or not GameOver.parameters(bindings.game_over_presentation) or not Particles.parameters(bindings.full_hold_particles) or bindings.audio.is_empty():return false
+	if campaign_cursor==7:return not Training.flight(bindings).is_empty() and not Training.station_return(bindings).is_empty() and not Training.navigation(bindings).is_empty()
+	return campaign_cursor==4 and SecondReturn.parameters(bindings.full_hold_return)
 
-func configure(library: RefCounted, bindings: RefCounted, visuals: RefCounted, packet: Dictionary, confirmed: bool, now_microseconds: int, environment_seconds: Variant=null, unix_seconds: Variant=null, mobile_layout:=false) -> bool:
+func configure(library: RefCounted, bindings: RefCounted, visuals: RefCounted, packet: Dictionary, confirmed: bool, now_microseconds: int, environment_seconds: Variant=null, unix_seconds: Variant=null, mobile_layout:=false, equipment: RefCounted=null) -> bool:
 	clear()
 	if not packet.get("campaign_cursor") is int:return fail("Departure requires its native campaign cursor")
 	var cursor: int=int(packet.get("campaign_cursor",-1))
-	if not confirmed or not supported(bindings,cursor):return fail("Confirm departure with a supported mining trip")
+	if not confirmed or not supported(bindings,cursor):return fail("Confirm departure with a supported flight")
 	var cat:=Catalogues.new();var bodies:=Bodies.new();var effects:=Effects.new()
 	if not cat.open(library) or not bodies.configure(library,bindings) or not effects.configure(library,bindings):return fail(cat.error+bodies.error+effects.error)
 	var environment_seed: Variant=int(Time.get_unix_time_from_system()) if environment_seconds==null else environment_seconds
 	var field_seed: Variant=int(Time.get_unix_time_from_system()) if unix_seconds==null else unix_seconds
 	var construction:=Construction.new()
 	# Mac Full HD uses its source large-display field composition.
-	if not construction.prepare(bindings,cat,packet,environment_seed,field_seed,true,bodies,effects):return fail(construction.error)
+	if not construction.prepare(bindings,cat,packet,environment_seed,field_seed,true,bodies,effects,equipment):return fail(construction.error)
 	_world=Frame.new()
 	var viewport_size:=Vector2i(get_viewport().get_visible_rect().size)
 	if not _world.configure(bindings,cat,library,construction,"E",.5,viewport_size,mobile_layout,false,"P"):return fail(_world.error)
@@ -60,10 +63,10 @@ func configure(library: RefCounted, bindings: RefCounted, visuals: RefCounted, p
 	briefing_audio=Speech.new();add_child(briefing_audio)
 	objective_audio=Speech.new();add_child(objective_audio)
 	if not briefing_audio.configure_mining_briefing(library,bindings,cursor) or not objective_audio.configure_mining_objective(library,bindings,cursor):return fail(briefing_audio.error+objective_audio.error)
-	if cursor==4:
+	if cursor in [4,7]:
 		flight_audio=FlightAudio.new();add_child(flight_audio)
 		if not flight_audio.configure_full_hold(library,bindings,_world,int(field_seed)):return fail(flight_audio.error)
-		if scene.game_over==null:return fail("Second-trip continuation display is unavailable")
+		if scene.game_over==null:return fail("Flight continuation display is unavailable")
 		scene.game_over.set_active(false)
 		scene.game_over.continue_requested.connect(func():
 			if not request_game_over_exit():transition_rejected.emit(error))
@@ -82,7 +85,7 @@ func activate() -> bool:
 	if flight_audio!=null:flight_audio.commit_frame(prepared)
 	return true
 
-func step(now_microseconds: int, commands:=Vector2.ZERO, _fire_primary:=false) -> bool:
+func step(now_microseconds: int, commands:=Vector2.ZERO, fire_primary:=false) -> bool:
 	error=""
 	if not _active or (status!="running" and status not in BOUNDARIES):return reject("Activate the mining trip before advancing it")
 	if not commands.is_finite() or absf(commands.x)>1 or absf(commands.y)>1:return reject("Invalid mining trip controls")
@@ -92,7 +95,7 @@ func step(now_microseconds: int, commands:=Vector2.ZERO, _fire_primary:=false) -
 	if not clock.error.is_empty():return reject(clock.error)
 	if is_paused() or status!="running":_clock=clock;return true
 	var drilling: bool=_world.drill_owner()!=null
-	var world: RefCounted=_world.evaluate(milliseconds,Vector2.ZERO if drilling else commands,_throttle,false,Vector2i(camera.get_viewport().get_visible_rect().size),commands if drilling else Vector2.ZERO)
+	var world: RefCounted=_world.evaluate(milliseconds,Vector2.ZERO if drilling else commands,_throttle,false,Vector2i(camera.get_viewport().get_visible_rect().size),commands if drilling else Vector2.ZERO,fire_primary)
 	if world==null:return reject(_world.error)
 	if not _commit(world,true,floori(float(now_microseconds)/1000.0)):return false
 	_clock=clock
@@ -113,6 +116,7 @@ func action(name: String) -> bool:
 		"dock","fire":
 			if _world.drill_owner()!=null:world=_world.stop_mining()
 			elif _world.snapshot().mining_approach.phase!="idle":world=_world.cancel_mining()
+			elif name=="fire" and _world.snapshot().location.campaign_cursor==7:return true
 			else:world=_world.start_mining()
 		"autopilot":
 			world=_world.cancel_station_autopilot() if _world.snapshot().station_autopilot.active else _world.start_station_autopilot()

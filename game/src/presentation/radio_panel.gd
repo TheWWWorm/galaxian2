@@ -44,7 +44,7 @@ func configure(base_content_id: String, binding_id: String, language: String, sp
 	clear()
 	_identity = {}
 	_speakers = {}
-	if not Library.valid_hash(base_content_id) or not Library.valid_hash(binding_id) or language.is_empty() or campaign_cursor not in [0, 1]:
+	if not Library.valid_hash(base_content_id) or not Library.valid_hash(binding_id) or language.is_empty() or campaign_cursor not in [0, 1, 7]:
 		return _fail("Radio view needs a verified content, binding and language identity")
 	# Copy names and retain supplied texture resources. Never guess a portrait or
 	# derive a localization ID by adding a fixed cross-edition offset.

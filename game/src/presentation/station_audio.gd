@@ -3,8 +3,8 @@ extends Node
 ## Explicit navigation replaces the prior voice; duration never acknowledges it.
 const Resources=preload("res://src/content/audio_resources.gd")
 const Streams=preload("res://src/presentation/audio_stream_control.gd")
-const MiningStory=preload("res://src/content/full_hold_story_definitions.gd")
-const StationReturn=preload("res://src/content/full_hold_return_definitions.gd")
+const MiningStory=preload("res://src/content/ordinary_flight_definitions.gd")
+const StationReturn=preload("res://src/content/ordinary_flight_definitions.gd")
 var error:=""
 var diagnostics:={}
 var _resources: RefCounted
@@ -31,7 +31,7 @@ func configure_mining_briefing(library: RefCounted, bindings: RefCounted, campai
 	if not _resources.configure_mining_briefing(library,bindings,campaign_cursor):return reject(_resources.error)
 	var ids:=[]
 	for event in MiningStory.briefing(bindings,campaign_cursor).events:
-		if event.voice_event_id>=0:ids.append(int(event.voice_event_id))
+		ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
 
 func configure_mining_objective(library: RefCounted, bindings: RefCounted, campaign_cursor:=2) -> bool:
@@ -39,19 +39,22 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, campa
 	if not _resources.configure_mining_objective(library,bindings,campaign_cursor):return reject(_resources.error)
 	var ids:=[]
 	for event in MiningStory.objective(bindings,campaign_cursor).events:
-		if event.voice_event_id>=0:ids.append(int(event.voice_event_id))
+		ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
 
 func configure_station_return(library: RefCounted, bindings: RefCounted, campaign_cursor:=3) -> bool:
 	clear();_resources=Resources.new()
 	if not _resources.configure_station_return(library,bindings,campaign_cursor):return reject(_resources.error)
 	var ids:=[]
-	for event in StationReturn.select(bindings,campaign_cursor).events:
-		if event.voice_event_id>=0:ids.append(int(event.voice_event_id))
+	for event in StationReturn.station_return(bindings,campaign_cursor).events:
+		ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
 
 func _prepare_voices(ids: Array) -> bool:
 	for id in ids:
+		# Silent instructions occupy a dialogue position as well. Compacting
+		# voices would shift later lines or reject an acknowledged silent line.
+		if id==-1:_clips.append(null);continue
 		var clip: Dictionary=_resources.prepare(int(id))
 		if clip.is_empty():return reject(_resources.error)
 		if clip.has("unsupported") or not clip.get("stream") is AudioStream or not clip.get("voice",false) or clip.spatial or clip.looping:return reject("Unsupported station voice: "+str(clip.get("unsupported",id)))
@@ -93,6 +96,7 @@ func present(line: int) -> bool:
 	if _player!=null:_player.free();_player=null
 	_line=line
 	if line<0 or line>=_clips.size():return true
+	if _clips[line]==null:return true
 	var clip: Dictionary=_clips[line]
 	_player=Streams.player(clip.stream,false);add_child(_player)
 	_player.volume_db=linear_to_db(clip.gain);_player.play();_player.stream_paused=_paused

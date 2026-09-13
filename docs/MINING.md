@@ -22,7 +22,8 @@ retaining the source's deferred cargo cache (25 used, zero free). Current v116
 packs then support mission 158's starter equipment shop. The first accepted
 inventory operation refreshes the cache from owned items. Mounting a weapon and
 armor plate unlocks Gunant's acknowledged completion line, without granting
-credits. The combat-training flight remains unfinished; see [equipment scope](EQUIPMENT.md).
+credits. Current Mac bindings then support combat training and its station
+return; see [equipment controls and scope](EQUIPMENT.md).
 Older packs keep their earlier application boundary.
 
 Lethal second-trip contact retains existing movement and drilling, hides the

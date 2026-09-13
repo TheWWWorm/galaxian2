@@ -21,6 +21,10 @@ const EncounterGeometry=preload("res://src/presentation/full_hold_encounter_geom
 const DeathEffect=preload("res://src/presentation/npc_death_effect_geometry.gd")
 const GameOver=preload("res://src/presentation/game_over_panel.gd")
 const DamageParticles=preload("res://src/presentation/opening_damage_geometry.gd")
+const RadioResources=preload("res://src/presentation/opening_radio_resources.gd")
+const RadioPanel=preload("res://src/presentation/radio_panel.gd")
+const NpcMarkers=preload("res://src/presentation/flight_npc_markers.gd")
+const WaypointMarker=preload("res://src/presentation/flight_waypoint_marker.gd")
 var error:=""
 var geometry: Node3D
 var sky: Node3D
@@ -46,6 +50,9 @@ var _last_death: RefCounted
 var _last_absolute_ms:=0
 var damage_particles: Node3D
 var _last_particles: RefCounted
+var radio: Control
+var npc_markers: Control
+var waypoint_marker: Control
 
 func build(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalogues: RefCounted,flight: RefCounted) -> bool:
 	clear()
@@ -56,7 +63,7 @@ func build(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalogu
 	if not message.is_empty():return fail(message)
 	camera=Camera3D.new();camera.current=true;add_child(camera)
 	geometry=Geometry.new();add_child(geometry)
-	if not geometry.build_departure(library,visuals,bindings,catalogues,state.player_cache,_player_geometry_state(state),"high",true):return fail(geometry.error)
+	if not geometry.build_departure(library,visuals,bindings,catalogues,state.player_cache,_player_geometry_state(state),"high",true,flight.equipment_owner()):return fail(geometry.error)
 	var pirates: RefCounted=flight.encounter_owner()
 	if pirates!=null:
 		encounter=EncounterGeometry.new();add_child(encounter)
@@ -70,19 +77,30 @@ func build(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalogu
 		damage_particles=DamageParticles.new();add_child(damage_particles)
 		if not damage_particles.build(particles,library,visuals,bindings):return fail(damage_particles.error)
 	sky=Background.new();add_child(sky)
-	if not sky.build_departure(library,visuals,bindings,catalogues,state.player_cache):return fail(sky.error)
+	if not sky.build_departure(library,visuals,bindings,catalogues,state.player_cache,"high",flight.equipment_owner()):return fail(sky.error)
 	planets=Planets.new();add_child(planets)
-	if not planets.build_departure(library,visuals,bindings,catalogues,state.player_cache):return fail(planets.error)
+	if not planets.build_departure(library,visuals,bindings,catalogues,state.player_cache,"high",flight.equipment_owner()):return fail(planets.error)
 	sun=Sun.new();add_child(sun)
-	if not sun.build_departure(library,visuals,bindings,catalogues,state.player_cache):return fail(sun.error)
+	if not sun.build_departure(library,visuals,bindings,catalogues,state.player_cache,"high",flight.equipment_owner()):return fail(sun.error)
 	var lights:=Lighting.new();add_child(lights)
-	if not lights.build_departure(bindings,catalogues,state.player_cache):return fail(lights.error)
+	if not lights.build_departure(bindings,catalogues,state.player_cache,flight.equipment_owner()):return fail(lights.error)
 	scenery=Scenery.new();add_child(scenery)
 	if not scenery.build(state.scenery,library,visuals,bindings,"high",true):return fail(scenery.error)
 	if state.has("station_exterior"):
 		station=Station.new();add_child(station)
 		if not station.build(library,visuals,bindings,flight.station_owner()):return fail(station.error)
 	var overlay:=CanvasLayer.new();overlay.layer=10;add_child(overlay)
+	if state.has("player_route"):
+		waypoint_marker=WaypointMarker.new();overlay.add_child(waypoint_marker);waypoint_marker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not waypoint_marker.prepare(library,bindings,visuals):return fail(waypoint_marker.error)
+	if state.has("radio"):
+		var resources:=RadioResources.new()
+		if not resources.prepare(library,bindings,visuals,7):return fail(resources.error)
+		radio=RadioPanel.new();overlay.add_child(radio);radio.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not radio.configure(bindings.base_content_id,bindings.binding_id,library.active_language,resources.speakers,7):return fail(radio.error)
+	if state.has("npc_scanner"):
+		npc_markers=NpcMarkers.new();overlay.add_child(npc_markers);npc_markers.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not npc_markers.prepare(library,bindings,visuals):return fail(npc_markers.error)
 	if state.has("mining_targeting"):
 		target_frame=TargetFrame.new();overlay.add_child(target_frame);target_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		if not target_frame.prepare(library,bindings,visuals):return fail(target_frame.error)
@@ -163,16 +181,22 @@ func _apply(state: Dictionary, prior_intensity: float, drill: RefCounted, pirate
 		if not reticle.present(state.get("player_aim",{})):return reject(reticle.error)
 		if not scan_animation.present(state.get("mining_targeting",{})):return reject(scan_animation.error)
 		target_frame.set_active(state.get("player_aim",{}).get("visible",false))
+	if npc_markers!=null and not npc_markers.present(state.get("npc_scanner",{})):return reject(npc_markers.error)
+	if waypoint_marker!=null and not waypoint_marker.present(state.get("player_route",{}),state.camera_view.pose,Vector2i(get_viewport().get_visible_rect().size),state.get("player_aim",{}).get("visible",false)):return reject(waypoint_marker.error)
 	if mining_panel!=null:
 		if drill==null:mining_panel.clear()
 		elif not mining_panel.present(drill,int(state.cargo.free_space),true):return reject(mining_panel.error)
 	if notice_panel!=null and not notice_panel.present(state.get("flight_notices",{})):return reject(notice_panel.error)
 	if state.dialogue.visible or (death!=null and not state.player_destruction.hud_visible):
-		for control in [target_frame,reticle,scan_animation,mining_panel,notice_panel]:
+		for control in [target_frame,reticle,scan_animation,mining_panel,notice_panel,npc_markers,waypoint_marker]:
 			if control!=null:control.visible=false
 	if game_over!=null and not game_over.present(death,absolute_milliseconds):return reject(game_over.error)
 	sun.commit_frame(sun_frame)
 	if encounter!=null:encounter.commit_world(pirate_frame)
+	if radio!=null:
+		var transmission: Dictionary=state.get("radio",{}).duplicate(true)
+		if state.dialogue.visible:transmission.visible=false
+		if not radio.present(transmission):return reject(radio.error)
 	if damage_particles!=null:damage_particles.commit_world(particle_frame)
 	if death!=null:
 		player_destruction.commit_effect(death_frame)
@@ -190,7 +214,7 @@ static func _player_geometry_state(state: Dictionary) -> Dictionary:
 
 func set_mobile_layout(value: bool) -> void:
 	if dialogue!=null:dialogue.set_mobile_layout(value)
-	for control in [target_frame,reticle,scan_animation,mining_panel,notice_panel,game_over]:
+	for control in [target_frame,reticle,scan_animation,mining_panel,notice_panel,game_over,radio,npc_markers,waypoint_marker]:
 		if control!=null:control.set_mobile_layout(value)
 func clear() -> void:
 	for child in get_children():child.free()
@@ -201,5 +225,6 @@ func clear() -> void:
 	encounter=null;_last_encounter=null
 	player_destruction=null;game_over=null;_last_death=null;_last_absolute_ms=0
 	damage_particles=null;_last_particles=null
+	radio=null;npc_markers=null;waypoint_marker=null
 func fail(message: String) -> bool:clear();error=message;return false
 func reject(message: String) -> bool:error=message;return false

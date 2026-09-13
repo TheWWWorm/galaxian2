@@ -7,8 +7,8 @@ const Dialogue=preload("res://src/content/dialogue_definitions.gd")
 const EngineParameters=preload("res://src/simulation/engine_audio.gd")
 const Channels=preload("res://src/content/audio_channels.gd")
 const StationPresentation=preload("res://src/content/station_presentation_definitions.gd")
-const MiningStory=preload("res://src/content/full_hold_story_definitions.gd")
-const StationReturn=preload("res://src/content/full_hold_return_definitions.gd")
+const MiningStory=preload("res://src/content/ordinary_flight_definitions.gd")
+const StationReturn=preload("res://src/content/ordinary_flight_definitions.gd")
 const StationEquipment=preload("res://src/content/station_equipment_definitions.gd")
 const TrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
 var error := ""
@@ -100,7 +100,7 @@ func configure_training_completion(library: RefCounted, bindings: RefCounted) ->
 
 func configure_station_return(library: RefCounted, bindings: RefCounted, campaign_cursor:=3) -> bool:
 	if not configure(library,bindings):return false
-	var rules:=StationReturn.select(bindings,campaign_cursor)
+	var rules:=StationReturn.station_return(bindings,campaign_cursor)
 	if rules.is_empty():return reject("Station return voice declarations are unavailable")
 	_voice_ids.clear()
 	for event in rules.events:

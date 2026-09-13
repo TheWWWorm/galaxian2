@@ -2,12 +2,13 @@ extends RefCounted
 ## Source timed text queue for the first mining flight. It never pauses flight,
 ## accepts acknowledgement, advances missions or consumes randomness.
 const Definitions=preload("res://src/content/flight_notice_definitions.gd")
-const MiningFlight=preload("res://src/content/full_hold_flight_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Desktop=preload("res://src/content/desktop_text_definitions.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const StationFlight=preload("res://src/content/station_flight_definitions.gd")
 const Catalogues=preload("res://src/content/catalogues.gd")
+const TrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
 var error:=""
 var _rules:={}
 var _identity:={}
@@ -21,10 +22,16 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 	error=""
 	if bindings==null or library==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.flight_notices):return reject("Flight notices require supported departure declarations")
 	var entry: Dictionary=construction.snapshot()
-	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or library.manifest.get("content_id")!=bindings.base_content_id or library.active_language.is_empty() or MiningFlight.flight(bindings,entry.get("campaign_cursor")).is_empty():return reject("Flight notices belong to another departure or language")
+	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or library.manifest.get("content_id")!=bindings.base_content_id or library.active_language.is_empty() or OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty():return reject("Flight notices belong to another departure or language")
 	var messages:={}
-	for key in bindings.flight_notices.messages:
-		var rule: Dictionary=bindings.flight_notices.messages[key];var pieces:=PackedStringArray();var display_ids:=[]
+	var definitions: Dictionary=bindings.flight_notices.messages.duplicate(true)
+	if entry.campaign_cursor==7:
+		var navigation:=TrainingStory.navigation(bindings)
+		if not navigation.is_empty():
+			var notice: Dictionary=navigation.progress_notice
+			definitions[str(int(notice.source_id))]=notice
+	for key in definitions:
+		var rule: Dictionary=definitions[key];var pieces:=PackedStringArray();var display_ids:=[]
 		for source_id in rule.text_ids:
 			var id:=Desktop.select_id(bindings.desktop_text,int(source_id))
 			if id<0 or id>=library.strings.size() or library.strings[id].is_empty():return reject("A flight notice is missing in this language")

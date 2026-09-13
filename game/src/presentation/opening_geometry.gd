@@ -83,10 +83,10 @@ func build_arrival(library: RefCounted, visuals: RefCounted, bindings: RefCounte
 	_arrival_player_origin=initial.frame.player_position
 	return true
 
-func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, state: Dictionary, quality := "high", with_detail := false) -> bool:
+func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, state: Dictionary, quality := "high", with_detail := false, equipment: RefCounted=null) -> bool:
 	clear()
 	var location:=ArrivalLocation.new()
-	var context:=location.resolve_departure(bindings,catalogues,cache)
+	var context:=location.resolve_departure(bindings,catalogues,cache,equipment)
 	if context.is_empty():return reject(location.error)
 	_departure_return_available=not bindings.mining_objective.is_empty()
 	_departure_return_cursor=int(context.campaign_cursor)+1
@@ -180,7 +180,7 @@ func apply_arrival(staging: Dictionary, actor: Dictionary, detail: Dictionary = 
 
 func _is_departure_return(state: Dictionary) -> bool:
 	var objective: Variant=state.get("mining_objective",{})
-	return _departure_return_available and state.get("campaign_cursor")==_departure_return_cursor and objective is Dictionary and objective.get("phase")=="return_required" and objective.get("cargo_objective_acknowledged",false) and state.get("mission")=={"kind":11,"station_id":78,"reward":0,"bonus":0}
+	return _departure_return_available and state.get("campaign_cursor")==_departure_return_cursor and objective is Dictionary and objective.get("phase")=="return_required" and objective.get("combat_objective_acknowledged",objective.get("cargo_objective_acknowledged",false)) and state.get("mission")=={"kind":11,"station_id":78,"reward":0,"bonus":0}
 
 func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 	error = ""
@@ -189,7 +189,7 @@ func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 		return reject("Opening geometry received another content identity")
 	# Completing cargo instructions changes the mission while retaining this
 	# same world and ship. It does not construct a new station or flight scene.
-	if state.get("campaign_cursor",0)!=_campaign_cursor and not (_campaign_cursor in [2,4] and _is_departure_return(state)):return reject("Flight geometry received another campaign scene")
+	if state.get("campaign_cursor",0)!=_campaign_cursor and not (_campaign_cursor in [2,4,7] and _is_departure_return(state)):return reject("Flight geometry received another campaign scene")
 	if not valid_pose(state.get("player_pose")): return reject("Opening player pose is unavailable or invalid")
 	var rows: Variant = state.get("actors")
 	if not rows is Array or rows.size() != actors.size(): return reject("Opening actor set changed")
@@ -220,7 +220,7 @@ func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 	var player_pose: Transform3D=state.player_pose
 	var player_visible:=true
 	if state.has("player_model_basis"):
-		if _campaign_cursor not in [2,4] or not state.player_model_basis is Basis or not valid_pose(Transform3D(state.player_model_basis,Vector3.ZERO)):return reject("Invalid mining-flight visual model orientation")
+		if _campaign_cursor not in [2,4,7] or not state.player_model_basis is Basis or not valid_pose(Transform3D(state.player_model_basis,Vector3.ZERO)):return reject("Invalid mining-flight visual model orientation")
 		player_pose=player_pose*Transform3D(state.player_model_basis,Vector3.ZERO)
 		if not valid_pose(player_pose):return reject("First-flight visual model orientation overflowed")
 	if not escape.is_empty():

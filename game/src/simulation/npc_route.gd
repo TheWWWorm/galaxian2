@@ -73,6 +73,14 @@ func configure_training_authored(bindings: RefCounted) -> bool:
 	_index=int(data.authored_route_initial_index);_loop=bool(data.authored_route_loop);_authored=true
 	return true
 
+func configure_training_player(bindings: RefCounted) -> bool:
+	if not configure_training_authored(bindings):return false
+	# The world gives the player the original route. Gunant owns a separate copy;
+	# neither actor's arrival advances the other's waypoint index.
+	_identity.erase("actor_id")
+	_identity.owner="player"
+	return true
+
 func generate(random_state: Variant) -> Dictionary:
 	error=""
 	if _identity.is_empty() or not _points.is_empty(): return fail("Configure a fresh NPC route before generating it once")

@@ -1,7 +1,7 @@
 # Combat implementation
 
 The application connects native Opening combat and the subsequent rescue and
-first two mining trips with current Mac packs. The shared pool calculator is
+first two mining trips and combat training with current Mac packs. The shared pool calculator is
 `game/src/simulation/combat_vitals.gd`; later encounters require verified contexts.
 
 Mac reader v119 prepares the combat-training player from the actual installed
@@ -59,9 +59,8 @@ captures of all six distinct models. The shared encounter stages primary hits
 against all four NPCs and 130 source asteroids, then the NPC weapon contacts.
 Late player fire passes its random state into NPC movement and destruction;
 new shots first contact in the following weapon pass. Failed stages preserve
-the accepted encounter, player and scenery together. The complete flight frame
-and session, player death, scene/audio integration, story and return are still
-required before the combat-training flight becomes playable.
+the accepted encounter, player and scenery together. Reader v124 connects these
+owners to the ordinary flight frame, application session and station return.
 
 Mac reader v122 adds the training briefing, timed radio and completion dialogue.
 The shared radio scheduler requires a typed training actor group: an active
@@ -73,8 +72,30 @@ Departure preparation retains the actual installed equipment and spare cargo,
 resets player pools, constructs the ordinary station field and four NPCs, and
 draws the entry camera after their initialization. The shared briefing clock
 waits for entry release and an eligible HUD poll; its three modal lines require
-acknowledgement. These prepared components do not yet enable the complete
-training flight, completion transition or station return in the application.
+acknowledgement. Silent instructions retain their positions in the speech
+sequence. Timed radio continues through the ordinary radio owner and does not
+acknowledge or replace a modal instruction.
+
+Mac reader v124 completes this application segment. Held primary input reaches
+the mounted gun; the four ships share the native scene, particles, acquisition
+markers and accepted audio frame. The player follows original waypoint markers
+with native distance labels and arrival notices. Its route advances separately
+from Gunant, using the preceding player position; final acknowledgement clears it. Starter scanner 81 acquires after 4,000 ms and
+does not inspect cargo. All three pirates must reach explosion mode 4 before
+the five completion lines become available. Their final acknowledgement selects
+the station return, releases protected inventory and resets prices by the actual
+installed/cargo list position. It grants no credits. Later mining keeps the
+inventory synchronized without repeating that price reset.
+
+Docking retains current player pools and cargo through nine station lines and
+original voices. Final acknowledgement selects cursor 9 and reloads the station;
+the following mission is an explicit unsupported boundary. A separate player
+death branch uses the shared game-over display and acknowledged menu transition.
+Checks cover actual keyboard/controller input, dialogue/audio alignment, paused
+input, native mining, failed presentation and transition recovery. Fixtures use
+disclosed close placements and direct normal damage to isolate completion and
+destruction; they do not establish an unmodified full playthrough or original
+runtime visual, audio or pacing parity.
 
 Mac reader v107 adds detached combat preparation for the second mining pirate.
 The existing actor/group and weapon owners accept its constructed world, retain

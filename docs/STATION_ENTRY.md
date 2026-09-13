@@ -3,8 +3,12 @@
 Current Mac packs continue through both mining returns into the starter equipment
 hangar. Purchases and installed equipment have separate ownership; installing a
 weapon and armor plate unlocks Gunant's original acknowledged completion line.
-See [equipment controls and scope](EQUIPMENT.md). Combat-training departure is
-still unfinished. Earlier implementation checkpoints below describe their
+See [equipment controls and scope](EQUIPMENT.md). Mac reader v124 also connects
+the combat-training return: the same equipped ship, current vitals and cargo
+reach Var Hastra, followed by nine acknowledged lines and original recordings.
+Final acknowledgement advances to cursor 9 and reloads the station, preserving
+inventory and kill credit without granting credits. The next station mission
+remains unsupported. Earlier implementation checkpoints below describe their
 individual support boundaries.
 
 The v104 native mining-flight component can return to Var Hastra after the

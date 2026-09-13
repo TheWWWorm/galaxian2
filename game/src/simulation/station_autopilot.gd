@@ -4,7 +4,7 @@ extends RefCounted
 ## frame/input ordering and checks arrival.
 ## The logical camera target stays separate from the visible banked ship.
 const Definitions=preload("res://src/content/station_autopilot_definitions.gd")
-const MiningFlight=preload("res://src/content/full_hold_flight_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Station=preload("res://src/content/station_exterior_resources.gd")
 const Vehicle=preload("res://src/simulation/vehicle_response.gd")
@@ -31,7 +31,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	for data in [entry,target]:
 		if data.get("base_content_id")!=bindings.base_content_id or data.get("binding_id")!=bindings.binding_id:return reject("Station autopilot belongs to another flight identity")
 	var rules: Dictionary=bindings.station_autopilot
-	if MiningFlight.flight(bindings,entry.get("campaign_cursor")).is_empty() or entry.get("location",{}).get("station_id")!=int(rules.station_id) or entry.location.get("system_id")!=int(rules.system_id) or target.get("station_id")!=int(rules.station_id) or target.get("system_id")!=int(rules.system_id):return reject("Station autopilot requires the supported mining location")
+	if OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty() or entry.get("location",{}).get("station_id")!=int(rules.station_id) or entry.location.get("system_id")!=int(rules.system_id) or target.get("station_id")!=int(rules.station_id) or target.get("system_id")!=int(rules.system_id):return reject("Station autopilot requires the supported mining location")
 	var destination:=Vector3(rules.target_position[0],rules.target_position[1],rules.target_position[2])
 	if not target.get("pose") is Transform3D or target.pose.origin!=destination:return reject("Station autopilot target differs from its authored position")
 	var vehicle:=Vehicle.new()

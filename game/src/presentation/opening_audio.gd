@@ -14,6 +14,8 @@ const EngineParameters=preload("res://src/simulation/engine_audio.gd")
 const MiningFlight=preload("res://src/simulation/first_flight_frame.gd")
 const Pirate=preload("res://src/content/full_hold_pirate_definitions.gd")
 const PlayerDeath=preload("res://src/content/player_destruction_definitions.gd")
+const Training=preload("res://src/content/combat_training_story_definitions.gd")
+const TrainingControl=preload("res://src/content/combat_training_control_definitions.gd")
 const PLAYER_ENGINE="player_engine"
 var error := ""
 var _resources: RefCounted
@@ -38,6 +40,8 @@ var _death_audio:={}
 var _content_identity:={}
 var _weapon_audio:={}
 var _npc_weapon_sound:=-1
+var _npc_weapon_sounds:=[]
+var _npc_scan_sound:=-1
 var _radio_voice:={}
 var _radio_identity:={}
 var _voice_displayed: Array=[]
@@ -56,23 +60,28 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 	if campaign_cursor==4:
 		if bindings==null or not Pirate.parameters(bindings.full_hold_pirate) or not PlayerDeath.parameters(bindings.player_destruction):return reject("Second-flight audio lacks its pirate and player destruction declarations")
 		_npc_count=1;_player_death_rules=bindings.player_destruction.duplicate(true)
+	if campaign_cursor==7:
+		if bindings==null or not Training.parameters(bindings.combat_training_story) or not TrainingControl.parameters(bindings.combat_training_control) or not PlayerDeath.parameters(bindings.player_destruction):return reject("Training audio lacks its complete cast and player destruction declarations")
+		_npc_count=4;_player_death_rules=bindings.player_destruction.duplicate(true)
+		_npc_scan_sound=int(bindings.opening_staging.npc_scanner.acquisition_sound_id)
 	_seed_value=audio_seed
 	_random.seed=audio_seed
 	_resources=Resources.new()
 	if not _resources.configure(library,bindings,0 if campaign_cursor==4 else campaign_cursor):return reject(_resources.error)
+	if _npc_scan_sound>=0 and _resources.prepare(_npc_scan_sound).is_empty():return reject(_resources.error)
 	_content_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	for id in bindings.vehicle_response.get("audio",{}).get("event_ids",[]):_engine_ids.append(int(id))
 	_arrival_engine_id=int(bindings.opening_staging.get("escape",{}).get("arrival_engine_sound_id",-1))
-	_radio_voice=Dialogue.select(bindings,campaign_cursor).get("voice",{}) if campaign_cursor in [0,1] else {}
+	_radio_voice=Dialogue.select(bindings,campaign_cursor).get("voice",{}) if campaign_cursor in [0,1,7] else {}
 	if not _radio_voice.is_empty():
-		if not RadioVoice.parameters(_radio_voice,23 if campaign_cursor==0 else 3):return reject("Invalid radio voice capability")
+		if not RadioVoice.parameters(_radio_voice,Dialogue.select(bindings,campaign_cursor).events.size()):return reject("Invalid radio voice capability")
 		_radio_voice=_radio_voice.duplicate(true)
 		_radio_identity=_content_identity.duplicate();_radio_identity.language=library.active_language
 		if campaign_cursor!=0:_radio_identity.campaign_cursor=campaign_cursor
 		_voice_displayed.resize(_radio_voice.event_ids.size());_voice_displayed.fill(false)
 		for id in _radio_voice.event_ids:
 			if id>=0 and _resources.prepare(int(id)).is_empty():return reject(_resources.error)
-	_weapon_audio=bindings.weapon_parameters.get("audio",{}) if campaign_cursor in [0,4] else {}
+	_weapon_audio=bindings.weapon_parameters.get("audio",{}) if campaign_cursor in [0,4,7] else {}
 	if not _weapon_audio.is_empty():
 		if not WeaponAudio.parameters(_weapon_audio):return reject("Invalid weapon audio capability")
 		_weapon_audio=_weapon_audio.duplicate(true)
@@ -80,8 +89,12 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 		if campaign_cursor==4:kind=int(bindings.full_hold_pirate.actor_kind)
 		if kind<0:return reject("Weapon audio requires its NPC owner")
 		_npc_weapon_sound=int(_weapon_audio.npc_event_ids[kind]) if kind<_weapon_audio.npc_event_ids.size() else int(_weapon_audio.npc_default_event_id)
-		if _resources.prepare(_npc_weapon_sound).is_empty():return reject(_resources.error)
-	_death_audio=bindings.opening_actors.get("npc_initialization",{}).get("destruction_audio",{}) if campaign_cursor in [0,4] else {}
+		for id in _npc_count:
+			var actor_kind:=int(bindings.combat_training_control.actor_kinds[id]) if campaign_cursor==7 else kind
+			var sound:=int(_weapon_audio.npc_event_ids[actor_kind]) if actor_kind<_weapon_audio.npc_event_ids.size() else int(_weapon_audio.npc_default_event_id)
+			_npc_weapon_sounds.append(sound)
+			if _resources.prepare(sound).is_empty():return reject(_resources.error)
+	_death_audio=bindings.opening_actors.get("npc_initialization",{}).get("destruction_audio",{}) if campaign_cursor in [0,4,7] else {}
 	if not _death_audio.is_empty():
 		if not Death.audio_parameters(_death_audio):return reject("Invalid NPC destruction audio capability")
 		_death_audio=_death_audio.duplicate(true)
@@ -89,7 +102,7 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 		_death_audio.breakup_source_ids=[int(_death_audio.breakup_source_ids[0]),int(_death_audio.breakup_source_ids[1])]
 		for id in [_death_audio.initial_source_id]+_death_audio.breakup_source_ids:
 			if _resources.prepare(int(id)).is_empty():return reject(_resources.error)
-	if campaign_cursor==4:
+	if campaign_cursor in [4,7]:
 		if _weapon_audio.is_empty() or _death_audio.is_empty():return reject("Second-flight combat audio is unavailable")
 		for id in [int(_player_death_rules.breakup_sound_base),int(_player_death_rules.breakup_sound_base)+1,int(_player_death_rules.failure_sound),_npc_weapon_sound,int(_death_audio.initial_source_id)]:
 			var clip: Dictionary=_resources.prepare(id)
@@ -112,7 +125,9 @@ func configure_full_hold(library: RefCounted,bindings: RefCounted,world: RefCoun
 	for key in ["base_content_id","binding_id"]:
 		if bindings==null or state.get(key)!=bindings.get(key):return reject("Second-flight audio belongs to another content identity")
 	if not state.get("flight_audio") is Dictionary or state.flight_audio.get("serial")!=0:return reject("Register second-flight audio before advancing its world")
-	if not configure(library,bindings,audio_seed,4):return false
+	var cursor: int=world.destruction_owner().snapshot().departure_cursor
+	if cursor not in [4,7] or state.campaign_cursor!=cursor:return reject("Register ordinary-flight sound in its initial mission")
+	if not configure(library,bindings,audio_seed,cursor):return false
 	_flight_identity=world.destruction_owner().presentation_identity()
 	return true
 
@@ -133,8 +148,15 @@ func prepare_full_hold(world: RefCounted) -> Dictionary:
 		var prepared:=prepare_player_death(cues.get(phase),phase)
 		if prepared.is_empty():return {}
 		commands.append_array(prepared.operations)
+	for event in state.get("npc_scanner_events",[]):
+		if not event is Dictionary or event.get("kind")!="sound" or event.get("source_id")!=_npc_scan_sound or not Definitions.integer(event.get("actor_id"),0,_npc_count-1):return fail("Invalid training acquisition sound")
+		commands.append({"action":"start","source_id":_npc_scan_sound})
 	var view:={"elapsed_ms":int(elapsed),"camera":{"view":state.camera_view},"escape":{"frame":{"audio":commands}}}
+	if state.has("radio"):
+		view.radio=state.radio;view.radio_changes=state.radio_events
 	var combat:=_content_identity.duplicate()
+	for key in ["primary_fire","primaries"]:
+		if state.encounter.has(key):combat[key]=state.encounter[key]
 	combat.elapsed_ms=int(elapsed);combat.actor_events=cues.get("actors")
 	var result:=prepare_frame(_revision+1,view,combat)
 	if result.is_empty():return {}
@@ -355,7 +377,7 @@ func prepare_npc_weapon(event: Dictionary, actor_id: int) -> Dictionary:
 	var rows: Variant=firing.get("actors")
 	if not rows is Array or rows.size()!=1 or not rows[0] is Dictionary or rows[0].get("actor_id")!=actor_id:return fail("NPC sound belongs to another firing actor")
 	if not rows[0].get("outcome") is Dictionary:return fail("Invalid NPC firing result")
-	var entry:={"enabled":true,"source_id":_npc_weapon_sound,"pitch_raw":0.0}
+	var entry:={"enabled":true,"source_id":_npc_weapon_sounds[actor_id],"pitch_raw":0.0}
 	var frame:=prepare_weapon_cues(rows[0].get("audio_events"),rows[0].get("outcome",{}).get("fired"),entry)
 	if frame.is_empty():return {}
 	for op in frame.operations:op.actor_id=actor_id
@@ -525,7 +547,7 @@ func clear() -> void:
 	restore_listener()
 	_resources=null;_identity=null;_revision=-1;_elapsed_ms=0;_players.clear();_retiring.clear();_history.clear();_unsupported.clear();_music=-1;_engine=-1;_paused=false;_start_serial=0;error=""
 	_last_samples.clear();_random.seed=0
-	_death_audio={};_content_identity={};_weapon_audio={};_npc_weapon_sound=-1
+	_death_audio={};_content_identity={};_weapon_audio={};_npc_weapon_sound=-1;_npc_weapon_sounds=[];_npc_scan_sound=-1
 	_radio_voice={};_radio_identity={};_voice_displayed=[];_voice_serial=0
 	_engine_ids=[];_arrival_engine_id=-1;_engine_generation=-1;_initial_engine_id=-1
 	_npc_count=3;_player_death_rules={};_flight_identity=null;_flight_serial=-1

@@ -5,8 +5,8 @@ signal next_requested
 signal previous_requested
 const Portraits=preload("res://src/presentation/portrait_compositor.gd")
 const Definitions=preload("res://src/content/station_presentation_definitions.gd")
-const MiningStory=preload("res://src/content/full_hold_story_definitions.gd")
-const StationReturn=preload("res://src/content/full_hold_return_definitions.gd")
+const MiningStory=preload("res://src/content/ordinary_flight_definitions.gd")
+const StationReturn=preload("res://src/content/ordinary_flight_definitions.gd")
 var error:=""
 var portrait_diagnostics:={}
 var _identity:={}
@@ -65,7 +65,7 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, visua
 
 func configure_station_return(library: RefCounted, bindings: RefCounted, visuals: RefCounted, campaign_cursor:=3) -> bool:
 	if library==null or bindings==null or visuals==null or not Definitions.parameters(bindings.station_presentation):return reject("Station return resources are unavailable")
-	var rules:=StationReturn.select(bindings,campaign_cursor)
+	var rules:=StationReturn.station_return(bindings,campaign_cursor)
 	if rules.is_empty():return reject("Station return resources are unavailable for this visit")
 	return _configure_resources(library,bindings,visuals,rules)
 

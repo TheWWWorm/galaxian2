@@ -55,6 +55,13 @@ With current Mac bindings, `combat_training_visuals` adds the projectile and
 impact checks to that same scenario. Add `--gpu --captures /path/to/captures` to
 capture each original weapon model independently.
 
+`combat_training_flight` also exercises the shared scene and the application
+from that earned station state through training, return-trip mining, nine return
+lines, station reload and a separate game-over branch. Use the same scenario
+argument; `--gpu --captures /path/to/captures` adds application screenshots.
+`flight_waypoint_marker` checks the source marker crops, distance format, route
+boundaries and independent player/companion progress without a tutorial fixture.
+
 The fixture replays the tutorial's accepted inventory transactions and compares
 all resulting equipment to the captured state. It rejects mismatched content or
 bindings, changed prerequisite code, incomplete acknowledgement and altered
@@ -62,8 +69,9 @@ inventory. The runner publishes a capture only after its integration run passes;
 a failed run preserves any previous capture. Recapture after a prerequisite
 change or when choosing another binding pack.
 
-These checks cover detached simulation components. They do not replace the full
-application test, exercise player saves or make the unfinished encounter playable.
+The focused construction tests cover detached simulation components. Neither
+those tests nor the flight fixtures exercise player saves or prove an unmodified
+playthrough. Close placements and direct damage isolate the tested transitions.
 Retain the complete integration run when changing session transitions or closing
 an encounter milestone. No scenario file belongs in a source package.
 

@@ -3,7 +3,7 @@ extends RefCounted
 ## A ready result requests the drill owner; it never extracts ore or progresses
 ## a mission. The flight must apply camera, engine and spin changes together.
 const Definitions=preload("res://src/content/mining_approach_definitions.gd")
-const MiningFlight=preload("res://src/content/full_hold_flight_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Targeting=preload("res://src/simulation/mining_targeting.gd")
 const Scenery=preload("res://src/simulation/opening_scenery.gd")
@@ -28,7 +28,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	error=""
 	if bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.mining_approach):return reject("Mining approach requires a supported mining departure")
 	var entry: Dictionary=construction.snapshot()
-	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or MiningFlight.flight(bindings,entry.get("campaign_cursor")).is_empty() or entry.scenery.get("bodies",{}).is_empty():return reject("Mining approach belongs to another or incomplete flight")
+	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty() or entry.scenery.get("bodies",{}).is_empty():return reject("Mining approach belongs to another or incomplete flight")
 	var vehicle:=Vehicle.new();var cruise:=Cruise.new()
 	if not vehicle.configure(bindings,catalogues,bindings.base_content_id) or not cruise.configure(bindings,bindings.base_content_id):return reject(vehicle.error+cruise.error)
 	var loadout: Dictionary=entry.departure.loadout

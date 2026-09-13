@@ -7,9 +7,10 @@ the three-transmission rescue, first station conversation and both mining trips.
 The second trip includes original briefing/warning speech, the retained pirate,
 weapon contacts, particles, combat/death sounds and six acknowledged return lines.
 The application also supports the cursor-6 starter equipment shop and installed
-weapon/armor requirement. Gunant's acknowledged line selects the next mission;
-the combat-training flight, remaining campaigns and general station services are
-unfinished. See [equipment scope](EQUIPMENT.md). Older packs retain their earlier
+weapon/armor requirement. Current Mac v124 bindings continue through combat
+training, its return conversation and station reload. The next station mission,
+remaining campaigns and general station services are unfinished. See
+[equipment controls and scope](EQUIPMENT.md). Older packs retain their earlier
 supported boundaries.
 
 Mac v119 adds native combat-training weapons and player preparation. The actual
@@ -20,8 +21,12 @@ player/NPC contacts and rollback are checked alongside the v118 four-ship contro
 Mac v120 adds cargo-aware destruction for all four training ships, separate
 Gunant/pirate counter attribution, shared random-state handoff and the original
 pirate defeat predicate. Lethal hits, explosions and cargo cleanup remain distinct.
-The complete flight session, world contacts, player death, mission events,
-presentation and return still need integration before this flight is available.
+Mac v124 connects the complete training frame, scene, held fire input, player
+death, modal briefing/completion, timed radio and nine station return lines.
+The source inventory transition retains cargo; optional return-trip mining keeps
+equipment synchronized. The station reload stops before the next unsupported
+mission. Tests use earned equipment plus disclosed placements and damage; an
+unmodified full playthrough and comparison with the original runtime remain.
 
 Current v115 packs connect lethal second-trip contact, retained motion/drilling,
 camera release, explosion and game-over fade. Acknowledgement returns to the
@@ -36,18 +41,16 @@ the Mac-based game is complete.
 
 | Area | Implemented and checked | Remaining work |
 |---|---|---|
-| Mac combat-training destruction | v120 shared cargo/debris lifecycle for all four ships, finite Gunant hull, distinct kill counters, ordered random-state handoff, and condition18 over exploded pirates; strict boundaries, projectile contact and rollback checked | Complete flight/session, world contacts, player death, mission events, presentation and return |
-| Mac combat-training weapons | v119 actual installed player equipment and fresh pools; three pirate guns and Gunant's distinct gun; ordered player/NPC contacts before projectile cleanup; upgraded player gun spread, finite damage and NPC kill attribution; older packs and rollback checked | Full flight/session integration, mission events, projectile/effect/audio presentation and return |
-| Mac combat-training control | v118 four native bodies, mixed target lists, source initialization/activation timing, shared steering and bank response, route exhaustion, finite hull and frame rollback | Full weapon/frame integration, mission events, presentation and return |
-| Mac starter equipment | v116 zero-price stock for two guns and one armor plate; native purchase/sale/mount/demount, protected drill/scanner, stock persistence and actual cargo refresh; installed-item predicate, original completion portrait/voice and UI sounds; acknowledged cursor 7 progression | Combat-training flight, general inventory/economy, original inventory icon/layout reconstruction and saves |
-| Mac second mining application | Earned first return offers departure with current v115 Mac packs; native mining, original briefing/warnings, pirate combat, cargo/vitals-preserving return and six station lines; separate lethal-contact branch checks pause, failed presentation/exit recovery and real viewport continuation; GPU captures inspected | Combat-training flight, original main menu/music, remaining sound owners, saves and original-runtime comparison |
+| Mac combat training | v124 actual equipped departure, four native ships, complete weapon contacts, field, particles and source models; held primary input, starter scanner, independent player waypoints, modal briefing, timed radio, native pirate defeat, inventory price transition, return-trip mining, nine station lines and reload; separate player death/menu branch and transactional failures checked | Next station mission, unmodified playthrough, original-runtime visual/audio/pacing comparison, remaining ordinary flight sounds and saves |
+| Mac starter equipment | v116 zero-price stock for two guns and one armor plate; native purchase/sale/mount/demount, protected drill/scanner, stock persistence and actual cargo refresh; installed-item predicate, original completion portrait/voice and UI sounds; acknowledged cursor 7 progression | General inventory/economy, original inventory icon/layout reconstruction and saves |
+| Mac second mining application | Earned first return offers departure with current v115 Mac packs; native mining, original briefing/warnings, pirate combat, cargo/vitals-preserving return and six station lines; separate lethal-contact branch checks pause, failed presentation/exit recovery and real viewport continuation; GPU captures inspected | Original main menu/music, remaining sound owners, saves and original-runtime comparison |
 | Mac second-trip combat/death audio | Shared native player accepts one pirate's weapon/death cues and player breakup/game-over cues; source positions, ordered current-music/engine/equipment stops, frame serials, rollback and prior Mac packs checked; two mixer captures have nonzero samples and silent paused tails | Ordinary engine/mining/acquisition/music ownership, original-runtime mix comparison and hardware listening |
 | Mac second-trip damage particles | v115 player/pirate trails, world manual burst and pirate smoke/fire connected to the native frame and shared renderer; original material/texture, source update order, private random streams, mining statistics position, inclusive expiry, rollback and older packs checked; location and supplemental close GPU views inspected | Original-runtime visual comparison and later content contexts |
 | Mac starter destruction | v113 death owner connected to the second-trip frame and renderer; retained manual/guided motion, separate bank/Euler/statistics, lethal-frame input suppression, continuing drill/stop, mining camera release, skipped player tail for invalid targets, world updates after full fade, two-model explosion without debris and detached exit packet; native/GPU checks and rollback pass | Other loadouts/death contexts and original-runtime comparison |
 | Mac game-over display | v114 original atlas art, destruction-owned fade/readiness, source sine blink and desktop/mobile prompt mapping for all twelve Mac languages; native fire/confirm/pointer input and hidden/held-input guards; connected to the second-trip scene with current camera, HUD hiding and accepted-frame restoration; inspected location captures | Full original main menu and its music, save restoration and other death contexts |
 | Mac first mining application | Departure confirmation, session clock, keyboard/controller/touch mining and station input, acknowledged briefing/cargo speech and automatic return entry; pause and failed-scene preservation; live mined-cargo application path and GPU views checked | Engine/mining/acquisition sounds, collision response, saves and complete tutorial |
 | Mac first mining return | v104 selected-station docking after acknowledged cargo instructions; pre-motion radius/current-volume timing, preserved current vitals and cargo, original return hangar/portraits and five lines/recordings; final acknowledgement clears cargo and selects the 25-ton objective without credits; native mined-cargo trip and desktop/phone views checked | Remaining flight sound owners, avoidance/collision response and full tutorial completion |
-| Mac second mining return | v112 shared docking after the full-hold warning; current vitals, ship and cargo retained through six source lines, five recordings and a silent instruction; final acknowledgement removes item rows, preserves the deferred cargo cache and selects mission 158; native trip under pirate fire, rollback, all Mac languages and desktop/phone component views checked | Later combat-training flight and general station services |
+| Mac second mining return | v112 shared docking after the full-hold warning; current vitals, ship and cargo retained through six source lines, five recordings and a silent instruction; final acknowledgement removes item rows, preserves the deferred cargo cache and selects mission 158; native trip under pirate fire, rollback, all Mac languages and desktop/phone component views checked | General station services |
 | Mac second mining departure preparation | v105 native station/player preparation after acknowledged delivery; retained ship/progress and 25-ton mission, source cache reset, isolated packet, refusal before acknowledgement or with uncleared cargo; native first-trip integration and older Mac imports checked | Later station equipment tutorial and remaining ordinary flight sound owners |
 | Mac second mining world preparation | v106 shared location, field, NPC and camera constructors; one source pirate with retained generated cargo/route, initial placement/activity and weapon-effect random ordering; independent numerical fixtures, earned progress and older Mac imports checked | Later station equipment tutorial and remaining ordinary flight sound owners |
 | Mac second mining pirate combat | v107 shared NPC bodies/projectile pools, earned-rank and difficulty hull, one-damage player contacts, strict firing cadence, content isolation and rollback; Mac Opening guidance health sample corrected | Tractor/collection and later combat contexts |

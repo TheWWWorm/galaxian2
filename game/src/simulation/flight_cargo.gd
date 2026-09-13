@@ -4,6 +4,7 @@ extends RefCounted
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Departure=preload("res://src/content/station_departure_definitions.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 var error:=""
 var _state:={}
 var _item_count:=0
@@ -15,15 +16,25 @@ func configure_departure(bindings: RefCounted, catalogues: RefCounted, construct
 	if bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or not Departure.parameters(bindings.station_departure):return reject("Cargo requires a prepared first departure")
 	var entry: Dictionary=construction.snapshot()
 	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id:return reject("Cargo belongs to another departure identity")
+	if OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty():return reject("Cargo requires a supported ordinary departure")
+	var training: bool=entry.campaign_cursor==7
 	var ship_id:=int(bindings.station_departure.ship_id)
 	var ships: Array=catalogues.tables.get("ships",[])
-	if entry.departure.loadout.ship_id!=ship_id or ship_id>=ships.size() or entry.departure.cargo_used!=0 or int(bindings.station_departure.initial_cargo_used)!=0:return reject("Unsupported initial cargo or ship")
+	if entry.departure.loadout.ship_id!=ship_id or ship_id>=ships.size() or (not training and entry.departure.cargo_used!=0) or int(bindings.station_departure.initial_cargo_used)!=0:return reject("Unsupported initial cargo or ship")
 	var capacity: Variant=ships[ship_id].get("stats",{}).get("cargo_capacity")
 	if not Numbers.integer(capacity,0,2147483647):return reject("Ship cargo capacity is unavailable")
 	var item_count: int=catalogues.tables.get("items",[]).size()
 	if item_count==0:return reject("Cargo requires the item catalogue")
-	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"ship_id":ship_id,
+	var candidate: RefCounted=get_script().new()
+	candidate._state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"ship_id":ship_id,
 		"capacity":int(capacity),"used":0,"entries":[]}
+	candidate._item_count=item_count
+	if training:
+		var equipment: RefCounted=construction.equipment_owner()
+		if equipment==null:return reject("Training cargo requires its retained equipment owner")
+		var hold: Dictionary=equipment.snapshot().cargo
+		if entry.departure.get("cargo")!=hold or not candidate.add_entries(hold.entries) or candidate.snapshot()!=hold:return reject("Training cargo differs from the earned hold or capacity")
+	_state=candidate._state.duplicate(true)
 	_item_count=item_count;_field_identity=construction.scenery_owner().presentation_identity()
 	_mined_indices=[]
 	return true

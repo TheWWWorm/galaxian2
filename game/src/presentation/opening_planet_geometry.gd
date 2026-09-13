@@ -21,10 +21,10 @@ func build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catal
 func build_arrival(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, arrival_cache: Variant, quality := "high") -> bool:
 	return _build(library,visuals,bindings,catalogues,quality,false,1,arrival_cache)
 
-func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, quality := "high") -> bool:
-	return _build(library,visuals,bindings,catalogues,quality,false,2,cache)
+func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, quality := "high", equipment: RefCounted=null) -> bool:
+	return _build(library,visuals,bindings,catalogues,quality,false,2,cache,equipment)
 
-func _build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, quality: String, with_escape: bool, cursor: int, location_cache: Variant) -> bool:
+func _build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, quality: String, with_escape: bool, cursor: int, location_cache: Variant, equipment: RefCounted=null) -> bool:
 	clear()
 	if visuals.base_content_id!=bindings.base_content_id:return reject("Planet textures belong to another content identity")
 	var layout:=Layout.new()
@@ -32,7 +32,7 @@ func _build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, cata
 	match cursor:
 		0:_layout=layout.for_opening(bindings,catalogues,library.manifest.get("content_id",""),quality)
 		1:_layout=layout.for_arrival(bindings,catalogues,location_cache,quality)
-		2:_layout=layout.for_departure(bindings,catalogues,location_cache,quality)
+		2:_layout=layout.for_departure(bindings,catalogues,location_cache,quality,equipment)
 		_:return reject("Unsupported planet scene")
 	if _layout.is_empty():return reject(layout.error)
 	if _layout.sky_index in [11,12]:return reject("Fogged planet drawing is not yet supported")

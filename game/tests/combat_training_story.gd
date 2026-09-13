@@ -27,6 +27,20 @@ func verify_training_destruction(args: PackedStringArray, equipment: RefCounted)
 	for key in StoryRules.SPANS:
 		var bad:=rules.duplicate(true);bad.provenance[key].offset+=1
 		check(not story_validation(bad,header.source_executable_bytes).is_empty(),"Disconnected training story accepted: "+key)
+	if rules.has("station_return"):
+		for key in StoryRules.RETURN_VALUES:
+			var bad:=rules.duplicate(true);bad.station_return[key]=null
+			check(not StoryRules.parameters(bad),"Changed training return accepted: "+key)
+		for key in StoryRules.RETURN_SPANS:
+			var bad:=rules.duplicate(true);bad.provenance[key].offset+=1
+			check(not story_validation(bad,header.source_executable_bytes).is_empty(),"Disconnected training return accepted: "+key)
+	if rules.has("navigation"):
+		for key in StoryRules.NAVIGATION_VALUES:
+			var bad:=rules.duplicate(true);bad.navigation[key]=null
+			check(not StoryRules.parameters(bad),"Changed training navigation accepted: "+key)
+		for key in StoryRules.NAVIGATION_SPANS:
+			var bad:=rules.duplicate(true);bad.provenance[key].offset+=1
+			check(not story_validation(bad,header.source_executable_bytes).is_empty(),"Disconnected training navigation accepted: "+key)
 	var briefing:=StoryRules.briefing(bindings)
 	check(briefing.campaign_cursor==7 and briefing.mission_kind==4 and briefing.entry_release_ms==7001 and briefing.briefing_minimum_ms==5001,"Training lost the shared entry/HUD clocks")
 	check(briefing.events.map(func(row):return int(row.text_id))==[1726,1727,1728] and bindings.desktop_text_id(1728)==1729,"Training briefing or desktop fire instruction changed")

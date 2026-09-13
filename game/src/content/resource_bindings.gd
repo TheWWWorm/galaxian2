@@ -9,7 +9,7 @@ const FullHoldParticles=preload("res://src/content/full_hold_particle_definition
 const PlayerDestruction=preload("res://src/content/player_destruction_definitions.gd")
 const CombatTrainingVisuals=preload("res://src/content/combat_training_visual_definitions.gd")
 const CombatTrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
-const MAX_READER_VERSION:=122
+const MAX_READER_VERSION:=124
 const CombatTrainingDestruction=preload("res://src/content/combat_training_destruction_definitions.gd")
 const CombatTrainingWeapons=preload("res://src/content/combat_training_weapon_definitions.gd")
 const CombatTrainingControl=preload("res://src/content/combat_training_control_definitions.gd")
@@ -957,6 +957,8 @@ func open(directory: String, base: Dictionary) -> bool:
 		var training_story_error:=CombatTrainingStory.validate(body.get("combat_training_story"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_combat_training,staged_combat_training_destruction,staged_mining_briefing,staged_mining_objective,staged_dialogue,staged_full_hold_story)
 		if not training_story_error.is_empty():return fail(training_story_error)
 		staged_combat_training_story=body.combat_training_story
+		if version>=123 and not staged_combat_training_story.is_empty() and not staged_combat_training_story.has("station_return"):return fail("This reader omitted the training station return")
+		if version>=124 and not staged_combat_training_story.is_empty() and not staged_combat_training_story.has("navigation"):return fail("This reader omitted training navigation")
 	source_architecture=architecture
 	audio=staged_audio
 	scenery_effects=staged_scenery_effects

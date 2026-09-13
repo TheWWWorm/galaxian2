@@ -40,10 +40,10 @@ func build_arrival(library: RefCounted, visuals: RefCounted, bindings: RefCounte
 	selection.campaign_cursor=context.campaign_cursor
 	return true
 
-func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, quality := "high") -> bool:
+func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, quality := "high", equipment: RefCounted=null) -> bool:
 	clear()
 	var location:=Arrival.new()
-	var context:=location.resolve_departure(bindings,catalogues,cache)
+	var context:=location.resolve_departure(bindings,catalogues,cache,equipment)
 	if context.is_empty():return reject(location.error)
 	if library.manifest.get("content_id","")!=bindings.base_content_id:return reject("Departure sky belongs to another content identity")
 	if not _build_location(library,visuals,bindings,catalogues,context.sky_parameters,context,quality,false):return false

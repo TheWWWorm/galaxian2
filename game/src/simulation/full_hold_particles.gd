@@ -25,11 +25,15 @@ func configure(bindings: RefCounted,combat: Dictionary,death: RefCounted,seed_se
 	var initial: Dictionary=death.snapshot()
 	for key in ["base_content_id","binding_id"]:
 		if initial.get(key)!=bindings.get(key) or combat.get(key)!=bindings.get(key):return reject("Second-flight particles belong to another departure")
-	if initial.get("phase")!="ready":return reject("Register second-flight particles before player death")
+	var training: bool=combat.get("campaign_cursor")==7
+	if initial.get("phase")!="ready" or initial.get("departure_cursor")!=(7 if training else 4):return reject("Register ordinary-flight particles before player death in the same encounter")
 	var smoke:=Smoke.new()
-	if not smoke.configure_full_hold(bindings,combat,seed_seconds):return reject(smoke.error)
+	if not (smoke.configure_combat_training(bindings,combat,seed_seconds) if training else smoke.configure_full_hold(bindings,combat,seed_seconds)):return reject(smoke.error)
 	var emitters:={}
-	for key in ["player","npc0","world"]:
+	var keys:=["player"]
+	for id in combat.actors.size():keys.append("npc%d"%id)
+	keys.append("world")
+	for key in keys:
 		var emitter:=Emitter.new()
 		if not emitter.configure_full_hold(bindings,bindings.base_content_id,11 if key=="world" else 9,seed_seconds):return reject(emitter.error)
 		emitters[key]=emitter
@@ -67,12 +71,11 @@ func advance(player_root: Variant,delta_ms: Variant) -> bool:
 	if _identity.is_empty() or not Flight.rigid_pose(player_root) or not Numbers.integer(delta_ms,0,1000):return reject("Second-flight particles require a rigid player root and bounded milliseconds")
 	if delta_ms==0:return true
 	var next:=fork_for_frame();var interval:=_manager_ms+int(delta_ms)
-	var npc_root: Transform3D=_smoke.snapshot().owners.npc0.root_pose
 	next._births={}
 	# General sprites precede smoke and fire. The root already retained by the
 	# shared NPC smoke/fire owner is also the preset-9 emitter's logical root.
 	for key in _emitters:
-		var pose: Transform3D=player_root if key=="player" else npc_root if key=="npc0" else Transform3D.IDENTITY
+		var pose: Transform3D=player_root if key=="player" else _smoke.npc_root(int(key.trim_prefix("npc"))) if key.begins_with("npc") else Transform3D.IDENTITY
 		var result: Dictionary=next._emitters[key].advance(pose,delta_ms,interval)
 		if result.has("error"):return reject(next._emitters[key].error)
 		next._births[key]=int(result.births)
@@ -86,10 +89,12 @@ func finish_npc_pass(before: Dictionary,after: Dictionary,events: Array,delta_ms
 	if _smoke==null:return reject("Configure second-flight particles before the NPC pass")
 	var next:=fork_for_frame()
 	if not next._smoke.finish_npc_pass(before,after,events,delta_ms,detail):return reject(next._smoke.error)
-	var death: Dictionary=events[0].get("destruction",{})
-	if not death.is_empty():
-		if death.started:next._emitters.npc0.set_emitting(true)
-		if death.breakup:next._emitters.npc0.set_emitting(false)
+	for event in events:
+		var death: Dictionary=event.get("destruction",{})
+		if not death.is_empty():
+			var key:="npc%d"%int(event.actor_id)
+			if death.started:next._emitters[key].set_emitting(true)
+			if death.breakup:next._emitters[key].set_emitting(false)
 	adopt(next);return true
 
 func matches_death(death: RefCounted) -> bool:
@@ -103,8 +108,10 @@ func snapshot() -> Dictionary:
 	var smoke: Dictionary=_smoke.snapshot()
 	result.manager_ms=_manager_ms;result.elapsed_ms=_elapsed_ms;result.burst_count=_burst_count
 	result.births=_births.duplicate(true);result.smoke_fire_births=smoke.births
-	result.owners={"player":{"trail":_emitters.player.snapshot()},"npc0":smoke.owners.npc0,"world":{"burst":_emitters.world.snapshot()}}
-	result.owners.npc0.trail=_emitters.npc0.snapshot()
+	result.owners={}
+	for key in _emitters:
+		result.owners[key]=smoke.owners.get(key,{})
+		result.owners[key]["burst" if key=="world" else "trail"]=_emitters[key].snapshot()
 	return result
 
 func fork_for_frame() -> RefCounted:

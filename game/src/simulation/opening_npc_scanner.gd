@@ -6,6 +6,8 @@ const Numbers = preload("res://src/content/opening_definitions.gd")
 const TargetProjection = preload("res://src/presentation/target_projection.gd")
 const Loadout = preload("res://src/simulation/opening_loadout.gd")
 const Vectors = preload("res://src/simulation/source_vectors.gd")
+const Equipment=preload("res://src/simulation/station_equipment.gd")
+const Training=preload("res://src/content/combat_training_control_definitions.gd")
 var error := ""
 var _identity := {}
 var _definition := {}
@@ -20,8 +22,10 @@ var _selected := -1
 var _candidate := -1
 var _elapsed := 0
 var _sample := {}
+var _kinds:=[8,8,8]
+var _campaign_cursor:=0
 
-func configure(bindings: RefCounted, catalogues: RefCounted, frame_radii: Vector2, animation_frames: int) -> bool:
+func configure(bindings: RefCounted, catalogues: RefCounted, frame_radii: Vector2, animation_frames: int, equipment_owner: RefCounted=null) -> bool:
 	clear()
 	if bindings==null or catalogues==null or not Definitions.parameters(bindings.opening_staging.get("npc_scanner",{})):
 		return reject("NPC scanner requires its verified opening declarations")
@@ -31,14 +35,22 @@ func configure(bindings: RefCounted, catalogues: RefCounted, frame_radii: Vector
 	var projection := TargetProjection.new()
 	if not projection.configure(bindings.flight_projection,Vector2i.ONE,frame_radii):return reject(projection.error)
 	if animation_frames<1 or animation_frames>1024:return reject("Invalid original scanner filmstrip")
-	var loadout := Loadout.new()
-	if not loadout.configure(bindings,catalogues,bindings.base_content_id):return reject(loadout.error)
+	var loadout: Dictionary
+	var training:=equipment_owner!=null
+	if training:
+		if not equipment_owner is Equipment or not Training.parameters(bindings.combat_training_control) or not equipment_owner.requirements().satisfied:return reject("Training scanner requires the retained equipped ship and complete cast")
+		loadout=equipment_owner.snapshot().loadout
+		if loadout.base_content_id!=bindings.base_content_id or loadout.binding_id!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id:return reject("Training scanner equipment belongs to another content identity")
+	else:
+		var initial:=Loadout.new()
+		if not initial.configure(bindings,catalogues,bindings.base_content_id):return reject(initial.error)
+		loadout=initial.snapshot()
 	var data: Dictionary=bindings.opening_staging.npc_scanner
 	var equipment := -1
-	for id in loadout.snapshot().equipment_ids:
+	for id in loadout.equipment_ids:
 		var item: Dictionary=catalogues.tables.items[id]
 		if item.arrays[2].size()<=5:return reject("Scanner equipment lacks its source type")
-		if int(item.arrays[2][5]) in [13,19]:return reject("Special scanner devices are outside the fresh opening scope")
+		if int(item.arrays[2][5]) in [13,19] and (not training or id!=90):return reject("Special scanner devices are outside this flight's scope")
 		if int(item.arrays[2][5])==int(data.equipment_type):equipment=id
 	var duration := int(data.default_duration_ms)
 	var cargo := false
@@ -47,8 +59,11 @@ func configure(bindings: RefCounted, catalogues: RefCounted, frame_radii: Vector
 		if not Numbers.integer(properties.get(int(data.duration_property)),1,2147483647):return reject("Unsupported scanner acquisition duration")
 		duration=int(properties[int(data.duration_property)])
 		cargo=properties.get(int(data.cargo_property))==1
+	if training and (equipment!=81 or duration!=4000 or cargo):return reject("Training NPC scanning requires the source starter scanner without cargo inspection")
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	_definition=data.duplicate(true);_perspective=bindings.flight_projection.duplicate(true);_hulls=npc.hull.hull_catalogue_ids.duplicate()
+	if training:
+		_hulls=bindings.combat_training_control.hull_catalogue_ids.duplicate();_kinds=bindings.combat_training_control.actor_kinds.duplicate();_campaign_cursor=7
 	_radii=frame_radii;_frame_count=animation_frames;_equipment=equipment;_duration=duration;_cargo=cargo
 	return true
 
@@ -59,13 +74,14 @@ func advance(combat: Dictionary, player: Transform3D, camera: Transform3D, aim: 
 		if combat.get(key)!=_identity[key] or aim.get(key)!=_identity[key]:return reject("NPC scanner samples belong to another content profile")
 	var population: Variant=combat.get("actors")
 	var point: Variant=aim.get("point");var viewport: Variant=aim.get("viewport_size")
-	if not population is Array or population.size()!=3 or not point is Vector3 or not point.is_finite() or not TargetProjection.safe_pixel(point.x) or not TargetProjection.safe_pixel(point.y) or not viewport is Vector2i or not player.is_finite():return reject("Invalid opening scanner sample")
+	if not population is Array or population.size()!=_hulls.size() or not point is Vector3 or not point.is_finite() or not TargetProjection.safe_pixel(point.x) or not TargetProjection.safe_pixel(point.y) or not viewport is Vector2i or not player.is_finite():return reject("Invalid ordinary scanner sample")
+	if _campaign_cursor==7 and combat.get("campaign_cursor")!=7:return reject("Training scanner lost its encounter context")
 	var projection := TargetProjection.new()
 	if not projection.configure(_perspective,viewport,_radii):return reject(projection.error)
 	# Check all inputs before committing selection, including invisible bodies.
 	for id in population.size():
 		var actor: Variant=population[id]
-		if not actor is Dictionary or actor.get("actor_id")!=id or actor.get("base_content_id")!=_identity.base_content_id or actor.get("binding_id")!=_identity.binding_id or actor.get("actor_kind")!=8 or actor.get("hull_catalogue_id")!=_hulls[id] or not actor.get("pose") is Transform3D or not actor.pose.is_finite() or not actor.get("active") is bool or not actor.get("hostile") is bool or not Numbers.integer(actor.get("actor_mode"),1,5) or not Numbers.integer(actor.get("hull_percent"),0,100):
+		if not actor is Dictionary or actor.get("actor_id")!=id or actor.get("base_content_id")!=_identity.base_content_id or actor.get("binding_id")!=_identity.binding_id or actor.get("actor_kind")!=_kinds[id] or actor.get("hull_catalogue_id")!=_hulls[id] or not actor.get("pose") is Transform3D or not actor.pose.is_finite() or not actor.get("active") is bool or not actor.get("hostile") is bool or not Numbers.integer(actor.get("actor_mode"),0 if _campaign_cursor==7 and id==3 else 1,5) or not Numbers.integer(actor.get("hull_percent"),0,100):
 			return reject("Invalid fresh NPC scanner population")
 	var selected := _selected;var candidate := _candidate;var elapsed := _elapsed
 	var markers := [];var events := [];var animation := -1
@@ -124,11 +140,13 @@ func fork_for_frame() -> RefCounted:
 	copy._identity=_identity;copy._definition=_definition;copy._perspective=_perspective;copy._radii=_radii;copy._hulls=_hulls
 	copy._frame_count=_frame_count;copy._equipment=_equipment;copy._duration=_duration;copy._cargo=_cargo
 	copy._selected=_selected;copy._candidate=_candidate;copy._elapsed=_elapsed;copy._sample=_sample.duplicate(true)
+	copy._kinds=_kinds.duplicate();copy._campaign_cursor=_campaign_cursor
 	return copy
 
 func clear() -> void:
 	error="";_identity={};_definition={};_perspective={};_hulls=[];_radii=Vector2.ZERO;_frame_count=0;_equipment=-1;_duration=0;_cargo=false
 	_selected=-1;_candidate=-1;_elapsed=0;_sample={}
+	_kinds=[8,8,8];_campaign_cursor=0
 
 func reject(message: String) -> bool:
 	error=message

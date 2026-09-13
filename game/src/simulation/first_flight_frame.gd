@@ -5,6 +5,8 @@ extends RefCounted
 ## Cargo completion selects the return mission after explicit acknowledgement.
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Briefing=preload("res://src/simulation/mining_briefing.gd")
+const Route=preload("res://src/simulation/npc_route.gd")
+const TrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
 const Pilot=preload("res://src/simulation/pilot_motion.gd")
 const Detail=preload("res://src/presentation/ship_detail_group.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
@@ -24,10 +26,13 @@ const StationReturn=preload("res://src/content/station_return_definitions.gd")
 const FullHoldReturn=preload("res://src/content/full_hold_return_definitions.gd")
 const Cache=preload("res://src/simulation/flight_player_cache.gd")
 const Vectors=preload("res://src/simulation/source_vectors.gd")
-const MiningFlight=preload("res://src/content/full_hold_flight_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const Encounter=preload("res://src/simulation/full_hold_encounter.gd")
 const Particles=preload("res://src/simulation/full_hold_particles.gd")
 const Death=preload("res://src/simulation/player_destruction.gd")
+const Radio=preload("res://src/simulation/radio_sequence.gd")
+const RadioResources=preload("res://src/presentation/opening_radio_resources.gd")
+const Scanner=preload("res://src/simulation/opening_npc_scanner.gd")
 var error:=""
 var _entry:={}
 var _pose:=Transform3D.IDENTITY
@@ -35,6 +40,8 @@ var _shot:={}
 var _random:={}
 var _reference:=Vector3.ZERO
 var _briefing: RefCounted
+var _route: RefCounted
+var _navigation:={}
 var _player: RefCounted
 var _scenery: RefCounted
 var _camera: RefCounted
@@ -62,6 +69,11 @@ var _world_elapsed_ms:=0
 var _unsupported_boundary:=""
 var _death: RefCounted
 var _particles: RefCounted
+var _equipment: RefCounted
+var _radio: RefCounted
+var _radio_events:=[]
+var _scanner: RefCounted
+var _scanner_events:=[]
 # Action-only forks retain this serial. The audio presenter commits each native
 # pass once, after the corresponding scene has been accepted.
 var _audio_frame:={}
@@ -69,18 +81,29 @@ var _statistics_pose:=Transform3D.IDENTITY
 var _camera_follow_enabled:=true
 var _game_over_packet:={}
 
-func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted, construction: RefCounted, dock_key: String, sensitivity: float, viewport_size:=Vector2i(1280,720), mobile_layout:=false, hard_difficulty:=false, autopilot_key:="A") -> bool:
+func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted, construction: RefCounted, dock_key: String, sensitivity: float, viewport_size:=Vector2i(1280,720), mobile_layout:=false, hard_difficulty:=false, autopilot_key:="A", primary_key:="Space") -> bool:
 	error=""
 	if construction==null or construction.get_script()!=Construction:return reject("First flight requires a prepared departure owner")
-	if MiningFlight.flight(bindings,construction.snapshot().get("campaign_cursor")).is_empty():return reject("This departure has no supported mining world")
+	if OrdinaryFlight.select(bindings,construction.snapshot().get("campaign_cursor")).is_empty():return reject("This departure has no supported mining world")
 	var briefing:=Briefing.new()
-	if not briefing.configure(bindings,library,construction,dock_key):return reject(briefing.error)
+	if not briefing.configure(bindings,library,construction,primary_key if construction.snapshot().campaign_cursor==7 else dock_key):return reject(briefing.error)
 	var entry: Dictionary=construction.snapshot()
 	var cargo:=Cargo.new()
 	if not cargo.configure_departure(bindings,catalogues,construction):return reject(cargo.error)
 	var player: RefCounted=construction.player_owner()
+	var equipment: RefCounted=construction.equipment_owner()
+	if equipment!=null and not equipment.prepare_training_completion(bindings,catalogues):return reject(equipment.error)
 	var encounter: RefCounted
-	if entry.campaign_cursor==4:
+	var route: RefCounted
+	var navigation:={}
+	if entry.campaign_cursor==7:
+		navigation=TrainingStory.navigation(bindings)
+		if not navigation.is_empty():
+			route=Route.new()
+			if not route.configure_training_player(bindings):return reject(route.error)
+		encounter=Encounter.new()
+		if not encounter.configure_combat_training(bindings,catalogues,library,player,construction.scenery_owner(),int(entry.departure.progress.rank),1.0 if hard_difficulty else .5):return reject(encounter.error)
+	elif entry.campaign_cursor==4:
 		encounter=Encounter.new()
 		if not encounter.configure(bindings,catalogues,library,construction,1.0 if hard_difficulty else .5):return reject(encounter.error)
 	var death: RefCounted
@@ -91,14 +114,18 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 	if death!=null and not bindings.full_hold_particles.is_empty():
 		particles=Particles.new()
 		if not particles.configure(bindings,encounter.snapshot().combat,death,int(entry.unix_seconds)):return reject(particles.error)
+	var radio: RefCounted
+	if entry.campaign_cursor==7:
+		var resources:=RadioResources.new();radio=Radio.new()
+		if not resources.prepare(library,bindings,null,7) or not radio.configure(bindings,library,resources.line_counts,7):return reject(resources.error+radio.error)
 	var pilot:=Pilot.new();var detail:=Detail.new()
 	var loadout: Dictionary=entry.departure.loadout
 	if not pilot.configure_vehicle(bindings,catalogues,bindings.base_content_id,int(loadout.ship_id),[],loadout.equipment_ids,sensitivity):return reject(pilot.error)
 	if not player.set_permissions(true,false):return reject(player.error)
 	var ships:={"player":int(loadout.ship_id)};var positions:={"player":entry.player_pose.origin}
 	if encounter!=null:
-		var actor: Dictionary=encounter.snapshot().combat.actors[0]
-		ships[0]=int(actor.hull_catalogue_id);positions[0]=actor.position
+		for actor in encounter.snapshot().combat.actors:
+			ships[actor.actor_id]=int(actor.hull_catalogue_id);positions[actor.actor_id]=actor.position
 	if not detail.configure(bindings,ships) or not detail.refresh(positions,Vector3.ZERO,1.0):return reject(detail.error)
 	var camera: RefCounted=construction.camera_owner()
 	var shot: Dictionary=entry.camera_shot.duplicate(true)
@@ -115,6 +142,14 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 		if not aim.configure(bindings) or not aim.advance(entry.player_pose,camera.snapshot().pose,viewport_size) or not aim.sample_feedback(false,0,false):return reject(aim.error)
 		if not targeting.configure(bindings,catalogues,construction,TargetFrame.logical_radii(frame_art.quarter_size,mobile_layout),animation.frames):return reject(targeting.error)
 		if not targeting.advance(construction.scenery_owner(),entry.player_pose,camera.snapshot().pose,aim.snapshot(),0,false):return reject(targeting.error)
+	var scanner: RefCounted
+	if equipment!=null:
+		var art:=TargetFrame.source_geometry(library,bindings)
+		var strip:=ScanAnimation.source_geometry(library,bindings,bindings.opening_staging.npc_scanner)
+		if art.has("error") or strip.has("error"):return reject("Training NPC acquisition art is unavailable")
+		scanner=Scanner.new()
+		if not scanner.configure(bindings,catalogues,TargetFrame.logical_radii(art.quarter_size,mobile_layout),int(strip.frames),equipment):return reject(scanner.error)
+		if not scanner.advance(encounter.snapshot().combat,entry.player_pose,camera.snapshot().pose,aim.snapshot(),0,false):return reject(scanner.error)
 	var approach: RefCounted
 	if not bindings.mining_approach.is_empty():
 		approach=Approach.new()
@@ -142,7 +177,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 		if not autopilot.configure(bindings,catalogues,construction,station):return reject(autopilot.error)
 		if not pilot.set_response_factor(autopilot.snapshot().response_factor):return reject(pilot.error)
 	if not bindings.station_return.is_empty() and (not StationReturn.parameters(bindings.station_return) or autopilot==null or objective==null):return reject("This departure has incomplete station return support")
-	var return_rules:=FullHoldReturn.select(bindings,int(entry.campaign_cursor)+1)
+	var return_rules:=OrdinaryFlight.docking(bindings,int(entry.campaign_cursor)+1)
 	if entry.campaign_cursor==4 and not bindings.full_hold_return.is_empty() and (return_rules.is_empty() or autopilot==null or objective==null):return reject("This departure has incomplete second station return support")
 	# Every mutable owner is detached from the station and construction. Failed
 	# preparation cannot replace the current good flight.
@@ -159,11 +194,14 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 	_station_contact=false;_station_packet={};_encounter=encounter;_world_elapsed_ms=0
 	_unsupported_boundary=""
 	_death=death;_statistics_pose=entry.player_pose;_camera_follow_enabled=true;_game_over_packet={}
-	_particles=particles
+	_particles=particles;_equipment=equipment
+	_radio=radio;_radio_events=[]
+	_scanner=scanner;_scanner_events=[]
+	_route=route;_navigation=navigation
 	_audio_frame={} if death==null else {"serial":0,"player_tail":{},"player_poll":{},"actors":[]}
 	return true
 
-func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paused:=false, viewport_size:=Vector2i.ZERO, drill_command:=Vector2.ZERO) -> RefCounted:
+func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paused:=false, viewport_size:=Vector2i.ZERO, drill_command:=Vector2.ZERO, primary_fire:=false) -> RefCounted:
 	error=""
 	if _briefing==null or not Numbers.integer(milliseconds,0,150) or not commands.is_finite() or absf(commands.x)>1.0 or absf(commands.y)>1.0 or not is_finite(throttle) or throttle<0.0 or throttle>1.0:
 		reject("Invalid first-flight frame, command or throttle");return null
@@ -172,11 +210,13 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 	if viewport.x<1 or viewport.y<1 or viewport.x>32767 or viewport.y>32767:reject("Invalid first-flight viewport");return null
 	var next:=fork_for_frame()
 	if paused or not _station_packet.is_empty() or not _game_over_packet.is_empty() or not _unsupported_boundary.is_empty():return next
+	next._radio_events=[];next._scanner_events=[]
 	if not next._audio_frame.is_empty():next._audio_frame={"serial":int(_audio_frame.serial)+1,"player_tail":{},"player_poll":{},"actors":[]}
 	if dialogue_visible():
 		# Source modal frames omit ordinary logic, but visit NPC/scenery with
 		# zero time. Activation and retained per-pass state can still change.
 		if not next._advance_world(0,_reference):reject(next.error);return null
+		if not next._observe_radio():reject(next.error);return null
 		return next
 	# Earlier packs keep their explicit pre-drill support boundary.
 	if _mining==null and _approach!=null and _approach.snapshot().phase=="drill_required":return next
@@ -207,6 +247,7 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 		var operation: Dictionary=next._mining.evaluate(next._scenery,next._cargo,delta_ms,next._random,drill_command,false,false)
 		if operation.is_empty():reject(next._mining.error);return null
 		next._mining=operation.session;next._scenery=operation.scenery;next._cargo=operation.cargo;next._random=operation.random_state
+		if next._equipment!=null and not next._equipment.retain_flight_cargo(next._cargo.snapshot()):reject(next._equipment.error);return null
 		if not next._queue_notice_events(next._mining.snapshot().events):reject(next.error);return null
 		if operation.release_approach:
 			if not next._release_mining_approach():reject(next.error);return null
@@ -250,6 +291,12 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 	# Aim is retained during player motion, using the preceding camera. Targets
 	# are projected only after this frame's scenery and camera have advanced.
 	if player_updates:
+		if player_tail and next._route!=null:
+			# The source caches this root position at the start of its player pass.
+			var arrival: Dictionary=next._route.advance(_pose.origin)
+			if arrival.is_empty():reject(next._route.error);return null
+			if arrival.arrived and next._notices!=null:
+				if not next._notices.enqueue(int(_navigation.progress_notice.source_id)):reject(next._notices.error);return null
 		if next._aim!=null and not next._aim.advance(next._pose,_camera.snapshot().pose,viewport):reject(next._aim.error);return null
 		if next._player.advance_recharge(delta_ms).is_empty() or next._player.advance_repair(delta_ms).is_empty():reject(next._player.error);return null
 	if death_active():
@@ -263,9 +310,10 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 	# Existing projectile slots contact the current player before advancing.
 	# The later mission cue must not move their retained shooter/launch poses.
 	if next._encounter!=null:
-		var weapon_pass: Dictionary=next._encounter.evaluate_weapons(next._player,next._pose,delta_ms)
+		var weapon_pass: Dictionary=next._encounter.evaluate_weapons(next._player,next._pose,delta_ms,next._scenery if _equipment!=null else null)
 		if weapon_pass.is_empty():reject(next._encounter.error);return null
 		next._encounter=weapon_pass.encounter;next._player=weapon_pass.player
+		if weapon_pass.has("scenery"):next._scenery=weapon_pass.scenery
 		if next._player.snapshot().vitals.hull<=0 and next._death==null:
 			# Retain the accepted lethal contact. The source player-death scene
 			# needs its own owner before this application path can continue.
@@ -276,8 +324,8 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 	if next._particles!=null and not next._particles.advance(next._pose,delta_ms):reject(next._particles.error);return null
 	var positions:={"player":next._pose.origin}
 	if next._encounter!=null:
-		var actor: Dictionary=next._encounter.snapshot().combat.actors[0]
-		positions[0]=actor.get("body_pose",actor.pose).origin
+		for actor in next._encounter.snapshot().combat.actors:
+			positions[actor.actor_id]=actor.get("body_pose",actor.pose).origin
 	if not next._detail.update(delta_ms,positions,_reference,1.0,false):reject(next._detail.error);return null
 	if next._death!=null and next._player.snapshot().vitals.hull<=0 and not next.death_active():
 		if not next._death.start(next._player,next._pose,Vector3.ZERO,next._camera.snapshot().pose,int(next._objective.snapshot().campaign_cursor),next._model_basis,next._statistics_pose):reject(next._death.error);return null
@@ -298,7 +346,7 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 			return next
 	var completion_opened:=false
 	if next._objective!=null and next._briefing.mission_poll_due():
-		if not next._objective.poll(next._cargo,next._scenery,next._player.snapshot().vitals.hull>0):reject(next._objective.error);return null
+		if not next._objective.poll(next._cargo,next._scenery,next._player.snapshot().vitals.hull>0,next._encounter):reject(next._objective.error);return null
 		completion_opened=next._objective.snapshot().dialogue.visible
 	next._briefing.finish_mission_poll(completion_opened)
 	if completion_opened:
@@ -311,12 +359,13 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 		# Completion bypasses controller/camera/input; the later world phase
 		# still visits its owners with zero time after the modal flag is set.
 		if not next._advance_world(0,_reference):reject(next.error);return null
+		if not next._observe_radio():reject(next.error);return null
 		return next
 	if cues.entry_released:
 		next._shot.mode="follow"
 		next._collision_enabled=true
 		if not next.death_active() and not next._player.set_permissions(true,true):reject(next._player.error);return null
-	if next._encounter!=null:
+	if next._encounter!=null and _equipment==null:
 		var cued: RefCounted=next._encounter.evaluate_cue(next._player,next._pose,int(next._objective.snapshot().campaign_cursor))
 		if cued==null:reject(next._encounter.error);return null
 		next._encounter=cued
@@ -326,17 +375,35 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 	if next.death_active() and not next._death.sample_camera(next._camera.snapshot().pose,next._camera_follow_enabled):reject(next._death.error);return null
 	if next._mining!=null and next._mining.has_active_drill() and next._player.snapshot().vitals.hull>0 and not cues.dialogue.visible:
 		if not next._mining.set_command(drill_command):reject(next._mining.error);return null
+	if next._equipment!=null:
+		var fired: Dictionary=next._encounter.evaluate_primary_fire(next._player,next._pose,primary_fire,cues.entry_released and not cues.dialogue.visible and not next.death_active(),next._random)
+		if fired.is_empty():reject(next._encounter.error);return null
+		next._encounter=fired.encounter;next._random=fired.random_state
 	if delta_ms>0:next._reference=next._camera.snapshot().eye
 	if not next._advance_world(0 if cues.dialogue.visible else delta_ms,_reference):reject(next.error);return null
 	if next._targeting!=null:
 		var hud_enabled: bool=not next.death_active() and cues.entry_released and not cues.dialogue.visible
-		if not next._aim.sample_feedback(false,delta_ms,hud_enabled):reject(next._aim.error);return null
+		var contact:=false
+		if next._equipment!=null:
+			for weapon in next._encounter.snapshot().primary_contacts:
+				for hit in weapon.contacts:
+					if hit.target.group=="npc":contact=true
+		if not next._aim.sample_feedback(contact,delta_ms,hud_enabled):reject(next._aim.error);return null
+		if next._scanner!=null:
+			if not next._scanner.advance(next._encounter.snapshot().combat,next._pose,next._camera.snapshot().pose,next._aim.snapshot(),delta_ms,hud_enabled):reject(next._scanner.error);return null
+			next._scanner_events=next._scanner.snapshot().events
 		var approaching: bool=next._approach!=null and next._approach.snapshot().phase!="idle"
 		if not next._targeting.advance(next._scenery,next._pose,next._camera.snapshot().pose,next._aim.snapshot(),delta_ms,hud_enabled,approaching):reject(next._targeting.error);return null
 		if not next._queue_notice_events(next._targeting.snapshot().events):reject(next.error);return null
 	if next._notices!=null:
 		if not next._notices.advance(delta_ms,next._mining!=null and next._mining.has_active_drill()):reject(next._notices.error);return null
+	if not next._observe_radio():reject(next.error);return null
 	return next
+
+func _observe_radio() -> bool:
+	if _radio==null:return true
+	_radio_events=_radio.step_combat_training(int(_briefing.snapshot().world_elapsed_ms),_encounter.combat_owner())
+	return true if _radio.error.is_empty() else reject(_radio.error)
 
 func _advance_world(milliseconds: int, preceding_reference: Vector3) -> bool:
 	if _encounter!=null:
@@ -347,6 +414,7 @@ func _advance_world(milliseconds: int, preceding_reference: Vector3) -> bool:
 			var after: Dictionary=actors.encounter.snapshot()
 			if not _particles.finish_npc_pass(before,after.combat,after.actor_events,milliseconds,1.0):return reject(_particles.error)
 		_encounter=actors.encounter;_random=actors.random_state
+		if _equipment!=null and not _objective.observe_combat(_encounter):return reject(_objective.error)
 		if not _audio_frame.is_empty():_audio_frame.actors=_encounter.snapshot().actor_events
 	if not _scenery.update(milliseconds,preceding_reference,1.0,null,_random):return reject(_scenery.error)
 	_random=_scenery.snapshot().random_state;_world_elapsed_ms+=milliseconds
@@ -414,6 +482,7 @@ func stop_mining(paused:=false) -> RefCounted:
 	var operation: Dictionary=next._mining.stop(next._scenery,next._cargo,next._random)
 	if operation.is_empty():reject(next._mining.error);return null
 	next._mining=operation.session;next._scenery=operation.scenery;next._cargo=operation.cargo;next._random=operation.random_state
+	if next._equipment!=null and not next._equipment.retain_flight_cargo(next._cargo.snapshot()):reject(next._equipment.error);return null
 	if not next._release_mining_approach():reject(next.error);return null
 	return next
 
@@ -425,7 +494,7 @@ func _evaluate_station_return() -> bool:
 		if selected and volume>=0 and not _notices.enqueue(int(_return_rules.restricted_notice)):return reject(_notices.error)
 		return true
 	if not selected or (volume<0 and not _station_contact):return true
-	if objective.campaign_cursor!=int(_return_rules.campaign_cursor) or not objective.cargo_objective_acknowledged or not objective.station_return_required or objective.dialogue.visible:return reject("Station return requires its acknowledged cargo instructions")
+	if objective.campaign_cursor!=int(_return_rules.campaign_cursor) or not objective.get("combat_objective_acknowledged",objective.cargo_objective_acknowledged) or not objective.station_return_required or objective.dialogue.visible:return reject("Station return requires its acknowledged cargo instructions")
 	if objective.mission!={"kind":int(_return_rules.mission_kind),"station_id":int(_return_rules.station_id),"reward":0,"bonus":0}:return reject("Station return mission does not match the current station")
 	var held: Dictionary=_cargo.snapshot()
 	if held.used<int(_return_rules.minimum_delivered_cargo) or _cargo.field_identity()!=_scenery.presentation_identity() or not _cargo.matches_mined_field(_scenery.snapshot()):return reject("Station return cargo disagrees with its mining field")
@@ -440,6 +509,7 @@ func _evaluate_station_return() -> bool:
 		"source_ship_configuration":_entry.departure.source_ship_configuration,
 		"world_elapsed_ms":_briefing.snapshot().world_elapsed_ms,
 		"docking":{"station_id":int(_return_rules.station_id),"pre_motion_contact":_station_contact,"post_motion_volume_index":volume,"position":_pose.origin}}
+	if _equipment!=null:_station_packet.equipment=_equipment.snapshot()
 	return true
 
 func prepare_station() -> Dictionary:
@@ -461,6 +531,8 @@ func _queue_notice_events(events: Array) -> bool:
 	for event in events:
 		if event.get("kind")=="notification" and not _notices.enqueue(event.get("source_id")):return reject(_notices.error)
 	return true
+
+func equipment_owner() -> RefCounted:return null if _equipment==null else _equipment.fork()
 
 func drill_owner() -> RefCounted:return null if _mining==null else _mining.drill_owner()
 func station_owner() -> RefCounted:return null if _station==null else _station.fork_for_frame()
@@ -493,6 +565,9 @@ func navigate(action: String, paused:=false) -> RefCounted:
 	var next:=fork_for_frame()
 	if _objective!=null and _objective.snapshot().dialogue.visible:
 		if not next._objective.navigate(action):reject(next._objective.error);return null
+		if _equipment!=null and next._objective.snapshot().combat_objective_acknowledged and not _objective.snapshot().combat_objective_acknowledged:
+			if not next._equipment.complete_training(next._cargo.snapshot()):reject(next._equipment.error);return null
+			if not _navigation.is_empty() and _navigation.clear_on_completion_acknowledgement:next._route=null
 	elif not next._briefing.navigate(action):reject(next._briefing.error);return null
 	return next
 
@@ -513,6 +588,9 @@ func snapshot() -> Dictionary:
 	state.camera_follow_enabled=_camera_follow_enabled
 	if _death!=null:state.player_destruction=_death.snapshot()
 	if _particles!=null:state.damage_particles=_particles.snapshot()
+	if _radio!=null:state.radio=_radio.snapshot();state.radio_events=_radio_events.duplicate(true)
+	if _scanner!=null:state.npc_scanner=_scanner.snapshot();state.npc_scanner_events=_scanner_events.duplicate(true)
+	if not _navigation.is_empty():state.player_route={} if _route==null else _route.snapshot()
 	if not _audio_frame.is_empty():state.flight_audio=_audio_frame.duplicate(true)
 	if _encounter!=null:
 		state.encounter=_encounter.snapshot();state.actors=state.encounter.combat.actors.duplicate(true)
@@ -536,6 +614,11 @@ func snapshot() -> Dictionary:
 	if _notices!=null:state.flight_notices=_notices.snapshot()
 	if _objective!=null:
 		state.mining_objective=_objective.snapshot()
+		if _equipment!=null:
+			state.progress=state.mining_objective.progress
+			state.combat_objective_satisfied=state.mining_objective.combat_objective_satisfied
+			state.combat_objective_acknowledged=state.mining_objective.combat_objective_acknowledged
+			state.equipment=_equipment.snapshot()
 		if state.mining_objective.phase!="collecting":
 			for key in ["campaign_cursor","progress","mission","dialogue","phase"]:state[key]=state.mining_objective[key]
 		state.cargo_objective_satisfied=state.mining_objective.cargo_objective_satisfied
@@ -569,6 +652,13 @@ func fork_for_frame() -> RefCounted:
 	copy._game_over_packet=_game_over_packet.duplicate(true)
 	if _death!=null:copy._death=_death.fork_for_frame()
 	if _particles!=null:copy._particles=_particles.fork_for_frame()
+	if _equipment!=null:copy._equipment=_equipment.fork()
+	if _radio!=null:copy._radio=_radio.fork_for_frame()
+	copy._radio_events=_radio_events.duplicate(true)
+	if _scanner!=null:copy._scanner=_scanner.fork_for_frame()
+	copy._scanner_events=_scanner_events.duplicate(true)
+	if _route!=null:copy._route=_route.fork_for_frame()
+	copy._navigation=_navigation
 	copy._audio_frame=_audio_frame.duplicate(true)
 	return copy
 
@@ -585,5 +675,7 @@ func clear() -> void:
 	_encounter=null;_world_elapsed_ms=0
 	_unsupported_boundary=""
 	_death=null;_statistics_pose=Transform3D.IDENTITY;_camera_follow_enabled=true;_game_over_packet={}
-	_particles=null;_audio_frame={}
+	_particles=null;_audio_frame={};_equipment=null;_radio=null;_radio_events=[]
+	_route=null;_navigation={}
+	_scanner=null;_scanner_events=[]
 func reject(message: String) -> bool:error=message;return false

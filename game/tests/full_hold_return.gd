@@ -94,7 +94,10 @@ func verify_reader(args: PackedStringArray, header: Dictionary):
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		var reader:=Bindings.new();check(reader.open(args[1],lib.manifest),reader.error)
 		var accepted:=reader.open(directory,lib.manifest)
-		check(accepted and reader.full_hold_return.is_empty() if scenario=="empty" else not accepted and reader.binding_id.is_empty() and reader.full_hold_return.is_empty(),"Second-return reader retained stale or malformed data: "+scenario)
+		# An optional empty return is valid only when no later station equipment
+		# declaration depends on it. Newer complete packs must reject that gap.
+		var optional_empty: bool=scenario=="empty" and body.get("station_equipment",{}).is_empty()
+		check(accepted and reader.full_hold_return.is_empty() if optional_empty else not accepted and reader.binding_id.is_empty() and reader.full_hold_return.is_empty(),"Second-return reader retained stale or malformed data: "+scenario)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)
 
 func verify_gates():

@@ -2,7 +2,7 @@ extends RefCounted
 ## Source-bound first mining station: model assembly bounds and authored volumes.
 ## This owner has no clock, random draws, damage, autopilot or arrival transition.
 const Definitions=preload("res://src/content/station_exterior_definitions.gd")
-const MiningFlight=preload("res://src/content/full_hold_flight_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Library=preload("res://src/content/library.gd")
 const AEM=preload("res://src/content/aem.gd")
@@ -21,7 +21,7 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	if library==null or bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.station_exterior):return reject("This pack has no supported mining station exterior")
 	if not Library.valid_hash(bindings.base_content_id) or not Library.valid_hash(bindings.binding_id) or library.manifest.get("content_id")!=bindings.base_content_id or catalogues.content_id!=bindings.base_content_id:return reject("Station exterior resources belong to different content identities")
 	var entry: Dictionary=construction.snapshot();var data: Dictionary=bindings.station_exterior
-	if entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or MiningFlight.flight(bindings,entry.get("campaign_cursor")).is_empty() or entry.get("location",{}).get("station_id")!=int(data.station_id) or entry.get("location",{}).get("system_id")!=int(data.system_id):return reject("Station exterior requires the supported mining location")
+	if entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty() or entry.get("location",{}).get("station_id")!=int(data.station_id) or entry.get("location",{}).get("system_id")!=int(data.system_id):return reject("Station exterior requires the supported mining location")
 	var stations: Array=catalogues.tables.get("stations",[]);var systems: Array=catalogues.tables.get("systems",[])
 	if stations.size()<=int(data.station_id) or systems.size()<=int(data.system_id):return reject("Station exterior is absent from the source catalogues")
 	var station: Dictionary=stations[int(data.station_id)];var system: Dictionary=systems[int(data.system_id)]

@@ -31,12 +31,12 @@ func configure_arrival(bindings: RefCounted,catalogues: RefCounted,cache: Varian
 	if _layout.is_empty():return reject(layout.error)
 	return _configure_layout(bindings,data,bindings.base_content_id)
 
-func configure_departure(bindings: RefCounted,catalogues: RefCounted,cache: Variant,quality:="high") -> bool:
+func configure_departure(bindings: RefCounted,catalogues: RefCounted,cache: Variant,quality:="high", equipment: RefCounted=null) -> bool:
 	clear()
 	var data: Dictionary=bindings.opening_sky.get("sun_flares",{})
 	if not Definitions.parameters(data):return reject("Sun flare declarations are unavailable; prepare current bindings")
 	var layout:=Layout.new()
-	_layout=layout.for_departure(bindings,catalogues,cache,quality)
+	_layout=layout.for_departure(bindings,catalogues,cache,quality,equipment)
 	if _layout.is_empty():return reject(layout.error)
 	return _configure_layout(bindings,data,bindings.base_content_id)
 

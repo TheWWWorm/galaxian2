@@ -8,7 +8,7 @@ const Catalogues=preload("res://src/content/catalogues.gd")
 const Clock=preload("res://src/simulation/frame_clock.gd")
 const Geometry=preload("res://src/presentation/hangar_geometry.gd")
 const Speech=preload("res://src/presentation/station_audio.gd")
-const BOUNDARIES=["launch_required"]
+const BOUNDARIES=["launch_required","station_reload_required","station_followup_required"]
 var error:=""
 var status:="idle"
 var camera: Camera3D
@@ -45,6 +45,15 @@ func configure_return(library: RefCounted, bindings: RefCounted, visuals: RefCou
 	if not _world.configure_return(bindings,cat,library,flight):return fail(_world.error)
 	return _build_scene(library,bindings,visuals,cat,now_microseconds,camera_seed)
 
+func configure_reload(library: RefCounted, bindings: RefCounted, visuals: RefCounted, previous: RefCounted, now_microseconds: int, camera_seed: int=0) -> bool:
+	clear()
+	if not supported(bindings):return fail("This pack has no supported station scene")
+	var cat:=Catalogues.new()
+	if not cat.open(library):return fail(cat.error)
+	_world=World.new()
+	if not _world.configure_reload(bindings,cat,library,previous):return fail(_world.error)
+	return _build_scene(library,bindings,visuals,cat,now_microseconds,camera_seed)
+
 func _build_scene(library: RefCounted, bindings: RefCounted, visuals: RefCounted, cat: RefCounted, now_microseconds: int, camera_seed: int) -> bool:
 	var seed: Dictionary=_world.snapshot().loadout
 	var selected: Dictionary=bindings.resolve_hangar(int(seed.station_id),cat)
@@ -67,7 +76,15 @@ func _build_scene(library: RefCounted, bindings: RefCounted, visuals: RefCounted
 	build_lighting(bindings.station_presentation.light)
 	audio=Speech.new();add_child(audio)
 	var state: Dictionary=_world.snapshot()
-	var voice_ready: bool=audio.configure_station_return(library,bindings,int(state.campaign_cursor)) if state.get("return_visit",false) else audio.configure(library,bindings)
+	var voice_ready: bool=true
+	if state.phase=="station_followup_required":
+		# No voice is scheduled for a conversation whose mission is unsupported.
+		_dialogue_started=true
+	elif state.get("equipment_conversation",false):
+		voice_ready=audio.configure_station_equipment(library,bindings)
+		_dialogue_started=not state.dialogue.visible
+	else:
+		voice_ready=audio.configure_station_return(library,bindings,int(state.campaign_cursor)) if state.get("return_visit",false) else audio.configure(library,bindings)
 	if not voice_ready:return fail(audio.error)
 	station_name=cat.tables.stations[int(selected.station_id)].name
 	status="running"
@@ -119,6 +136,7 @@ func navigate(action: String, panel: Control) -> bool:
 	if not audio.valid_line(voice_line):return reject("Station speech is unavailable")
 	if not panel.present(staged):return reject(panel.error)
 	_world=candidate;_generation+=1
+	if staged.get("boundary")=="station_reload_required":status="station_reload_required"
 	audio.present(voice_line)
 	return true
 
@@ -170,6 +188,8 @@ func set_pause(reason: String, paused: bool, now_microseconds: int) -> bool:
 func rebase_time(now_microseconds: int) -> bool:
 	if _clock==null:return reject("Station clock is unavailable")
 	return _clock.rebase(now_microseconds)
+func station_owner() -> RefCounted:return null if _world==null else _world.fork()
+func equipment_owner() -> RefCounted:return null if _world==null else _world.equipment_owner()
 func is_paused() -> bool:return not _pauses.is_empty()
 func can_control() -> bool:return false
 func flight_hud_visible(_state: Dictionary={}) -> bool:return false

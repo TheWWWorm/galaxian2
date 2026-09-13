@@ -15,7 +15,16 @@ Close the hangar to return to the station. Owning equipment in cargo is
 insufficient: a primary weapon and armor plate must be installed. Gunant's
 original line and voice then await acknowledgement. Closing that conversation
 selects the combat-training mission and retains acquired cargo and installed
-equipment. The combat-training flight is still being reconstructed.
+equipment. With current Mac bindings, choose **Depart** and confirm to begin.
+Steer with WASD/arrows or the left stick; fire with Space or the right trigger.
+The touch-controls preference enables the on-screen flight actions.
+
+Finish the three pirates and acknowledge Gunant's return instructions, then
+select the station with P/controller Y. Training releases the protected items
+and applies the source inventory prices without removing owned cargo. Mining
+remains available on the return trip. Nine station lines lead to a station
+reload; the following mission is not yet supported. General trading and saves
+remain unfinished.
 
 ## Implementation and verification scope
 

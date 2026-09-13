@@ -23,9 +23,10 @@ func resolve(bindings: RefCounted, catalogues: RefCounted, arrival_cache: Varian
 	if not Cache.matches(arrival_cache,seed,int(data.campaign_cursor)):return reject("Rescue location requires the matching restored player cache")
 	return _resolve(bindings,catalogues,seed,int(data.campaign_cursor))
 
-func resolve_departure(bindings: RefCounted, catalogues: RefCounted, departure_cache: Variant) -> Dictionary:
+func resolve_departure(bindings: RefCounted, catalogues: RefCounted, departure_cache: Variant, equipment: RefCounted=null) -> Dictionary:
 	error=""
 	if bindings==null or catalogues==null or not departure_cache is Dictionary:return reject("Mining-flight environment is unavailable")
+	if departure_cache.get("campaign_cursor")==7:return resolve_combat_training(bindings,catalogues,equipment,departure_cache)
 	var flight:=MiningFlight.flight(bindings,departure_cache.get("campaign_cursor"))
 	if flight.is_empty():return reject("This departure has no supported mining-flight environment")
 	if not Definitions.parameters(bindings.arrival_environment) or not SkyDefinitions.parameters(bindings.opening_sky) or not Planets.parameters(bindings.opening_sky.get("planet_resources",{})):return reject("First flight requires the shared ordinary environment")

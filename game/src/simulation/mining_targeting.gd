@@ -2,7 +2,7 @@ extends RefCounted
 ## First-departure asteroid acquisition. Selection grants no cargo, movement or
 ## mission progress. The flight supplies committed poses and its retained aim.
 const Definitions=preload("res://src/content/mining_targeting_definitions.gd")
-const MiningFlight=preload("res://src/content/full_hold_flight_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Scenery=preload("res://src/simulation/opening_scenery.gd")
 const TargetProjection=preload("res://src/presentation/target_projection.gd")
@@ -27,7 +27,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	error=""
 	if bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.mining_targeting):return reject("Asteroid selection requires a supported mining departure")
 	var entry: Dictionary=construction.snapshot()
-	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id or MiningFlight.flight(bindings,entry.get("campaign_cursor")).is_empty():return reject("Asteroid selection belongs to another departure")
+	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id or OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty():return reject("Asteroid selection belongs to another departure")
 	var projection:=TargetProjection.new()
 	if not projection.configure(bindings.flight_projection,Vector2i.ONE,frame_radii):return reject(projection.error)
 	if animation_frames<1 or animation_frames>1024:return reject("Invalid source acquisition filmstrip")
@@ -37,7 +37,9 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	for id in entry.departure.loadout.equipment_ids:
 		if not Numbers.integer(id,0,items.size()-1):return reject("Asteroid selection equipment is unavailable")
 		var properties: Dictionary=items[id].properties
-		if properties.get(int(rules.item_kind_property))!=int(rules.equipment_kind):return reject("Installed scanner item is not equipment")
+		# Installed primaries share the loadout but do not supply the equipment
+		# subtypes used by the scanner and drill getters.
+		if properties.get(int(rules.item_kind_property))!=int(rules.equipment_kind):continue
 		var category: Variant=properties.get(int(rules.category_property))
 		if category==int(rules.unsupported_device_category):return reject("Special tractor devices require a separate selection owner")
 		if category==int(rules.scanner_category):scanner=id

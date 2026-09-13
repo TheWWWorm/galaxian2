@@ -22,7 +22,10 @@ func after_second_return(args: PackedStringArray):
 		check(before.campaign_cursor==7 and before.phase=="combat_departure_required","Encounter fixture did not reach acknowledged equipment completion")
 	var equipment: RefCounted=host.session._world.equipment_owner()
 	verify_training_construction(args,equipment)
-	check(host.session.snapshot()==before and not host.request_departure(),"Detached construction changed station progress or exposed an unfinished flight")
+	check_training_station_retained(before,"construction")
+
+func check_training_station_retained(before: Dictionary, context: String) -> void:
+	check(host.session.snapshot()==before and host._launch_packet.is_empty(),"Detached "+context+" changed station progress or requested departure")
 
 func verify_training_construction(args: PackedStringArray, equipment: RefCounted):
 	var catalogues:=Catalogues.new()

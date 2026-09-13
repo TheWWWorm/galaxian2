@@ -13,6 +13,7 @@ const Vectors=preload("res://src/simulation/source_vectors.gd")
 const Vitals=preload("res://src/simulation/combat_vitals.gd")
 const Random=preload("res://src/simulation/seeded_random.gd")
 const Explosion=preload("res://src/simulation/type_zero_explosion.gd")
+const Training=preload("res://src/content/combat_training_story_definitions.gd")
 var error:=""
 var _rules:={}
 var _state:={}
@@ -25,13 +26,22 @@ func configure(bindings: RefCounted, resources: RefCounted, construction: RefCou
 	var entry: Dictionary=construction.snapshot();var effect: Dictionary=resources.snapshot()
 	for key in ["base_content_id","binding_id"]:
 		if entry.get(key)!=bindings.get(key) or effect.get(key)!=bindings.get(key):return reject("Player destruction belongs to another content identity")
+	var training: bool=entry.get("campaign_cursor")==7
+	if training:
+		if Training.flight(bindings).is_empty() or construction.equipment_owner()==null:return reject("Training destruction requires its equipped ordinary departure")
+		rules=rules.duplicate(true)
+		rules.departure_cursor=7;rules.story_cursors=[7,int(bindings.combat_training_story.cursor_after_acknowledgement)]
 	if entry.get("campaign_cursor")!=int(rules.departure_cursor) or entry.get("departure",{}).get("loadout",{}).get("ship_id")!=int(rules.ship_id):return reject("Unsupported player destruction context")
 	var clock:=Explosion.create(effect,[],14292)
 	if clock.is_empty():return reject("Player destruction lacks its authored explosion clocks")
 	for index in 2:
 		if clock.models[index].get("model_id")!=int(rules.model_ids[index]) or clock.models[index].get("resource")!=Resources.PATHS[index]:return reject("Player destruction changed its explosion model bindings")
 	var initial: Dictionary=entry.get("player",{})
-	if initial.get("ship_id")!=int(rules.ship_id) or initial.get("equipment_ids")!=[90,81]:return reject("Player destruction requires the source starter without an escape device")
+	var expected_equipment: Array=construction.equipment_owner().snapshot().loadout.equipment_ids if training else [90,81]
+	if initial.get("ship_id")!=int(rules.ship_id) or initial.get("equipment_ids")!=expected_equipment:return reject("Player destruction requires its retained starter loadout")
+	# The native tutorial inventory can only contain these source offers and
+	# retained drill/scanner. None supplies the escape-pod subtype27.
+	if training and not expected_equipment.all(func(id):return id in [0,22,55,81,90]):return reject("Training destruction has an unsupported escape-device context")
 	_rules=rules.duplicate(true)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"actor_id":"player",
 		"departure_cursor":int(rules.departure_cursor),"campaign_cursor":int(rules.departure_cursor),

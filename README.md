@@ -4,8 +4,9 @@ A native Godot recreation of Galaxy on Fire 2 that uses content imported locally
 from your own copy of the game. Original game files are not included.
 
 This project is in early development. With current Mac Full HD content, you can
-play the opening encounter, rescue, two mining trips and starter equipment
-tutorial. The combat-training flight and later campaign are still being built.
+play the opening encounter, rescue, two mining trips, starter equipment tutorial,
+and combat training through its return to Var Hastra. The following station
+mission and later campaign are still being built.
 Persistent saves, the complete economy and the remaining base-game and expansion
 missions are not ready. See [what is supported](docs/SUPPORT.md).
 

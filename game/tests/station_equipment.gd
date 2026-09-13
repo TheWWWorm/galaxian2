@@ -88,7 +88,12 @@ func after_second_return(args: PackedStringArray):
 	check(state.campaign_cursor==7 and state.phase=="combat_departure_required" and state.mission.kind==4 and state.equipment_acknowledged,"Acknowledged equipment failed to select combat training")
 	check(state.progress.rank_score==before.progress.rank_score+int(bindings.opening_handoff.cursor_weight) and state.progress.campaign_cursor==7,"Equipment completion duplicated or omitted its rank contribution")
 	check(state.cargo==cargo and state.loadout==loadout and state.arrival_player==arrival and state.reward_credits==0,"Completion discarded owned gear, healed the player or granted credits")
-	check(host.session.audio._player==null and not host.request_departure(),"Unsupported combat departure began or completion speech kept playing")
+	check(host.session.audio._player==null,"Completion speech kept playing after acknowledgement")
+	var training_ready: bool=not bindings.combat_training_story.get("station_return",{}).is_empty()
+	check(host.request_departure()==training_ready,"Departure availability differs from the supported training return")
+	if training_ready:
+		check(host._launch_packet.get("equipment")==state.equipment and host.session.snapshot()==state,"Departure confirmation changed the equipped station")
+		host.cancel_departure()
 	before=state
 	check(not host.equipment_action("buy",0) and not host.equipment_action("open") and not host.session.navigate("next",host.station_panel) and host.session.snapshot()==before,"Completed tutorial repeated actions or advanced twice")
 	if args.size()==4:await capture(args[3],"equipment-completed-action-rejection")
