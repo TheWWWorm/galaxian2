@@ -39,7 +39,7 @@ func build(owner: RefCounted, library: RefCounted, visuals: RefCounted, bindings
 			if not _surface.prepare_model(model):resources.clear();return reject(_surface.error)
 		guns.append({"key":row.key,"slots":slots})
 		var sampler:=Sampler.new()
-		if not sampler.configure(slots[0].surfaces):resources.clear();return reject(sampler.error)
+		if not sampler.configure(slots[0].surfaces,row.end_ms==0):resources.clear();return reject(sampler.error)
 		if sampler.snapshot().range!={"start_ms":row.start_ms,"end_ms":row.end_ms}:resources.clear();return reject("Projectile animation metadata changed")
 		_samplers.append(sampler)
 	resources.clear();_identity=owner.presentation_identity();_descriptor=state;_edition=library.manifest.profile.edition;_reduced=reduced_scale
@@ -58,7 +58,7 @@ func prepare_world(owner: RefCounted, world: Dictionary, camera: Transform3D, pa
 	var prepared:=[];var samplers:=[]
 	for i in guns.size():
 		var row: Dictionary=state.models[i];var weapon: Dictionary=weapons[i].projectiles
-		for key in ["key","item_id","kind","capacity","model_id","resource","start_ms","end_ms"]:
+		for key in ["key","item_id","kind","capacity","model_id","resource","captured_up","start_ms","end_ms"]:
 			if row.get(key)!=_descriptor.models[i][key]:return failed("Projectile model identity changed")
 		if weapons[i].key!=row.key or weapon.weapon.item_id!=row.item_id or weapon.weapon.kind!=row.kind or weapon.slots.size()!=row.capacity:return failed("Projectile slots differ from prepared weapons")
 		var sampler: RefCounted=_samplers[i].fork_for_frame()
@@ -66,7 +66,7 @@ func prepare_world(owner: RefCounted, world: Dictionary, camera: Transform3D, pa
 		if animation.is_empty():return failed(sampler.error)
 		var slots:=[]
 		for slot in weapon.slots:
-			var root:=Pose.sample(slot,row.kind,camera,_reduced,state.rules)
+			var root:=Pose.sample(slot,row.kind,camera,_reduced,state.rules,row.captured_up)
 			if root.has("error"):return failed(root.error)
 			var surfaces:=[]
 			if root.visible:

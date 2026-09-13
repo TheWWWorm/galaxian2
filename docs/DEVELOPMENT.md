@@ -51,6 +51,10 @@ without replaying the application sequence:
 python3 tools/run_checks.py native combat_training_focused --args-file /path/to/args.json --scenario /path/to/equipment-scenario.bin
 ```
 
+With current Mac bindings, `combat_training_visuals` adds the projectile and
+impact checks to that same scenario. Add `--gpu --captures /path/to/captures` to
+capture each original weapon model independently.
+
 The fixture replays the tutorial's accepted inventory transactions and compares
 all resulting equipment to the captured state. It rejects mismatched content or
 bindings, changed prerequisite code, incomplete acknowledgement and altered

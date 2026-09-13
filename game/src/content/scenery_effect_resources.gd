@@ -95,7 +95,7 @@ static func effect_parameters(effect: Variant, bindings: RefCounted) -> bool:
 		if not model.get("start_ms") is int or not model.get("end_ms") is int or not Numbers.integer(model.start_ms,0,int(MAX_KEY_TIME)) or not Numbers.integer(model.end_ms,maxi(1,model.start_ms),int(MAX_KEY_TIME)): return false
 	return effect.get("duration_ms") is int and effect.duration_ms==maxi(models[0].end_ms,models[1].end_ms)
 
-static func playback_range(surfaces: Variant) -> Dictionary:
+static func playback_range(surfaces: Variant, allow_static:=false) -> Dictionary:
 	if not surfaces is Array or surfaces.is_empty() or surfaces.size()>AEM.MAX_SUBMESHES: return {}
 	var first := INF
 	var last := 0
@@ -131,6 +131,7 @@ static func playback_range(surfaces: Variant) -> Dictionary:
 					last=maxi(last,int(time))
 					for component in dimensions:
 						if not is_finite(keys[offset+component+1]): return {}
+	if total_keys==0 and allow_static:return {"start_ms":0,"end_ms":0}
 	if not is_finite(first) or last<1: return {}
 	return {"start_ms":int(first),"end_ms":last}
 

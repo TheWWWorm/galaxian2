@@ -10,15 +10,15 @@ var _pivots: Array[Vector3] = []
 var _state: Array = []
 var _range := {}
 
-func configure(surfaces: Variant) -> bool:
+func configure(surfaces: Variant, allow_static:=false) -> bool:
 	error="";_tables=[];_pivots=[];_state=[];_range={}
-	var timing := Resources.playback_range(surfaces)
+	var timing := Resources.playback_range(surfaces,allow_static)
 	if timing.is_empty():error="Unsupported scenery animation channels or timing";return false
 	for surface in surfaces:
 		if not surface.get("pivot") is Vector3 or not surface.pivot.is_finite():
 			error="Scenery animation requires finite source pivots";return false
 	var compiler := Keys.new()
-	var prepared := compiler.prepare(surfaces)
+	var prepared := compiler.prepare(surfaces,allow_static)
 	if prepared.is_empty():error=compiler.error;return false
 	_tables=prepared.surfaces;_range=timing
 	for surface in surfaces:

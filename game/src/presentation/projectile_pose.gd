@@ -5,7 +5,7 @@ const Vitals=preload("res://src/simulation/combat_vitals.gd")
 const Vectors=preload("res://src/simulation/source_vectors.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 
-static func sample(slot: Variant, kind: int, camera: Transform3D, reduced_scale: bool, rules: Dictionary) -> Dictionary:
+static func sample(slot: Variant, kind: int, camera: Transform3D, reduced_scale: bool, rules: Dictionary, captured_up:=false) -> Dictionary:
 	if slot==null:return {"visible":false}
 	if not slot is Dictionary or not slot.get("position") is Vector3 or not slot.get("velocity") is Vector3 or not Numbers.integer(slot.get("remaining_ms"),-1000000,2147483647):return {"error":"Invalid projectile presentation slot"}
 	if not slot.position.is_finite() or not slot.velocity.is_finite() or not camera.is_finite():return {"error":"Nonfinite projectile presentation pose"}
@@ -14,8 +14,12 @@ static func sample(slot: Variant, kind: int, camera: Transform3D, reduced_scale:
 	if kind==int(rules.camera_facing_kind):
 		basis=Basis(camera.basis.x,camera.basis.y,-camera.basis.z)
 	else:
+		var reference_up:=Vector3.UP
+		if captured_up:
+			if not slot.get("up") is Vector3 or not slot.up.is_finite():return {"error":"Projectile lost its captured firing up axis"}
+			reference_up=slot.up
 		var forward:=Vectors.normalized(slot.velocity)
-		var right:=Vectors.normalized(Vectors.cross(Vector3.UP,forward))
+		var right:=Vectors.normalized(Vectors.cross(reference_up,forward))
 		var up:=Vectors.normalized(Vectors.cross(forward,right))
 		basis=Basis(right,up,forward)
 	var scale:=1.0

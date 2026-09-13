@@ -1,6 +1,6 @@
 extends RefCounted
-## Target membership for the verified fresh opening. This is not a discovery
-## mechanism for arbitrary loaded worlds or later equipment configurations.
+## Complete ordinary target membership for verified opening and training worlds.
+## Unknown equipment groups and changed source populations remain unsupported.
 const Opening = preload("res://src/content/opening_sky_definitions.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Vehicle = preload("res://src/content/vehicle_definitions.gd")
@@ -9,6 +9,8 @@ const Actors = preload("res://src/simulation/opening_actor_state.gd")
 const Population = preload("res://src/simulation/scenery_population.gd")
 const Ores = preload("res://src/simulation/scenery_ores.gd")
 const Field = preload("res://src/simulation/scenery_field.gd")
+const Player=preload("res://src/simulation/opening_player_state.gd")
+const Training=preload("res://src/content/combat_training_weapon_definitions.gd")
 const REQUIRED_EQUIPMENT_TYPE := 33
 var error := ""
 var _state := {}
@@ -24,6 +26,32 @@ func configure(bindings: RefCounted, catalogues: RefCounted, opening_field: Dict
 	var loadout := Loadout.new()
 	if not loadout.configure(bindings,catalogues,bindings.base_content_id):return reject(loadout.error)
 	var source := loadout.snapshot()
+	var actors := Actors.new()
+	if not actors.configure(bindings,catalogues,bindings.base_content_id):return reject(actors.error)
+	var population := Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var count: Dictionary = population.for_station(source.station_id)
+	if count.is_empty():return reject(population.error)
+	count.center=Vector3.ZERO
+	return _configure_source(bindings,catalogues,source,actors.snapshot().actors,opening_field,count)
+
+func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, player: RefCounted, scenery: RefCounted) -> bool:
+	clear()
+	# Scenery also owns primary contact staging; avoid a preload cycle through
+	# its primary owner while still requiring the native scenery implementation.
+	if bindings==null or not player is Player or scenery==null or scenery.get_script()==null or scenery.get_script().resource_path!="res://src/simulation/opening_scenery.gd" or not Training.parameters(bindings.combat_training_weapons):return reject("Training targets require the native equipped player and scenery")
+	var source: Dictionary=player.loadout();var field: Dictionary=scenery.snapshot()
+	if source.get("campaign_cursor")!=7 or source.get("binding_id")!=bindings.binding_id or source.get("base_content_id")!=bindings.base_content_id:return reject("Training target equipment has a different identity")
+	var world: RefCounted=scenery.world_initialization_owner()
+	if world==null or world.snapshot().get("campaign_cursor")!=7:return reject("Training targets require completed world construction")
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var count:=population.for_departure(source.station_id,world.snapshot().entry_conditions,7)
+	if count.is_empty():return reject(population.error)
+	return _configure_source(bindings,catalogues,source,world.snapshot().npc_construction.actors,field,count)
+
+func _configure_source(bindings: RefCounted, catalogues: RefCounted, source: Dictionary, actor_rows: Array, opening_field: Dictionary, count: Dictionary) -> bool:
+	if catalogues==null or catalogues.content_id!=bindings.base_content_id or not Vehicle.valid_parameters(bindings.vehicle_response):return reject("Target inventory requires matching equipment type declarations")
 	var type_index := int(bindings.vehicle_response.item_type_value_index)
 	for id in source.equipment_ids:
 		var values: Variant = catalogues.tables.items[id].arrays[2]
@@ -31,16 +59,10 @@ func configure(bindings: RefCounted, catalogues: RefCounted, opening_field: Dict
 			return reject("Opening equipment has no supported source type")
 		if int(values[type_index])==REQUIRED_EQUIPMENT_TYPE:
 			return reject("Opening equipment requires an unsupported additional target group")
-	var actors := Actors.new()
-	if not actors.configure(bindings,catalogues,bindings.base_content_id):return reject(actors.error)
-	var population := Population.new()
-	if not population.configure(bindings):return reject(population.error)
-	var count: Dictionary = population.for_station(source.station_id)
-	if count.is_empty():return reject(population.error)
 	for key in ["base_content_id","binding_id","station_id","system_id"]:
 		if not exact_value(opening_field.get(key),source[key]):return reject("Opening target field has a different identity or location")
-	if not opening_field.get("center") is Vector3 or opening_field.center!=Vector3.ZERO:
-		return reject("Fresh opening targets require the source zero scenery center")
+	if not opening_field.get("center") is Vector3 or opening_field.center!=count.center:
+		return reject("Ordinary targets require the source scenery center")
 	var rows: Variant = opening_field.get("objects")
 	if not rows is Array or rows.size()!=count.count:
 		return reject("Opening target scenery count differs from its source population")
@@ -48,7 +70,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, opening_field: Dict
 	if not large_count is int or large_count<Field.LARGE_COUNT_BASE or large_count>=Field.LARGE_COUNT_BASE+Field.LARGE_COUNT_BOUND:
 		return reject("Opening target scenery has an invalid size-class boundary")
 	var ores := Ores.new()
-	if not ores.configure(bindings,catalogues,source.station_id,false,false,0):return reject(ores.error)
+	if not ores.configure(bindings,catalogues,source.station_id,false,false,int(source.get("campaign_cursor",0))):return reject(ores.error)
 	var possible_ores := {}
 	var ore_rows: Array = ores.snapshot().rows
 	for index in int(bindings.scenery_resources.sample_rows):
@@ -72,7 +94,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, opening_field: Dict
 			return reject("Opening scenery target position is unavailable")
 		var half_width := float(Field.LARGE_WIDTH if row.large else Field.SMALL_WIDTH)*0.5
 		for axis in 3:
-			if row.position[axis]<-half_width or row.position[axis]>=half_width:
+			if row.position[axis]<count.center[axis]-half_width or row.position[axis]>=count.center[axis]+half_width:
 				return reject("Opening scenery target lies outside its source field")
 		var minimum_scale := Field.f32(float(120 if row.large else 30)*Field.f32(0.01))
 		var maximum_scale := Field.f32(float(219 if row.large else 99)*Field.f32(0.01))
@@ -81,17 +103,23 @@ func configure(bindings: RefCounted, catalogues: RefCounted, opening_field: Dict
 		scenery.append({"index":index,"model_id":model_id,"item_id":row.item_id,
 			"scale":row.scale,"large":row.large,"position":row.position})
 		indices.append(index)
-	var actor_rows: Array = actors.snapshot().actors
 	var npc_ids := []
-	for actor in actor_rows:npc_ids.append(actor.actor_id)
+	var cast:=[]
+	for actor in actor_rows:
+		var model: String=bindings.resolve_ship_model(int(actor.hull_catalogue_id))
+		if model.is_empty():return reject(bindings.error)
+		npc_ids.append(actor.actor_id)
+		cast.append({"actor_id":actor.actor_id,"actor_kind":actor.actor_kind,
+			"hull_catalogue_id":actor.hull_catalogue_id,"hull_resource":model})
 	var canonical := {}
 	for key in ["base_content_id","binding_id","ship_id","slots","equipment_ids"]:canonical[key]=source[key]
+	if source.has("campaign_cursor"):canonical.campaign_cursor=source.campaign_cursor
 	_state={"base_content_id":source.base_content_id,"binding_id":source.binding_id,
 		"station_id":source.station_id,"system_id":source.system_id,"ship_id":source.ship_id,
 		"equipment_ids":source.equipment_ids.duplicate(),"npc_ids":npc_ids,"scenery_indices":indices,
 		"third_group_absence":"missing_equipment_type","required_equipment_type":REQUIRED_EQUIPMENT_TYPE,
 		"loadout":canonical.duplicate(true)}
-	_actors=actor_rows.duplicate(true);_scenery=scenery
+	_actors=cast;_scenery=scenery
 	return true
 
 func validate_loadout(loadout: Dictionary) -> bool:

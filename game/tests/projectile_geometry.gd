@@ -1,4 +1,5 @@
 extends SceneTree
+const Capture=preload("res://tests/fixtures/model_capture.gd")
 const Frame=preload("res://src/simulation/opening_world_frame.gd")
 const Timeline=preload("res://src/simulation/opening_detail_timeline.gd")
 const Scenery=preload("res://src/simulation/opening_scenery.gd")
@@ -130,8 +131,6 @@ func capture_models(geometry: Node3D, owner: RefCounted, edition: String) -> voi
 	if DisplayServer.get_name()=="headless":return
 	var output:=OS.get_environment("GOF2_CAPTURE_DIR")
 	if output.is_empty():return
-	var camera:=Camera3D.new();root.add_child(camera);camera.projection=Camera3D.PROJECTION_ORTHOGONAL;camera.far=100000;camera.current=true
-	var background:=WorldEnvironment.new();background.environment=Environment.new();background.environment.background_mode=Environment.BG_COLOR;background.environment.background_color=Color.BLACK;root.add_child(background)
 	var clock: RefCounted=owner.projectile_visual_owner().fork_for_frame();check(clock.advance(100),clock.error)
 	for weapon_index in [0,2]:
 		var fixture: Dictionary=owner.snapshot();fixture.elapsed_ms=100;fixture.projectile_visuals=clock.snapshot()
@@ -142,25 +141,10 @@ func capture_models(geometry: Node3D, owner: RefCounted, edition: String) -> voi
 		if prepared.is_empty():continue
 		geometry.commit_world(prepared)
 		var model: Node3D=geometry.guns[weapon_index].slots[0]
-		var bounds:=AABB();var first:=true
-		for mesh in model.instances:
-			var extent: AABB=mesh.transform*mesh.mesh.get_aabb()
-			bounds=extent if first else bounds.merge(extent);first=false
-		var extent:=maxf(bounds.size.x,maxf(bounds.size.y,bounds.size.z))
-		camera.position=Vector3(bounds.get_center().x,bounds.get_center().y,bounds.end.z+extent+1000)
-		var aspect:=float(root.size.x)/root.size.y
-		camera.size=maxf(bounds.size.y,bounds.size.x/aspect)*1.25
-		await process_frame;await process_frame;await RenderingServer.frame_post_draw
-		var pixels:=root.get_texture().get_image()
-		check(pixels.save_png(output.path_join("projectile-%s-%s.png"%[edition,"player" if weapon_index==0 else "npc"]))==OK,"Projectile screenshot failed")
-		var lit:=0
-		for y in pixels.get_height():
-			for x in pixels.get_width():
-				var pixel:=pixels.get_pixel(x,y)
-				if maxf(pixel.r,maxf(pixel.g,pixel.b))>0.03:lit+=1
-		check(lit>40,"Source projectile did not render independently: weapon %d, %d pixels"%[weapon_index,lit])
-		print(edition,": GPU weapon ",weapon_index,", ",lit," lit pixels; bounds ",bounds)
-	camera.free();background.free()
+		var name:="projectile-%s-%s.png"%[edition,"player" if weapon_index==0 else "npc"]
+		var result:=await Capture.capture(self,model,output.path_join(name))
+		check(result.get("saved",false) and result.get("lit_pixels",0)>40,"Source model did not render independently: "+name+" "+str(result))
+		print(name,": ",result)
 
 func check_playback() -> void:
 	var models:=[{"start_ms":33,"end_ms":200,"time_ms":33,"playing":true}]

@@ -117,6 +117,20 @@ func _configure_field(bindings: RefCounted, catalogues: RefCounted, unix_seconds
 	_initialization_open=true
 	return true
 
+func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted, player_position: Vector3, entry_conditions: Dictionary, unix_seconds: Variant, large_display:=true, body_resources: RefCounted=null, effect_resources: RefCounted=null) -> bool:
+	clear()
+	var world:=WorldInitialization.new()
+	if not world.configure_combat_training(bindings,catalogues,equipment,player_position,entry_conditions):return reject(world.error)
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var selected:=population.for_departure(int(bindings.combat_training.station_id),entry_conditions,7)
+	if selected.is_empty():return reject(population.error)
+	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,7,selected.center,large_display,body_resources,effect_resources):return false
+	if not _finish_world_initialization(world):
+		var message:=error;clear();return reject(message)
+	_departure_population=selected
+	return true
+
 func complete_world_initialization(bindings: RefCounted, catalogues: RefCounted) -> bool:
 	error=""
 	if not _initialization_open or _motion==null or _world_initialization!=null:
@@ -130,11 +144,17 @@ func complete_world_initialization(bindings: RefCounted, catalogues: RefCounted)
 	elif not _arrival_cache.is_empty():ready=owner.configure_arrival(bindings,catalogues,_arrival_cache,_arrival_conditions)
 	else:ready=owner.configure(bindings,catalogues)
 	if not ready:return reject(owner.error)
-	var result := owner.generate(_random_state)
+	return _finish_world_initialization(owner)
+
+func _finish_world_initialization(owner: RefCounted) -> bool:
+	var result: Dictionary=owner.generate(_random_state)
 	if result.is_empty(): return reject(owner.error)
 	_world_initialization=owner;_random_state=result.random_state.duplicate(true)
 	_initialization_open=false
 	return true
+
+func world_initialization_owner() -> RefCounted:
+	return null if _world_initialization==null else _world_initialization.fork_for_frame()
 
 func initial_npc_route(actor_id: int) -> RefCounted:
 	error=""

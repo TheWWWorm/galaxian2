@@ -11,6 +11,7 @@ const World=preload("res://src/simulation/opening_world_initialization.gd")
 const Combat=preload("res://src/simulation/opening_combat_group.gd")
 const Guidance=preload("res://src/simulation/opening_npc_guidance.gd")
 const Flight=preload("res://src/simulation/npc_flight.gd")
+const Weapons=preload("res://src/simulation/opening_npc_weapons.gd")
 const Random=preload("res://src/simulation/seeded_random.gd")
 var error:=""
 var _identity:={}
@@ -138,6 +139,32 @@ func defeat_status() -> Dictionary:
 	for id in range(int(rule.begin),int(rule.end)):
 		if actors[id].actor_mode==int(rule.actor_mode):count+=1
 	return {"kind":int(rule.kind),"defeated":count,"required":int(rule.end)-int(rule.begin),"satisfied":count==int(rule.end)-int(rule.begin)}
+
+func evaluate(combat: RefCounted, weapons: RefCounted, milliseconds: int, player: Dictionary, random_state: Dictionary) -> Dictionary:
+	error=""
+	if not weapons is Weapons:return fail("Training actor updates require their retained weapon pools")
+	var staged:=fork_for_frame();var next_weapons: RefCounted=weapons.fork_for_frame()
+	var operation: Dictionary=staged.advance(milliseconds,player,combat,random_state)
+	if operation.is_empty():return fail(staged.error)
+	# These ordinary NPC shots consume no random values and cannot contact
+	# anything until the next weapon phase. Preserve each pre-motion pose and
+	# actor order while committing their independent pools with the whole pass.
+	var fired: Dictionary=next_weapons.fire_combat_training(staged._combat,operation.firing_requests)
+	if fired.is_empty():return fail(next_weapons.error)
+	var events:=[]
+	for id in operation.decisions.size():
+		var event:={"actor_id":id,"decision":operation.decisions[id],"firing":{},"movement":staged._flight[id].snapshot()}
+		for fire in fired.actors:
+			if fire.actor_id==id:event.firing={"actors":[fire]}
+		for death in operation.get("death_events",[]):
+			if death.state.actor_id==id:
+				event.destruction=death
+				if not death.get("accounting_event",{}).is_empty():event.death_accounting=death.accounting_event
+		events.append(event)
+	return {"controller":staged,"combat":staged._combat,"weapons":next_weapons,"random_state":operation.random_state,"actors":events}
+
+func destruction_owner(actor_id: int) -> RefCounted:
+	return null if actor_id<0 or actor_id>=_destruction.size() else _destruction[actor_id].fork_for_frame()
 
 func combat_owner() -> RefCounted:
 	return null if _combat==null else _combat.fork_for_frame()

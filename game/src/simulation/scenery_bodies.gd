@@ -7,11 +7,13 @@ const Definitions = preload("res://src/content/scenery_resource_definitions.gd")
 const HitDefinitions = preload("res://src/content/ordinary_hit_definitions.gd")
 const WeaponHit = preload("res://src/simulation/ordinary_weapon_hit.gd")
 const Vitals = preload("res://src/simulation/combat_vitals.gd")
+const TrainingWeapons=preload("res://src/content/combat_training_weapon_definitions.gd")
 var error := ""
 var _identity := {}
 var _hit_policy := {}
 var _rows := []
 var _vitals := []
+var _training_primary:=false
 
 func configure(bindings: RefCounted, field: Dictionary, resources: RefCounted) -> bool:
 	clear()
@@ -65,6 +67,7 @@ func configure(bindings: RefCounted, field: Dictionary, resources: RefCounted) -
 	_identity={"base_content_id":source.base_content_id,"binding_id":source.binding_id}
 	_hit_policy=policy.duplicate(true)
 	_rows=rows;_vitals=pools
+	_training_primary=TrainingWeapons.parameters(bindings.combat_training_weapons)
 	return true
 
 func snapshot() -> Dictionary:
@@ -87,7 +90,9 @@ func collision_context(object_index: Variant) -> Dictionary:
 		"path":"bounds","center":row.position,"half_extent":row.half_extent}
 
 func supports_weapon_hit(weapon: Variant) -> bool:
-	error=WeaponHit.validate(weapon,_identity,_hit_policy)
+	var kinds:=[0]
+	if _training_primary and weapon is Dictionary and weapon.get("campaign_cursor")==7 and TrainingWeapons.dispersed_primary(weapon):kinds.append(2)
+	error=WeaponHit.validate(weapon,_identity,_hit_policy,kinds)
 	return error.is_empty()
 
 func weapon_hit(object_index: Variant, weapon: Variant) -> Dictionary:
@@ -154,6 +159,7 @@ func has_pending_destruction() -> bool:
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted = get_script().new()
 	copy._identity=_identity.duplicate();copy._hit_policy=_hit_policy.duplicate(true)
+	copy._training_primary=_training_primary
 	copy._rows=_rows.duplicate(true)
 	for pool in _vitals:
 		var values: Dictionary = pool.snapshot()
@@ -164,6 +170,7 @@ func fork_for_frame() -> RefCounted:
 
 func clear() -> void:
 	error="";_identity={};_hit_policy={};_rows=[];_vitals=[]
+	_training_primary=false
 
 func valid_index(index: Variant) -> bool:
 	return index is int and index>=0 and index<_rows.size()

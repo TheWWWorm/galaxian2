@@ -1,4 +1,5 @@
 extends SceneTree
+const Capture=preload("res://tests/fixtures/model_capture.gd")
 const Frame=preload("res://src/simulation/opening_world_frame.gd")
 const Timeline=preload("res://src/simulation/opening_detail_timeline.gd")
 const Scenery=preload("res://src/simulation/opening_scenery.gd")
@@ -157,8 +158,6 @@ func capture_models(original: RefCounted, world: Dictionary, geometry: Node3D, e
 	if DisplayServer.get_name()=="headless":return
 	var output:=OS.get_environment("GOF2_CAPTURE_DIR")
 	if output.is_empty():return
-	var camera:=Camera3D.new();root.add_child(camera);camera.projection=Camera3D.PROJECTION_ORTHOGONAL;camera.far=100000;camera.current=true
-	var background:=WorldEnvironment.new();background.environment=Environment.new();background.environment.background_mode=Environment.BG_COLOR;background.environment.background_color=Color.BLACK;root.add_child(background)
 	for index in [0,2]:
 		var clock: RefCounted=original.fork_for_frame();var fixture:=world.duplicate(true);var events:=empty_events(fixture)
 		if index==0:fixture.primaries.guns[0].projectiles.slots[0]={"id":1,"position":Vector3.ZERO};events.primary[0].contacts=[hit(0,1)]
@@ -171,23 +170,11 @@ func capture_models(original: RefCounted, world: Dictionary, geometry: Node3D, e
 		check(not prepared.is_empty(),geometry.error)
 		if prepared.is_empty():continue
 		geometry.commit_world(prepared)
-		var model: Node3D=geometry.guns[index].slots[0];var bounds:=AABB();var first:=true
-		for mesh in model.instances:
-			var extent: AABB=mesh.transform*mesh.mesh.get_aabb();bounds=extent if first else bounds.merge(extent);first=false
-		var extent:=maxf(bounds.size.x,maxf(bounds.size.y,bounds.size.z))
-		camera.position=Vector3(bounds.get_center().x,bounds.get_center().y,bounds.end.z+extent+1000)
-		camera.size=maxf(bounds.size.y,bounds.size.x/(float(root.size.x)/root.size.y))*1.25
-		await process_frame;await process_frame;await RenderingServer.frame_post_draw
-		var pixels:=root.get_texture().get_image();var name:="impact-%s-%s.png"%[edition,"player" if index==0 else "npc"]
-		check(pixels.save_png(output.path_join(name))==OK,"Impact screenshot failed")
-		var lit:=0
-		for y in pixels.get_height():
-			for x in pixels.get_width():
-				var pixel:=pixels.get_pixel(x,y)
-				if maxf(pixel.r,maxf(pixel.g,pixel.b))>0.03:lit+=1
-		check(lit>40,"Source impact model was not independently visible: "+name)
-		print(name,": ",lit," lit pixels")
-	camera.free();background.free()
+		var model: Node3D=geometry.guns[index].slots[0]
+		var name:="impact-%s-%s.png"%[edition,"player" if index==0 else "npc"]
+		var result:=await Capture.capture(self,model,output.path_join(name))
+		check(result.get("saved",false) and result.get("lit_pixels",0)>40,"Source model did not render independently: "+name+" "+str(result))
+		print(name,": ",result)
 
 func empty_events(world: Dictionary) -> Dictionary:
 	var result:={"primary":[],"npc":[]}

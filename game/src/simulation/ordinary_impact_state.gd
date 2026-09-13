@@ -7,7 +7,6 @@ const AEM=preload("res://src/content/aem.gd")
 const Ranges=preload("res://src/content/scenery_effect_resources.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const Playback=preload("res://src/simulation/model_playback.gd")
-const PATHS=["resources/data/assets/main/3d/meshes/fx/impact_000_lookat_anim_add.aem","resources/data/assets/main/3d/meshes/fx/impact_005_lookat_anim_add.aem"]
 var error:=""
 var _state:={}
 var _identity: RefCounted
@@ -28,14 +27,13 @@ func configure(bindings: RefCounted, library: RefCounted, world: Dictionary) -> 
 	for entry in inputs:
 		var weapon: Dictionary=entry.projectiles.get("weapon",{})
 		if not Numbers.integer(weapon.get("item_id"),0,2147483647) or not Numbers.integer(weapon.get("projectile_capacity"),1,256):return reject("Invalid impact weapon")
-		var index: int=rules.item_ids.find(float(weapon.item_id))
-		if index<0:index=rules.item_ids.find(int(weapon.item_id))
-		if index<0 or weapon.get("kind")!=rules.kinds[index] or weapon.get("category")!=0 or seen.has(entry.key):return reject("Impact weapon is outside the fresh ordinary population")
+		var mapping:=Visuals.model_mapping(bindings,weapon,entry.key,true)
+		if mapping.is_empty() or seen.has(entry.key):return reject("Unsupported or duplicate ordinary impact weapon")
 		seen[entry.key]=true
 		for key in ["base_content_id","binding_id"]:
 			if weapon.get(key)!=world[key]:return reject("Foreign impact weapon")
-		var id:=int(rules.model_ids[index]);var path: String=bindings.resolve(id,"mesh")
-		if path!=PATHS[index]:return reject("Unsupported impact model mapping")
+		var id: int=mapping.id;var path: String=bindings.resolve(id,"mesh")
+		if path!=mapping.resource:return reject("Unsupported impact model mapping")
 		if not metadata.has(id):
 			var reader:=AEM.new();var decoded:=reader.decode(library.read_resource(path,AEM.MAX_BYTES))
 			if decoded.is_empty():return reject(reader.error)
@@ -83,7 +81,12 @@ func apply_contacts(previous_world: Dictionary, primary_events: Array, npc_event
 		events.append({"key":by_mount[int(event.mount_id)],"contacts":event.get("contacts")})
 	for event in npc_events:
 		if not event is Dictionary or not Numbers.integer(event.get("actor_id"),0,2147483647):return reject("Unknown impact NPC owner")
-		events.append({"key":"npc:%d"%int(event.actor_id),"contacts":event.get("contacts")})
+		if not event.get("contacts") is Array or not event.get("npc_contacts",[]) is Array:return reject("Invalid NPC impact contact lists")
+		# These weapons visit player then NPCs before cleanup. Keep all
+		# overlapping hits and their order, including non-player damage.
+		var contacts: Array=event.contacts.duplicate()
+		contacts.append_array(event.get("npc_contacts",[]))
+		events.append({"key":"npc:%d"%int(event.actor_id),"contacts":contacts})
 	if events.size()!=inputs.size():return reject("Impact frame omitted a weapon contact pass")
 	var staged: Dictionary=_state.duplicate(true)
 	for event in events:

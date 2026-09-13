@@ -47,9 +47,21 @@ the shared destruction rules. `defeat_status()` reports condition 18 over pirate
 0..2 in explosion mode 4, independently of later retirement. That predicate does
 not advance campaign progress or award rewards.
 
-These components are checked on detached encounters. The complete flight frame
-and session, world contacts, player death, visual/audio presentation, story and
-return are still required before the combat-training flight becomes playable.
+Mac reader v121 adds the training projectile and impact mappings to the shared
+effect owners. The starter and upgraded player bolts are static meshes; Gunant's
+authored projectile uses its own looping model. Player shots retain the firing
+ship's up axis. Each slot keeps an independent impact clock, including ordered
+NPC-to-NPC contacts and retained sampling on a repeated hit. Effect setup does not
+repeat the NPC constructor's random draws or advance the post-scenery stream.
+
+These components are checked on detached encounters, including independent GPU
+captures of all six distinct models. The shared encounter stages primary hits
+against all four NPCs and 130 source asteroids, then the NPC weapon contacts.
+Late player fire passes its random state into NPC movement and destruction;
+new shots first contact in the following weapon pass. Failed stages preserve
+the accepted encounter, player and scenery together. The complete flight frame
+and session, player death, scene/audio integration, story and return are still
+required before the combat-training flight becomes playable.
 
 Mac reader v107 adds detached combat preparation for the second mining pirate.
 The existing actor/group and weapon owners accept its constructed world, retain

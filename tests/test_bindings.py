@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from gof2_content.registrations import extract, MachO, thumb_immediate
+from gof2_content.registrations import extract, MachO, thumb_immediate, READER
 from gof2_content.bindings import prepare, binding_id
 from gof2_content.formats import ContentError
 from gof2_content.importer import install
@@ -144,7 +144,7 @@ class BindingTests(unittest.TestCase):
             self.assertNotIn('station_presentation', header)
             self.assertEqual(json.loads((pack / 'registrations.json').read_text())['desktop_text'], {})
             self.assertNotIn('desktop_text', header)
-            self.assertEqual(header['reader'], 'resource-registration-v114')
+            self.assertEqual(header['reader'], READER)
             self.assertEqual(json.loads((pack / 'registrations.json').read_text())['station_departure'], {})
             self.assertNotIn('station_departure', header)
             self.assertEqual(json.loads((pack / 'registrations.json').read_text())['first_flight'], {})

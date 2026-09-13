@@ -133,6 +133,7 @@ def prepare(source: Path, base: Path, output: Path, checkpoint=lambda *_: None):
     combat_training_control = declarations.pop('combat_training_control')
     combat_training_weapons = declarations.pop('combat_training_weapons')
     combat_training_destruction = declarations.pop('combat_training_destruction')
+    combat_training_visuals = declarations.pop('combat_training_visuals')
     player_destruction = declarations.pop('player_destruction')
     full_hold_particles = declarations.pop('full_hold_particles')
     game_over_presentation = declarations.pop('game_over_presentation')
@@ -220,6 +221,7 @@ def prepare(source: Path, base: Path, output: Path, checkpoint=lambda *_: None):
                        'combat_training_control': combat_training_control,
                        'combat_training_weapons': combat_training_weapons,
                        'combat_training_destruction': combat_training_destruction,
+                       'combat_training_visuals': combat_training_visuals,
                        'player_destruction': player_destruction,
                        'full_hold_particles': full_hold_particles,
                        'game_over_presentation': game_over_presentation,

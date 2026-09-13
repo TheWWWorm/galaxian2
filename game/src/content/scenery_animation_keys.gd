@@ -7,9 +7,9 @@ const MAX_WORK := 8000000
 var error := ""
 var _work := 0
 
-func prepare(surfaces: Variant) -> Dictionary:
+func prepare(surfaces: Variant, allow_static:=false) -> Dictionary:
 	error="";_work=0
-	if Resources.playback_range(surfaces).is_empty():
+	if Resources.playback_range(surfaces,allow_static).is_empty():
 		return reject("Unsupported scenery animation channel layout or timing")
 	var compiled := []
 	for surface in surfaces:

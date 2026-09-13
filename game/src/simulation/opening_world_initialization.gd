@@ -149,6 +149,15 @@ func arrival_motion_construction() -> Dictionary:
 func snapshot() -> Dictionary:
 	return _state.duplicate(true)
 
+func fork_for_frame() -> RefCounted:
+	var copy: RefCounted=get_script().new()
+	if _state.is_empty():return copy
+	copy._identity=_identity.duplicate(true);copy._definition=_definition.duplicate(true);copy._state=_state.duplicate(true)
+	# A generated constructor rejects a second generation and only returns
+	# detached routes. Reconfiguration replaces it rather than mutating it.
+	copy._construction=_construction
+	return copy
+
 func clear() -> void:
 	error="";_identity={};_definition={};_construction=null;_state={}
 

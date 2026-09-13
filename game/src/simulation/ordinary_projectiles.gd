@@ -155,7 +155,15 @@ func fire_from_mount(mount: Dictionary, ship_transform: Variant, world_direction
 		mount_dot(Vector3(basis.x.z, basis.y.z, basis.z.z), offset))
 	var muzzle := added(scaled(ship_transform.origin, 1.0), rotated)
 	if not muzzle.is_finite(): return fail("Weapon mount exceeds finite world coordinates")
-	return fire(muzzle, world_direction, firing_allowed,random_state)
+	var up:=scaled(basis.y,1.0)
+	if not up.is_finite():return fail("Weapon up axis exceeds finite world coordinates")
+	var result:=fire(muzzle, world_direction, firing_allowed,random_state)
+	if result.get("fired",false) and _weapon.get("campaign_cursor")==7 and not _weapon.get("nonplayer_source",false):
+		# The original ordinary launch stores the firing matrix's Y column in
+		# each slot. It survives ship rotation and is reused by the draw root.
+		_slots[result.projectile.slot].up=up
+		result.projectile.up=up
+	return result
 
 static func mount_dot(row: Vector3, offset: Vector3) -> float:
 	var x := Vitals.single(Vitals.single(row.x) * offset.x)

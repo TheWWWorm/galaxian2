@@ -3,6 +3,7 @@ extends RefCounted
 ## resource selection, bodies and later population changes are separate work.
 const FirstFlight=preload("res://src/content/first_flight_definitions.gd")
 const FullHold=preload("res://src/content/full_hold_flight_definitions.gd")
+const Training=preload("res://src/content/combat_training_definitions.gd")
 const Definitions = preload("res://src/content/scenery_population_definitions.gd")
 const Generator = preload("res://src/simulation/seeded_random.gd")
 const Library = preload("res://src/content/library.gd")
@@ -13,6 +14,7 @@ var _parameters := {}
 var _arrival := {}
 var _departure := {}
 var _full_hold := {}
+var _training := {}
 
 func clear() -> void:
 	error=""
@@ -21,6 +23,7 @@ func clear() -> void:
 	_arrival={}
 	_departure={}
 	_full_hold={}
+	_training={}
 
 func configure(bindings: RefCounted) -> bool:
 	clear()
@@ -33,6 +36,7 @@ func configure(bindings: RefCounted) -> bool:
 	_arrival=bindings.arrival_world_initialization.duplicate(true)
 	_departure=bindings.first_flight.duplicate(true)
 	_full_hold=bindings.full_hold_flight.duplicate(true)
+	_training=bindings.combat_training.duplicate(true)
 	return true
 
 func for_station(station_id: Variant) -> Dictionary:
@@ -62,8 +66,9 @@ func for_departure(station_id: Variant, entry_conditions: Variant, cursor: int=2
 	var data: Dictionary
 	if cursor==2 and FirstFlight.parameters(_departure):data=_departure
 	elif cursor==4 and FullHold.parameters(_full_hold):data=_full_hold
-	else:return fail("This mining departure has no supported scenery center")
-	if not station_id is int or station_id!=int(data.station_id) or not FirstFlight.entry_conditions(entry_conditions):return fail("Mining-flight scenery requires its ordinary station and empty companion list")
+	elif cursor==7 and Training.parameters(_training):data=_training
+	else:return fail("This departure has no supported scenery center")
+	if not station_id is int or station_id!=int(data.station_id) or not FirstFlight.entry_conditions(entry_conditions):return fail("Departure scenery requires its ordinary station and empty companion list")
 	return _ordinary_center(station_id,cursor)
 
 func _ordinary_center(station_id: int, cursor: int) -> Dictionary:

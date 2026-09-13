@@ -90,6 +90,7 @@ from .combat_training import extract_combat_training
 from .combat_training_control import extract_combat_training_control
 from .combat_training_weapons import extract_combat_training_weapons
 from .combat_training_destruction import extract_combat_training_destruction
+from .combat_training_visuals import extract_combat_training_visuals
 from .full_hold_appearance import extract_full_hold_appearance
 from .full_hold_story import extract_full_hold_story
 from .full_hold_destruction import extract_full_hold_destruction
@@ -118,7 +119,7 @@ from .camera_follow import extract_camera_follow
 MAX_EXECUTABLE = 64 * 1024 * 1024
 MAX_SECTIONS = 256
 MAX_RECORDS = 20000
-READER = 'resource-registration-v120'
+READER = 'resource-registration-v121'
 
 
 class MachO:
@@ -525,6 +526,7 @@ def extract(source, edition, checkpoint=lambda *_: None):
             'combat_training_control': combat_training_control,
             'combat_training_weapons': combat_training_weapons,
             'combat_training_destruction': extract_combat_training_destruction(mach, arrival_staging, combat_training, combat_training_control, combat_training_weapons, actors),
+            'combat_training_visuals': extract_combat_training_visuals(mach, arrival_staging, combat_training_weapons, staging),
             'full_hold_appearance': extract_full_hold_appearance(mach, arrival_staging, full_hold_story, full_hold_destruction),
             'full_hold_control': full_hold_control,
             'full_hold_destruction': full_hold_destruction,
