@@ -8,6 +8,8 @@ const GameOver=preload("res://src/content/game_over_definitions.gd")
 const FullHoldParticles=preload("res://src/content/full_hold_particle_definitions.gd")
 const PlayerDestruction=preload("res://src/content/player_destruction_definitions.gd")
 const CombatTrainingVisuals=preload("res://src/content/combat_training_visual_definitions.gd")
+const CombatTrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
+const MAX_READER_VERSION:=122
 const CombatTrainingDestruction=preload("res://src/content/combat_training_destruction_definitions.gd")
 const CombatTrainingWeapons=preload("res://src/content/combat_training_weapon_definitions.gd")
 const CombatTrainingControl=preload("res://src/content/combat_training_control_definitions.gd")
@@ -106,6 +108,7 @@ var full_hold_particles := {}
 var player_destruction := {}
 var station_equipment := {}
 var combat_training_visuals := {}
+var combat_training_story := {}
 var combat_training_destruction := {}
 var combat_training_weapons := {}
 var combat_training_control := {}
@@ -196,6 +199,7 @@ func open(directory: String, base: Dictionary) -> bool:
 	player_destruction = {}
 	station_equipment = {}
 	combat_training_visuals = {}
+	combat_training_story = {}
 	combat_training_destruction = {}
 	combat_training_weapons = {}
 	combat_training_control = {}
@@ -948,6 +952,11 @@ func open(directory: String, base: Dictionary) -> bool:
 		var training_visual_error:=CombatTrainingVisuals.validate(body.get("combat_training_visuals"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_combat_training_weapons,staged_staging)
 		if not training_visual_error.is_empty():return fail(training_visual_error)
 		staged_combat_training_visuals=body.combat_training_visuals
+	var staged_combat_training_story := {}
+	if version>=122:
+		var training_story_error:=CombatTrainingStory.validate(body.get("combat_training_story"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_combat_training,staged_combat_training_destruction,staged_mining_briefing,staged_mining_objective,staged_dialogue,staged_full_hold_story)
+		if not training_story_error.is_empty():return fail(training_story_error)
+		staged_combat_training_story=body.combat_training_story
 	source_architecture=architecture
 	audio=staged_audio
 	scenery_effects=staged_scenery_effects
@@ -994,6 +1003,7 @@ func open(directory: String, base: Dictionary) -> bool:
 	player_destruction = staged_player_destruction
 	station_equipment = staged_station_equipment
 	combat_training_visuals = staged_combat_training_visuals
+	combat_training_story = staged_combat_training_story
 	combat_training_destruction = staged_combat_training_destruction
 	combat_training_weapons = staged_combat_training_weapons
 	combat_training_control = staged_combat_training_control
@@ -1317,5 +1327,5 @@ static func reader_version(value: Variant) -> int:
 	var suffix: String=value.trim_prefix("resource-registration-v")
 	if not suffix.is_valid_int():return 0
 	var version:=suffix.to_int()
-	if version<1 or version>121 or value!="resource-registration-v%d"%version:return 0
+	if version<1 or version>MAX_READER_VERSION or value!="resource-registration-v%d"%version:return 0
 	return version

@@ -1,5 +1,6 @@
 """Recover station construction parameters; runtime data contains no executable bytes."""
 import copy
+import hashlib
 from .ship_models import section_bytes
 
 def declaration_bytes(mach,address,size,name):
@@ -11,6 +12,25 @@ def declaration_bytes(mach,address,size,name):
             offset=section['offset']+address-section['address']
             if 0<=offset<=len(mach.data)-size:return mach.data[offset:offset+size],offset+mach.slice_offset
     return None
+
+def hashed_declarations(mach, arrival, layouts):
+    """Validate bounded declarations relative to the shared Mac actor anchor."""
+    if mach.architecture != 'x86_64':
+        return {}
+    try:
+        origin = arrival['provenance']['actor']
+        if origin['bytes'] != 315:
+            return {}
+        anchor = mach.text['address'] + origin['offset'] - mach.slice_offset - mach.text['offset']
+        proof = {}
+        for key, (delta, size, section, digest) in layouts.items():
+            found = declaration_bytes(mach, anchor + delta, size, section.encode())
+            if found is None or hashlib.sha256(found[0]).hexdigest() != digest:
+                return {}
+            proof[key] = {'offset': found[1], 'bytes': size}
+        return proof
+    except (KeyError, TypeError, ValueError, IndexError, OverflowError):
+        return {}
 
 def extract_station_exterior(mach, arrival, flight):
     if mach.architecture!='x86_64' or flight.get('scope')!='first_mining_flight_construction':return {}

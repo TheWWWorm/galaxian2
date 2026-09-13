@@ -6,6 +6,7 @@ extends RefCounted
 const Definitions = preload("res://src/content/dialogue_definitions.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Library = preload("res://src/content/library.gd")
+const Combat = preload("res://src/simulation/opening_combat_group.gd")
 var error := ""
 var _definition := {}
 var _lines: Array = []
@@ -68,6 +69,36 @@ func configure_from_layout(bindings: RefCounted, library: RefCounted, layout: Re
 	return configure(bindings, library, counts, campaign_cursor)
 
 func step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int) -> Array:
+	if _identity.get("campaign_cursor")==7:
+		fail("Training radio requires its typed actor activity context")
+		return []
+	return _step(elapsed_ms,actor_hulls,cinematic_phase,false)
+
+func step_combat_training(elapsed_ms: int, combat: RefCounted) -> Array:
+	error=""
+	if _identity.get("campaign_cursor")!=7 or not combat is Combat:
+		fail("Training radio requires its typed actor activity context")
+		return []
+	var state: Dictionary=combat.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if state.get(key)!=_identity[key]:
+			fail("Training radio belongs to another encounter")
+			return []
+	if not state.get("actors") is Array or state.actors.size()!=4:
+		fail("Training radio requires the complete source actor list")
+		return []
+	var hostile_active:=false
+	for id in 4:
+		var actor: Dictionary=state.actors[id]
+		if actor.get("actor_id")!=id or not actor.get("active") is bool or not actor.get("friendly") is bool:
+			fail("Training radio lacks source actor activity or allegiance")
+			return []
+		# Scenery is absent from this typed NPC group. Hull and explosion mode
+		# do not participate in source radio condition16.
+		hostile_active=hostile_active or (actor.active and not actor.friendly)
+	return _step(elapsed_ms,{},0,hostile_active)
+
+func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hostile_active: bool) -> Array:
 	error = ""
 	if _identity.is_empty() or elapsed_ms < 0 or elapsed_ms < _last_time or elapsed_ms > 2147483647:
 		fail("Invalid radio context or simulation time")
@@ -76,7 +107,7 @@ func step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int) -> Arr
 	var changes := []
 	if _active < 0:
 		for i in _started.size():
-			if not _started[i] and eligible(_definition.events[i], elapsed_ms, actor_hulls, cinematic_phase):
+			if not _started[i] and eligible(_definition.events[i], elapsed_ms, actor_hulls, cinematic_phase,hostile_active):
 				_active = i
 				_started[i] = true
 				_activated_at = elapsed_ms
@@ -98,7 +129,7 @@ func step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int) -> Arr
 		_visible = false
 	return changes
 
-func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int) -> bool:
+func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int, hostile_active:=false) -> bool:
 	var value := int(row.values[0])
 	match int(row.condition):
 		5: return elapsed_ms >= value
@@ -109,6 +140,7 @@ func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int) -
 				if not Numbers.integer(hull, -2147483648, 2147483647) or hull > 0: return false
 			return true
 		27: return phase == value
+		16: return hostile_active
 	return false
 
 func snapshot() -> Dictionary:

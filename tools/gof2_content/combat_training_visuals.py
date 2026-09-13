@@ -1,7 +1,6 @@
 """Optional Mac ordinary weapon model mappings for the training encounter."""
 import copy
-import hashlib
-from .station_exterior import declaration_bytes
+from .station_exterior import hashed_declarations
 
 
 def extract_combat_training_visuals(mach, arrival, weapons, staging):
@@ -12,16 +11,9 @@ def extract_combat_training_visuals(mach, arrival, weapons, staging):
             return {}
         if not staging['projectile_visuals'] or not staging['projectile_impacts']:
             return {}
-        origin = arrival['provenance']['actor']
-        if origin['bytes'] != 315:
+        proof = hashed_declarations(mach, arrival, LAYOUTS)
+        if not proof:
             return {}
-        anchor = mach.text['address'] + origin['offset'] - mach.slice_offset - mach.text['offset']
-        proof = {}
-        for key, (delta, size, section, digest) in LAYOUTS.items():
-            found = declaration_bytes(mach, anchor + delta, size, section.encode())
-            if found is None or hashlib.sha256(found[0]).hexdigest() != digest:
-                return {}
-            proof[key] = {'offset': found[1], 'bytes': size}
         result = copy.deepcopy(VALUES)
         result['provenance'] = proof
         return result

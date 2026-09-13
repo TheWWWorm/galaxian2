@@ -31,8 +31,8 @@ func verify_training_destruction(args: PackedStringArray, equipment: RefCounted)
 func verify_training_visuals(args: PackedStringArray, equipment: RefCounted):
 	var rules: Dictionary=bindings.combat_training_visuals
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
-	for version in range(1,122):check(Bindings.reader_version("resource-registration-v%d"%version)==version,"Supported reader version lost its gate")
-	for value in [null,121,true,"resource-registration-v0","resource-registration-v122","resource-registration-v0121","resource-registration-v+121","resource-registration-v121 ","resource-registration-v121suffix"]:
+	for version in range(1,Bindings.MAX_READER_VERSION+1):check(Bindings.reader_version("resource-registration-v%d"%version)==version,"Supported reader version lost its gate")
+	for value in [null,121,true,"resource-registration-v0","resource-registration-v%d"%(Bindings.MAX_READER_VERSION+1),"resource-registration-v0121","resource-registration-v+121","resource-registration-v121 ","resource-registration-v121suffix"]:
 		check(Bindings.reader_version(value)==0,"Unsupported reader spelling accepted")
 	if Bindings.reader_version(header.reader)>=121:check(TrainingVisualRules.parameters(rules),"Current Mac pack omitted training visuals")
 	var cat:=Catalogues.new();check(cat.open(lib),cat.error)

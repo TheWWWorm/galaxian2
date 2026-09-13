@@ -1,8 +1,9 @@
 extends RefCounted
-## Entry and acknowledged briefing for the supported mining flights. The caller owns
+## Entry and acknowledged briefing for supported ordinary flights. The caller owns
 ## world/camera updates and uses simulation_delta_ms() for this frame. This owner
 ## never mines cargo, completes missions, advances the campaign or grants rewards.
 const Story=preload("res://src/content/full_hold_story_definitions.gd")
+const Training=preload("res://src/content/combat_training_story_definitions.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 var error:=""
@@ -18,10 +19,11 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 	if bindings==null or library==null or construction==null or construction.get_script()!=Construction:return reject("Mining briefing requires a prepared departure")
 	var flight: Dictionary=construction.snapshot()
 	if flight.is_empty() or flight.get("base_content_id")!=bindings.base_content_id or flight.get("binding_id")!=bindings.binding_id or library.manifest.get("content_id")!=bindings.base_content_id:return reject("Mining briefing belongs to another flight or content identity")
-	var rules:=Story.briefing(bindings,flight.get("campaign_cursor"))
+	var training: bool=flight.get("campaign_cursor")==7
+	var rules:=Training.briefing(bindings) if training else Story.briefing(bindings,flight.get("campaign_cursor"))
 	if rules.is_empty():return reject("This departure has no supported mining briefing")
 	if flight.activated or flight.entry_released or flight.briefing_started:return reject("Mining briefing requires a fresh prepared departure")
-	if bindings.desktop_text_id(1703)!=1704:return reject("Mining briefing requires its desktop instruction mapping")
+	if bindings.desktop_text_id(1728 if training else 1703)!=(1729 if training else 1704):return reject("Flight briefing requires its desktop instruction mapping")
 	if dock_key.strip_edges().is_empty() or dock_key.length()>32 or dock_key.contains("#") or dock_key.contains("\n"):return reject("Mining instruction requires its active mining/dock key label")
 	var lines:=[]
 	for event in rules.events:

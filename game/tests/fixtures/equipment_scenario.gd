@@ -2,6 +2,7 @@ extends RefCounted
 ## Private, test-only capture of an earned equipment tutorial transition.
 ## Replaying the recorded transactions never restores or changes a player save.
 const Equipment=preload("res://src/simulation/station_equipment.gd")
+const Station=preload("res://src/simulation/station_entry.gd")
 const MAX_BYTES=4*1024*1024
 const PRODUCERS=["res://src/simulation/station_equipment.gd",
 	"res://src/simulation/station_entry.gd",
@@ -61,3 +62,23 @@ func restore(data: Variant, bindings: RefCounted, catalogues: RefCounted) -> Ref
 func fail(message: String) -> RefCounted:
 	error=message
 	return null
+
+func station_owner(bindings: RefCounted, catalogues: RefCounted) -> RefCounted:
+	# Restore only a capture already checked against the real tutorial producer
+	# and replay every equipment transaction again. This helper never writes a save.
+	var data:=document.duplicate(true)
+	var equipment:=restore(data,bindings,catalogues)
+	if equipment==null:return null
+	var station:=Station.new()
+	station._state=data.station_after.duplicate(true)
+	for key in ["dialogue","equipment","boundary"]:station._state.erase(key)
+	station._rules=bindings.station_entry.duplicate(true)
+	station._progress_rules=bindings.opening_handoff.duplicate(true)
+	station._return_rules=bindings.full_hold_return.duplicate(true)
+	station._equipment_rules=bindings.station_equipment.duplicate(true)
+	station._equipment=equipment
+	# The acknowledged line list is retained so a snapshot does not change its
+	# recorded index/count. No new dialogue or acknowledgement is introduced.
+	station._lines=bindings.station_equipment.events.duplicate(true)
+	station._equipment_lines=station._lines.duplicate(true)
+	return station

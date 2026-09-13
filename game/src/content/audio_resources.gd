@@ -10,6 +10,7 @@ const StationPresentation=preload("res://src/content/station_presentation_defini
 const MiningStory=preload("res://src/content/full_hold_story_definitions.gd")
 const StationReturn=preload("res://src/content/full_hold_return_definitions.gd")
 const StationEquipment=preload("res://src/content/station_equipment_definitions.gd")
+const TrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
 var error := ""
 var unsupported := {}
 var _library: RefCounted
@@ -26,7 +27,7 @@ func configure(library: RefCounted, bindings: RefCounted, campaign_cursor: int =
 	error="";unsupported.clear();_banks.clear();_clips.clear();_sound_cache.clear();_channel_cache.clear();_decoded_bytes=0;_definitions={};_library=null
 	_language_index=0;_voice_ids.clear()
 	if library==null or bindings==null or bindings.base_content_id!=library.manifest.get("content_id"):return reject("Audio requires matching base content and bindings")
-	if campaign_cursor not in [0,1]:return reject("Unsupported radio scene")
+	if campaign_cursor not in [0,1,7]:return reject("Unsupported radio scene")
 	var message:=Definitions.validate(bindings.audio,library.manifest.files)
 	if not message.is_empty():return reject(message)
 	if bindings.audio.is_empty():return reject("This binding pack has no audio declarations")
@@ -36,7 +37,7 @@ func configure(library: RefCounted, bindings: RefCounted, campaign_cursor: int =
 	if campaign_cursor!=0 and not Dialogue.valid_parameters(dialogue,campaign_cursor):return reject("Rescue radio is unavailable")
 	var voice: Dictionary=dialogue.get("voice",{})
 	if not voice.is_empty():
-		if not RadioVoice.parameters(voice,23 if campaign_cursor==0 else 3):return reject("Invalid radio voice capability")
+		if not RadioVoice.parameters(voice,dialogue.events.size()):return reject("Invalid radio voice capability")
 		_language_index=_definitions.languages.find(RadioVoice.language(voice,library.active_language))
 		if _language_index<0:return reject("The selected voice language is absent from the source event project")
 		for id in voice.event_ids:
@@ -75,7 +76,7 @@ func configure_station(library: RefCounted, bindings: RefCounted) -> bool:
 
 func configure_mining_briefing(library: RefCounted, bindings: RefCounted, campaign_cursor:=2) -> bool:
 	if not configure(library,bindings):return false
-	var rules:=MiningStory.briefing(bindings,campaign_cursor)
+	var rules:=TrainingStory.briefing(bindings) if campaign_cursor==7 else MiningStory.briefing(bindings,campaign_cursor)
 	if rules.is_empty():return reject("Mining voice declarations are unavailable")
 	_voice_ids.clear()
 	for event in rules.events:
@@ -89,6 +90,12 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, campa
 	_voice_ids.clear()
 	for event in rules.events:
 		if event.voice_event_id>=0:_voice_ids[int(event.voice_event_id)]=true
+	return true
+
+func configure_training_completion(library: RefCounted, bindings: RefCounted) -> bool:
+	if not configure(library,bindings) or not TrainingStory.parameters(bindings.combat_training_story):return reject("Training completion voice is unavailable")
+	_voice_ids.clear()
+	for event in bindings.combat_training_story.completion_events:_voice_ids[int(event.voice_event_id)]=true
 	return true
 
 func configure_station_return(library: RefCounted, bindings: RefCounted, campaign_cursor:=3) -> bool:

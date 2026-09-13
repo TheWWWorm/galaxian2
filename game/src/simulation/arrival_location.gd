@@ -7,6 +7,8 @@ const Planets=preload("res://src/content/planet_resource_definitions.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const Loadout=preload("res://src/simulation/opening_loadout.gd")
 const Cache=preload("res://src/simulation/flight_player_cache.gd")
+const Equipment=preload("res://src/simulation/station_equipment.gd")
+const Training=preload("res://src/content/combat_training_story_definitions.gd")
 var error:=""
 
 func resolve(bindings: RefCounted, catalogues: RefCounted, arrival_cache: Variant) -> Dictionary:
@@ -49,6 +51,17 @@ func _resolve(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, cu
 		"star_texture_base":int(sky.star_texture_base),"sky_mesh_id":int(data.sky_mesh_base)+index,"sky_texture_id":int(data.sky_texture_base)+index}
 	result.current_planet_texture_id=int(sky.planet_resources.near_textures[int(station.planet_type)])
 	return result
+
+func resolve_combat_training(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted, player_cache: Dictionary) -> Dictionary:
+	error=""
+	if bindings==null or catalogues==null or not equipment is Equipment or Training.flight(bindings).is_empty():return reject("Training requires its equipped ordinary location")
+	if not equipment.requirements().satisfied:return reject("Training equipment is incomplete")
+	var seed: Dictionary=equipment.snapshot().loadout
+	if catalogues.content_id!=bindings.base_content_id or seed.get("base_content_id")!=bindings.base_content_id or seed.get("binding_id")!=bindings.binding_id or not Cache.matches(player_cache,seed,7):return reject("Training location belongs to another equipped player")
+	if not Definitions.parameters(bindings.arrival_environment) or not SkyDefinitions.parameters(bindings.opening_sky) or not Planets.parameters(bindings.opening_sky.get("planet_resources",{})):return reject("Training requires its shared ordinary environment")
+	for key in ["station_id","system_id"]:
+		if seed.get(key)!=int(bindings.combat_training_story[key]):return reject("Training location changed")
+	return _resolve(bindings,catalogues,seed,7)
 
 func reject(message: String) -> Dictionary:
 	error=message

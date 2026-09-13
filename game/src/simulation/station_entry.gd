@@ -13,6 +13,7 @@ const ReturnDefinitions=preload("res://src/content/station_return_definitions.gd
 const FullHoldReturn=preload("res://src/content/full_hold_return_definitions.gd")
 const Flight=preload("res://src/simulation/first_flight_frame.gd")
 const Equipment=preload("res://src/simulation/station_equipment.gd")
+const TrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
 var error := ""
 var _state := {}
 var _lines := []
@@ -183,6 +184,7 @@ func prepare_departure(bindings: RefCounted, catalogues: RefCounted) -> Dictiona
 	error=""
 	# Preparation is read-only. The scene owner must obtain the source departure
 	# confirmation and successfully prepare the flight before replacing station.
+	if _state.get("phase")=="combat_departure_required":return _prepare_combat_training(bindings,catalogues)
 	if _state.is_empty() or _state.phase!="ready_to_launch" or not _state.acknowledged:
 		fail("Acknowledge the station conversation before preparing departure");return {}
 	if bindings==null or catalogues==null or not Departure.parameters(bindings.station_departure):
@@ -219,6 +221,27 @@ func prepare_departure(bindings: RefCounted, catalogues: RefCounted) -> Dictiona
 		"loadout":seed,"reset_cache":reset,"player_cache":cache,"player":state,
 		"progress":_state.progress.duplicate(true),"mission":_state.mission.duplicate(true),
 		"cargo_used":int(rules.initial_cargo_used),"source_ship_configuration":_state.source_ship_configuration,
+		"confirmation_required":rules.confirmation_required,"confirmation_text_id":int(rules.confirmation_text_id)}
+
+func _prepare_combat_training(bindings: RefCounted, catalogues: RefCounted) -> Dictionary:
+	if bindings==null or catalogues==null or TrainingStory.flight(bindings).is_empty() or not Departure.parameters(bindings.station_departure):fail("This pack has no supported training departure");return {}
+	if not _state.get("acknowledged",false) or not _state.get("equipment_acknowledged",false) or _state.get("hangar_open",true) or _state.get("campaign_cursor")!=7 or not _equipment is Equipment:fail("Acknowledge the completed equipment tutorial before departure");return {}
+	if bindings.base_content_id!=_state.base_content_id or bindings.binding_id!=_state.binding_id or catalogues.content_id!=_state.base_content_id or bindings.station_entry!=_rules or bindings.opening_handoff!=_progress_rules or bindings.station_equipment!=_equipment_rules:fail("Training departure belongs to another station or content identity");return {}
+	var owned: Dictionary=_equipment.snapshot()
+	if not _equipment.requirements().satisfied or owned.loadout!=_state.loadout or owned.cargo!=_state.cargo or owned.cargo_cache_stale:fail("Training departure requires the retained equipped ship and cargo");return {}
+	if _state.mining_completed or _state.reward_credits!=0 or _state.progress.campaign_cursor!=7 or _state.mission!={"kind":4,"station_id":78,"reward":0,"bonus":0,"source_parameter":0}:fail("Training departure changed the earned mission or progress");return {}
+	var player:=Player.new()
+	if not player.configure_combat_training(bindings,catalogues,_equipment):fail(player.error);return {}
+	var state:=player.snapshot();var seed: Dictionary=owned.loadout
+	var reset:=Cache.combat_training_cache(bindings.opening_actors.player_initialization.flight_cache,bindings.combat_training_weapons,seed,state.max_hull,state.capacities,true)
+	if reset.is_empty():fail("Training departure could not reset the previous flight pools");return {}
+	var rules: Dictionary=bindings.station_departure
+	return {"base_content_id":_state.base_content_id,"binding_id":_state.binding_id,"campaign_cursor":7,
+		"source_state":int(rules.source_state),"world_type":int(rules.world_type),"audio_selector":int(rules.audio_selector),
+		"loadout":seed.duplicate(true),"reset_cache":reset,"player_cache":player.cache_snapshot(),"player":state,
+		"progress":_state.progress.duplicate(true),"mission":_state.mission.duplicate(true),
+		"cargo_used":int(owned.cargo.used),"cargo":owned.cargo.duplicate(true),"equipment":owned,
+		"source_ship_configuration":_state.source_ship_configuration,
 		"confirmation_required":rules.confirmation_required,"confirmation_text_id":int(rules.confirmation_text_id)}
 
 func snapshot() -> Dictionary:

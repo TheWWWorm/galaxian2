@@ -63,6 +63,19 @@ the accepted encounter, player and scenery together. The complete flight frame
 and session, player death, scene/audio integration, story and return are still
 required before the combat-training flight becomes playable.
 
+Mac reader v122 adds the training briefing, timed radio and completion dialogue.
+The shared radio scheduler requires a typed training actor group: an active
+nonfriendly NPC starts Gunant's line, then Keith's line depends on that first
+line having started. Hull and explosion mode do not affect this radio condition.
+English and German voice resources are checked through the existing audio reader.
+
+Departure preparation retains the actual installed equipment and spare cargo,
+resets player pools, constructs the ordinary station field and four NPCs, and
+draws the entry camera after their initialization. The shared briefing clock
+waits for entry release and an eligible HUD poll; its three modal lines require
+acknowledgement. These prepared components do not yet enable the complete
+training flight, completion transition or station return in the application.
+
 Mac reader v107 adds detached combat preparation for the second mining pirate.
 The existing actor/group and weapon owners accept its constructed world, retain
 earned rank, and use its factory hull and one-damage primary. The second-trip
