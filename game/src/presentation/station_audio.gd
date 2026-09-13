@@ -1,0 +1,112 @@
+extends Node
+## Shared acknowledged speech for the station, mining briefing and return.
+## Explicit navigation replaces the prior voice; duration never acknowledges it.
+const Resources=preload("res://src/content/audio_resources.gd")
+const Streams=preload("res://src/presentation/audio_stream_control.gd")
+const MiningStory=preload("res://src/content/full_hold_story_definitions.gd")
+const StationReturn=preload("res://src/content/full_hold_return_definitions.gd")
+var error:=""
+var diagnostics:={}
+var _resources: RefCounted
+var _clips: Array=[]
+var _player: Node
+var _paused:=false
+var _line:=-1
+var _history: Array=[]
+var _effect_clips:={}
+var _effects:={}
+var _effect_history:=[]
+
+func configure(library: RefCounted, bindings: RefCounted) -> bool:
+	clear();_resources=Resources.new()
+	if not _resources.configure_station(library,bindings):return reject(_resources.error)
+	if not _prepare_voices(bindings.station_presentation.dialogue.voice_event_ids):return false
+	# This event has authored envelopes that require their own native owner.
+	# Keep its unsupported status explicit rather than substituting another loop.
+	diagnostics.atmosphere="Station atmosphere envelopes are not connected"
+	return true
+
+func configure_mining_briefing(library: RefCounted, bindings: RefCounted, campaign_cursor:=2) -> bool:
+	clear();_resources=Resources.new()
+	if not _resources.configure_mining_briefing(library,bindings,campaign_cursor):return reject(_resources.error)
+	var ids:=[]
+	for event in MiningStory.briefing(bindings,campaign_cursor).events:
+		if event.voice_event_id>=0:ids.append(int(event.voice_event_id))
+	return _prepare_voices(ids)
+
+func configure_mining_objective(library: RefCounted, bindings: RefCounted, campaign_cursor:=2) -> bool:
+	clear();_resources=Resources.new()
+	if not _resources.configure_mining_objective(library,bindings,campaign_cursor):return reject(_resources.error)
+	var ids:=[]
+	for event in MiningStory.objective(bindings,campaign_cursor).events:
+		if event.voice_event_id>=0:ids.append(int(event.voice_event_id))
+	return _prepare_voices(ids)
+
+func configure_station_return(library: RefCounted, bindings: RefCounted, campaign_cursor:=3) -> bool:
+	clear();_resources=Resources.new()
+	if not _resources.configure_station_return(library,bindings,campaign_cursor):return reject(_resources.error)
+	var ids:=[]
+	for event in StationReturn.select(bindings,campaign_cursor).events:
+		if event.voice_event_id>=0:ids.append(int(event.voice_event_id))
+	return _prepare_voices(ids)
+
+func _prepare_voices(ids: Array) -> bool:
+	for id in ids:
+		var clip: Dictionary=_resources.prepare(int(id))
+		if clip.is_empty():return reject(_resources.error)
+		if clip.has("unsupported") or not clip.get("stream") is AudioStream or not clip.get("voice",false) or clip.spatial or clip.looping:return reject("Unsupported station voice: "+str(clip.get("unsupported",id)))
+		_clips.append(clip)
+	return true
+
+func configure_station_equipment(library: RefCounted, bindings: RefCounted) -> bool:
+	clear();_resources=Resources.new()
+	if not _resources.configure_station_equipment(library,bindings):return reject(_resources.error)
+	var ids:=[]
+	for event in bindings.station_equipment.events:ids.append(int(event.voice_event_id))
+	return _prepare_voices(ids)
+
+func prepare_equipment_effects(rules: Dictionary) -> bool:
+	if _resources==null:return reject("Station audio is unavailable")
+	var clips:={}
+	for key in ["mount_audio_id","unmount_audio_id"]:
+		var id:=int(rules[key]);var clip: Dictionary=_resources.prepare(id)
+		if clip.is_empty():return reject(_resources.error)
+		if clip.has("unsupported") or not clip.get("stream") is AudioStream or clip.get("voice",false) or clip.spatial or clip.looping:return reject("Unsupported equipment sound")
+		clips[id]=clip
+	_effect_clips=clips
+	return true
+
+func play_equipment_effect(id: int) -> void:
+	if not _effect_clips.has(id):return
+	if _effects.has(id):_effects[id].free()
+	var clip: Dictionary=_effect_clips[id]
+	var player: Node=Streams.player(clip.stream,false);add_child(player);_effects[id]=player
+	player.volume_db=linear_to_db(clip.gain);player.play();player.stream_paused=_paused
+	player.finished.connect(func():_effects.erase(id);player.queue_free())
+	_effect_history.append(id)
+
+func valid_line(line: int) -> bool:return line>=-1 and line<=_clips.size()
+
+func present(line: int) -> bool:
+	if not valid_line(line):return reject("Invalid station speech line")
+	if line==_line:return true
+	if _player!=null:_player.free();_player=null
+	_line=line
+	if line<0 or line>=_clips.size():return true
+	var clip: Dictionary=_clips[line]
+	_player=Streams.player(clip.stream,false);add_child(_player)
+	_player.volume_db=linear_to_db(clip.gain);_player.play();_player.stream_paused=_paused
+	_history.append({"line":line,"source_id":clip.id,"source_bank":clip.source_bank,"source_index":clip.source_index})
+	return true
+
+func set_paused(value: bool) -> void:
+	_paused=value
+	if _player!=null:_player.stream_paused=value
+	for player in _effects.values():player.stream_paused=value
+
+func snapshot() -> Dictionary:return {"line":_line,"paused":_paused,"history":_history.duplicate(true),"diagnostics":diagnostics.duplicate(true),"equipment_effects":_effect_history.duplicate()}
+func clear() -> void:
+	for child in get_children():child.free()
+	error="";diagnostics={};_resources=null;_clips=[];_player=null;_paused=false;_line=-1;_history=[]
+	_effect_clips={};_effects={};_effect_history=[]
+func reject(message: String) -> bool:error=message;return false

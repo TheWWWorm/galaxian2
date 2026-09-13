@@ -1,0 +1,101 @@
+"""Recover rescue actor motion declarations; emit data and extents only."""
+import copy
+from .ship_models import section_bytes
+
+def extract_arrival_actor_motion(mach, arrival, actors, environment):
+    arch=mach.architecture
+    if arch not in LAYOUTS:return {}
+    try:
+        if arrival['campaign_cursor']!=1 or arrival['actor_kind']!=3 or arrival['actor_hull_id']!=30 or not environment or not actors['npc_initialization']['flight']:return {}
+        origin=arrival['provenance']['actor']
+        if origin['bytes']!=(315 if arch=='x86_64' else 310):return {}
+        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
+        proof={}
+        for key,(delta,size,pattern) in LAYOUTS[arch].items():
+            found=section_bytes(mach,anchor+delta,size,b'__text')
+            if found is None or found[0]!=bytes.fromhex(pattern):return {}
+            proof[key]={'offset':found[1],'bytes':size}
+        result=copy.deepcopy(VALUES);result['provenance']=proof
+        return result
+    except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
+
+VALUES = {'scope': 'rescue_mode_five_branch',
+ 'campaign_cursor': 1,
+ 'actor_id': 0,
+ 'actor_kind': 3,
+ 'hull_catalogue_id': 30,
+ 'initial_mode': 0,
+ 'initial_active': True,
+ 'script_mode': 5,
+ 'script_active': False,
+ 'script_targeting_blocked': True,
+ 'active_mode': 1,
+ 'activation_half_extent': 50000,
+ 'target_index': 0,
+ 'inactive_route_requires_target_list': True,
+ 'ordinary_travel_in_mode_five': False,
+ 'bank_updates_in_mode_five': False,
+ 'statistics_sync_before_mode': True}
+
+LAYOUTS = {'x86_64': {'initial_mode': [-80932,
+                             25,
+                             '48c7432000000000c783bc00000000000000c683e500000000'],
+            'initial_active': [534937, 7, 'c683c800000001'],
+            'half_extent': [607204,
+                            38,
+                            '488d0597f71b00488b38e8d7d30300b9a086010084c0b850c300000f45c14189842478010000'],
+            'mode_setter': [-78898,
+                            44,
+                            '554889e553504889fbc783bc00000005000000488b7b0831f6e802750900c683e5000000014883c4085b5dc3'],
+            'sync': [611560,
+                     61,
+                     '498b5e08498b7e10e81f9eebff4883c3084889df4889c6e8f68d0900498b7e184885ff7418498b5e08e8fe9debff4883c3084889df4889c6e8c58e0900'],
+            'copy': [1237754,
+                     240,
+                     '554889e54883ec2048897df8488975f0488b75f8488b7df0f30f1007f30f1106488b7df0f30f104704f30f114604488b7df0f30f104708f30f114608488b7df0f30f10470cf30f11460c488b7df0f30f104710f30f114610488b7df0f30f104714f30f114614488b7df0f30f104718f30f114618488b7df0f30f10471cf30f11461c488b7df0f30f104720f30f114620488b7df0f30f104724f30f114624488b7df0f30f104728f30f114628488b7df0f30f10472cf30f11462c4889f74881c730000000488b45f0480530000000488975e84889c6e8d642fdff488b75e8488945e04889f04883c4205dc30f1f440000'],
+            'route_gate': [614426, 17, '498b7e08e8d9e0feff3c010f8587070000'],
+            'target_fallback': [616370,
+                                26,
+                                '41c7465400000000498b7e0831f6e8d1c9feff498986a0010000'],
+            'relative_position': [617108,
+                                  86,
+                                  'f3410f1086cc010000f3410f5c4648f3410f1186d8010000f3410f1086d0010000f3410f5c464cf3410f1186dc010000498d86d801000048898578f5fffff3410f1086d4010000f3410f5c4650f3410f1186e0010000'],
+            'dispatch': [619552,
+                         40,
+                         '418b86bc0000004883f809488b9590f5ffff0f8737200000488d0d83200000486304814801c8ffe0'],
+            'mode_five': [619682,
+                          255,
+                          '498b4608f64060017428488d05cfc61b00488b38e871a3030083f8027c14498b7e184885ff7504498b7e1031f6e80885ebff498b86a00100004885c00f848b1f0000f64062010f85811f0000f3410f1096d8010000418b8678010000f30f2ac00f2ec20f86641f0000f7d8f30f2ac80f2ed10f86551f0000f3410f1096dc0100000f2ec20f86431f00000f2ed10f863a1f0000f3410f1096e00100000f2ec20f86281f00000f2ed10f861f1f000041c786bc00000001000000498b7e184885ff7504498b7e10be01000000e86a84ebff498b7e08be01000000e86ecbfeff41f6867f010000010f84e11e0000498b7e78be01000000e8f859f8ffe9ce1e0000'],
+            'dispatch_table': [627906,
+                               40,
+                               'dfe0ffff9be6ffffadffffff15f8ffffa0fbffffe0dfffff86dfffff9be6ffffc2e2ffffefe0ffff']},
+ 'armv7': {'initial_mode': [-74770, 16, '0299002201200a61c1f8842081f8ad20'],
+           'initial_active': [490768,
+                              36,
+                              '01214ff0ff35c6f8d00086f8701004acc6f80c1186f8440086f8450086f8680086f8c010'],
+           'half_extent': [547350,
+                           36,
+                           '10981e2100681b913df0baf915994cf2503200281cbf48f2a062c0f201021f20c1f82421'],
+           'mode_setter': [-72894,
+                           28,
+                           '90b504460520c4f884000021606801af8af01cfe012084f8ad0090bd'],
+           'sync': [551278,
+                    62,
+                    'dae901894ff0ff344846cdf8a04873f625fb014608f10400cdf8a04857f122fbdaf80c0058b1daf80450cdf8a04873f615fb0146281dcdf8a04857f165fb'],
+           'copy': [1957842,
+                    164,
+                    '80b56f4684b0039002910398029991ed000a80ed000a029991ed010a80ed010a029991ed020a80ed020a029991ed030a80ed030a029991ed040a80ed040a029991ed050a80ed050a029991ed060a80ed060a029991ed070a80ed070a029991ed080a80ed080a029991ed090a80ed090a029991ed0a0a80ed0a0a029991ed0b0a80ed0b0a00f13001029a303201900846114620ef1001e7f7dbfc01990090084604b080bd'],
+           'route_gate': [553906, 18, 'daf80400cdf8a048f1f7ecfd012840f0c580'],
+           'target_fallback': [554318,
+                               28,
+                               '00200021caf83400daf80400cdf8a048f1f716f801460029caf84411'],
+           'relative_position': [554834,
+                                 48,
+                                 '9aed0a0a9aed581a21ef000d8aed5b0a9aed0b0a9aed591a21ef000d8aed5c0a9aed0c0a9aed5a1a21ef000d8aed5d0a'],
+           'dispatch': [557064, 14, 'daf88400092801f28b86dfe810f0'],
+           'mode_five': [558094,
+                         260,
+                         'daf8040090f85c00b0b137984ff0ff310068cdf8a0183af0d5fc02280cdbdaf80c004ff0ff31002808bfdaf80800cdf8a018002171f6e8ffdaf84401002801f06c8490f85e00002841f06784daf824019aed5b2a40ec300bbbff2006b4eec02af1ee10fa41f15984404240ec300bbbff2016b4eec12af1ee10fa41f34e849aed5c2ab4eec02af1ee10fa41f14684b4eec12af1ee10fa41f340849aed5d2ab4eec02af1ee10fa41f13884b4eec12af1ee10fa41f3328401204ff0ff31caf88400daf80c00002808bfdaf80800cdf8a018012171f699ffdaf804004ff0ff340121cdf8a048f0f74cfd9af82b01002801f01484daf850000121cdf8a04894f7d2f801f00bbc'],
+           'dispatch_table': [557078,
+                              20,
+                              'a5000a00890eaa00de01fc017e020a00ad027703']}}

@@ -1,0 +1,2 @@
+# Optional import-time CPU decoder; not used by the native Godot runtime.
+texture2ddecoder==1.0.6

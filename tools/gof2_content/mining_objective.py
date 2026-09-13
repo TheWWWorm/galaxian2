@@ -1,0 +1,121 @@
+"""Bounded cargo/return declarations; executable bytes are never runtime data."""
+import copy
+from .ship_models import section_bytes
+
+def extract_mining_objective(mach, arrival, flight, presentation, desktop, briefing):
+    if mach.architecture!='x86_64' or flight.get('scope')!='first_mining_flight_construction':return {}
+    if presentation.get('scope')!='first_station_presentation' or briefing.get('scope')!='first_mining_briefing':return {}
+    if [1708,1709] not in desktop.get('pairs',[]):return {}
+    try:
+        origin=arrival['provenance']['actor']
+        if origin['bytes']!=315:return {}
+        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
+        proof={}
+        for key,(delta,size,section,pattern) in LAYOUTS.items():
+            found=section_bytes(mach,anchor+delta,size,section.encode())
+            if found is None or found[0]!=bytes.fromhex(pattern):return {}
+            proof[key]={'offset':found[1],'bytes':size}
+        # Shared presentation validates the complete text/voice lookup and the
+        # null mission actor: missing instruction lookup means no voice.
+        result=copy.deepcopy(VALUES);result['provenance']=proof
+        return result
+    except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
+
+VALUES = {'scope': 'first_mining_cargo_objective',
+ 'campaign_cursor': 2,
+ 'mission_kind': 154,
+ 'station_id': 78,
+ 'required_cargo': 10,
+ 'cargo_metric': 'total_used',
+ 'poll_minimum_ms': 5001,
+ 'max_frame_ms': 150,
+ 'initial_clock_held': False,
+ 'entry_controller_holds_clock': True,
+ 'idle_poll_discards_overshoot': True,
+ 'completion_opening_holds_camera': True,
+ 'mode': 1,
+ 'cursor_after_acknowledgement': 3,
+ 'next_kind': 11,
+ 'reward_credits': 0,
+ 'bonus_credits': 0,
+ 'station_return_required': True,
+ 'next_text_id': 179,
+ 'final_text_id': 180,
+ 'events': [{'speaker_id': 2, 'text_id': 1706, 'voice_event_id': 327},
+            {'speaker_id': 0, 'text_id': 1707, 'voice_event_id': 328},
+            {'speaker_id': 16, 'text_id': 1708, 'voice_event_id': -1}],
+ 'desktop_instruction': [1708, 1709],
+ 'key_tokens': ['#KEY_AUTOPILOT', '#KEY_DOCK']}
+
+LAYOUTS = {'mode1_counts': [1555258, 12, '__const', '000000002600000006000000'],
+ 'mode1_events': [1546514, 24, '__const', '02000000aa06000000000000ab06000010000000ac060000'],
+ 'voice_events': [1561466, 16, '__const', 'aa06000047010000ab06000048010000'],
+ 'cargo_getter': [729972, 10, '__text', '554889e58b47105dc390'],
+ 'parameter_getter': [400574, 12, '__text', '554889e58b87900000005dc3'],
+ 'shown_getter': [400508, 10, '__text', '554889e58a470124015d'],
+ 'shown_setter': [400498, 10, '__text', '554889e5408877015dc3'],
+ 'cargo_dispatch': [875250, 4, '__text', '5dfaffff'],
+ 'cargo_predicate': [873791, 24, '__text', '498bbd00020000e829cefdff89c3e9500300008b45d43c01'],
+ 'cargo_compare': [874658, 22, '__text', '4c89ffe814c4f8ff39c30f8cdd000000e9f50100004c'],
+ 'cargo_success': [875180, 18, '__text', '4c89ffbe01000000e8b9c1f8ff4c89f8ebdf'],
+ 'poll_gate': [385853,
+               89,
+               '__text',
+               '49817f50891300007c0a41f68720010000017427488d052a581f00488b38e8d83407004889c7e86239000089c130c081f9aa0000000f8520090000488d0503581f00488b38498b8798000000488b480831f631d2e84e700700'],
+ 'poll_reset': [388744, 22, '__text', '48817b50891300000f8cf400000048c7435000000000'],
+ 'completion_order': [377531,
+                      73,
+                      '__text',
+                      '41f6456c017542498b7d60e8a3c8020084c0752b488d05ac781f00488b38e86e5507004889c7e88259000084c075104c89efe8de1f000084c00f85ed0800004c89efe8c0290000eb12'],
+ 'completion_dialogue_test': [387006,
+                              61,
+                              '__text',
+                              '488d05bd531f00488b38e87f3007004889c7e8033600003c010f8532040000488d059e531f00488b38e84030070089c7e8fb86efff3c010f8514040000'],
+ 'completion_dialogue_start': [387235,
+                               69,
+                               '__text',
+                               '498b9fb80000004d85f67512488d05cc521f00488b38e88e2f07004989c64889df4c89f6ba01000000b9ffffffffe89e81efff41c6476a0141c64769014c89ffe8584bffff'],
+ 'dialogue_mode': [-693532,
+                   52,
+                   '__text',
+                   '41c7476c000000004183feff7512488d0589d02f00488b38e82bad17004189c6458977204c89ff5b415c415e415f5de9f8030000'],
+ 'mission_next': [859851, 23, '__text', 'ffc041898678020000498b8e4802000049898e60010000'],
+ 'next_dispatch': [871414, 4, '__text', '72d5ffff'],
+ 'next_mission': [860512,
+                  49,
+                  '__text',
+                  'bf98000000e8c2600a004889c34889dfbe0b00000031d2b94e000000e817f6f8ff4c89f74889dee80cfcffffe9242a0000'],
+ 'final_advance': [352276,
+                   37,
+                   '__text',
+                   '4d89e54c89f7e8b9bd0000488d0d5cdb1f00488b3984c0740cbe01000000e863be0700eb38'],
+ 'final_reward': [352369,
+                  64,
+                  '__text',
+                  '488d050adb1f004c8b204c89f7e803bd000089c34c89f7e821bd00008d34184c89e7e8deed07004d89ec498b842498000000c700000000004c89f7e827bd0000'],
+ 'final_cleanup': [352952,
+                   122,
+                   '__text',
+                   '4584ff7565498bbc2490000000e8806cfcff488d0549e01f00488b30488d05a7d81f00488b38e81db50700498b7c246031f6e811280300498b7c2460e87b3303003c01750c498b7c246031f6e8ff310300498b7c2460e809280300498bbc249000000031f6e802dcfbff4c89f7e8aeba000084c00f85c40b0000'],
+ 'final_reset': [356086, 27, '__text', '49c744243800000000498bbc2488000000e8de28f9ffe9afe5ffff'],
+ 'clock_initial': [338262,
+                   51,
+                   '__text',
+                   'c6436900c6436b0048c7435000000000c6830c01000000c6830901000000c6830801000000c6830a01000000c6830d01000000'],
+ 'clock_modal_gate': [364625, 11, '__text', '41f64569010f85410b0000'],
+ 'clock_increment': [365124, 19, '__text', '41f6456b010f85140400004963454849014550'],
+ 'controller_initial_hold': [121658, 5, '__text', '41c6471101'],
+ 'controller_initial_override': [121716, 5, '__text', '41c6471200'],
+ 'controller_release': [151090,
+                        87,
+                        '__text',
+                        '41817d30591b00000f8c0701000041c745300000000041c6452c0041c6452d01498b7d1831f6e803940b00498b7d20e8744fffff488b38be01000000e8a7e5050041c6451100498b7d20e8594fffff4889c7be01000000'],
+ 'controller_return': [230741, 7, '__text', '418a4424112401'],
+ 'controller_clock_order': [377622, 24, '__text', '418a5d6b418b7548498bbd98000000e8965afcff4188456b'],
+ 'controller_override_clock': [378039, 14, '__text', 'f6401201740849c7455089130000'],
+ 'initial_briefing_dispatch': [375756,
+                               113,
+                               '__text',
+                               '49817d50891300007c4541f6456a01753e488d059e7f1f00488b38e8605c07004889c7e87460000084c07523488d05837f1f00488b38e8455c07004889c7e86d60000084c075084c89efe89d240000498b7d60e82ecc02003c010f858f060000498b7d60e86137030084c00f857e060000'],
+ 'initial_player_mode': [550660, 7, '__text', 'c6838c01000000'],
+ 'player_mode_getter': [559186, 14, '__text', '554889e58a878c01000024015dc3']}

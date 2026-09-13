@@ -1,0 +1,135 @@
+extends RefCounted
+## Fresh opening NPC acquisition. This owns no damage, rewards or mission state.
+## Special devices, other target groups and acquisition audio/messages remain separate.
+const Definitions = preload("res://src/content/npc_scanner_definitions.gd")
+const Numbers = preload("res://src/content/opening_definitions.gd")
+const TargetProjection = preload("res://src/presentation/target_projection.gd")
+const Loadout = preload("res://src/simulation/opening_loadout.gd")
+const Vectors = preload("res://src/simulation/source_vectors.gd")
+var error := ""
+var _identity := {}
+var _definition := {}
+var _perspective := {}
+var _hulls := []
+var _radii := Vector2.ZERO
+var _frame_count := 0
+var _equipment := -1
+var _duration := 0
+var _cargo := false
+var _selected := -1
+var _candidate := -1
+var _elapsed := 0
+var _sample := {}
+
+func configure(bindings: RefCounted, catalogues: RefCounted, frame_radii: Vector2, animation_frames: int) -> bool:
+	clear()
+	if bindings==null or catalogues==null or not Definitions.parameters(bindings.opening_staging.get("npc_scanner",{})):
+		return reject("NPC scanner requires its verified opening declarations")
+	var npc: Dictionary=bindings.opening_actors.get("npc_initialization",{})
+	if npc.get("hull",{}).is_empty() or npc.get("hostility",{}).is_empty() or npc.get("construction",{}).is_empty():
+		return reject("NPC scanner requires the fresh actor hull, flags and cargo scope")
+	var projection := TargetProjection.new()
+	if not projection.configure(bindings.flight_projection,Vector2i.ONE,frame_radii):return reject(projection.error)
+	if animation_frames<1 or animation_frames>1024:return reject("Invalid original scanner filmstrip")
+	var loadout := Loadout.new()
+	if not loadout.configure(bindings,catalogues,bindings.base_content_id):return reject(loadout.error)
+	var data: Dictionary=bindings.opening_staging.npc_scanner
+	var equipment := -1
+	for id in loadout.snapshot().equipment_ids:
+		var item: Dictionary=catalogues.tables.items[id]
+		if item.arrays[2].size()<=5:return reject("Scanner equipment lacks its source type")
+		if int(item.arrays[2][5]) in [13,19]:return reject("Special scanner devices are outside the fresh opening scope")
+		if int(item.arrays[2][5])==int(data.equipment_type):equipment=id
+	var duration := int(data.default_duration_ms)
+	var cargo := false
+	if equipment>=0:
+		var properties: Dictionary=catalogues.tables.items[equipment].properties
+		if not Numbers.integer(properties.get(int(data.duration_property)),1,2147483647):return reject("Unsupported scanner acquisition duration")
+		duration=int(properties[int(data.duration_property)])
+		cargo=properties.get(int(data.cargo_property))==1
+	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
+	_definition=data.duplicate(true);_perspective=bindings.flight_projection.duplicate(true);_hulls=npc.hull.hull_catalogue_ids.duplicate()
+	_radii=frame_radii;_frame_count=animation_frames;_equipment=equipment;_duration=duration;_cargo=cargo
+	return true
+
+func advance(combat: Dictionary, player: Transform3D, camera: Transform3D, aim: Dictionary, delta_ms: Variant, enabled: bool) -> bool:
+	error=""
+	if _definition.is_empty() or not Numbers.integer(delta_ms,0,2147483647):return reject("NPC scanner requires an ordinary integer frame duration")
+	for key in _identity:
+		if combat.get(key)!=_identity[key] or aim.get(key)!=_identity[key]:return reject("NPC scanner samples belong to another content profile")
+	var population: Variant=combat.get("actors")
+	var point: Variant=aim.get("point");var viewport: Variant=aim.get("viewport_size")
+	if not population is Array or population.size()!=3 or not point is Vector3 or not point.is_finite() or not TargetProjection.safe_pixel(point.x) or not TargetProjection.safe_pixel(point.y) or not viewport is Vector2i or not player.is_finite():return reject("Invalid opening scanner sample")
+	var projection := TargetProjection.new()
+	if not projection.configure(_perspective,viewport,_radii):return reject(projection.error)
+	# Check all inputs before committing selection, including invisible bodies.
+	for id in population.size():
+		var actor: Variant=population[id]
+		if not actor is Dictionary or actor.get("actor_id")!=id or actor.get("base_content_id")!=_identity.base_content_id or actor.get("binding_id")!=_identity.binding_id or actor.get("actor_kind")!=8 or actor.get("hull_catalogue_id")!=_hulls[id] or not actor.get("pose") is Transform3D or not actor.pose.is_finite() or not actor.get("active") is bool or not actor.get("hostile") is bool or not Numbers.integer(actor.get("actor_mode"),1,5) or not Numbers.integer(actor.get("hull_percent"),0,100):
+			return reject("Invalid fresh NPC scanner population")
+	var selected := _selected;var candidate := _candidate;var elapsed := _elapsed
+	var markers := [];var events := [];var animation := -1
+	# Native scope currently displays the ordinary phase-four HUD. Hidden draws
+	# retain selection and time; pause owners do not call advance at all.
+	if enabled and _equipment>=0:
+		if selected>=0 and int(population[selected].actor_mode) in [3,4]:selected=-1;candidate=-1
+		var radius := int(viewport.x)/int(_definition.window_divisor)
+		var lower := Vector2(TargetProjection.single(point.x-float(radius)),TargetProjection.single(point.y-float(radius)))
+		if not TargetProjection.safe_pixel(lower.x) or not TargetProjection.safe_pixel(lower.y) or not TargetProjection.safe_pixel(lower.x+radius*2) or not TargetProjection.safe_pixel(lower.y+radius*2):return reject("Scanner window exceeds source pixel coordinates")
+		var lower_pixels := Vector2i(int(lower.x),int(lower.y))
+		var upper_pixels := lower_pixels+Vector2i(radius*2,radius*2)
+		var found := -1
+		for actor in population:
+			if not actor.active or int(actor.actor_mode) in [3,4]:continue
+			var projected: Dictionary=projection.project(camera,actor.pose.origin)
+			if projected.has("error"):return reject(projection.error)
+			var offset := Vectors.added(player.origin,-actor.pose.origin)
+			var near: bool=projected.in_view and absf(offset.x)<=_definition.near_half_extent and absf(offset.y)<=_definition.near_half_extent and absf(offset.z)<=_definition.near_half_extent
+			var pixel: Vector2i=projected.pixels
+			var inside: bool=projected.in_view and pixel.x>lower_pixels.x and pixel.x<upper_pixels.x and pixel.y>lower_pixels.y and pixel.y<upper_pixels.y
+			markers.append({"actor_id":actor.actor_id,"pixels":pixel,"near":near,"selected":actor.actor_id==selected,
+				"hostile":actor.hostile,"hull_percent":int(actor.hull_percent),"in_scan_window":inside,"in_view":projected.in_view})
+			if found<0 and inside:found=int(actor.actor_id)
+		if found>=0:
+			if candidate!=found:elapsed=0
+			candidate=found
+			if elapsed>2147483647-int(delta_ms):return reject("NPC acquisition timer exceeds source integer range")
+			elapsed+=int(delta_ms)
+			if elapsed>_duration:
+				if selected!=candidate:
+					selected=candidate
+					events.append({"kind":"sound","source_id":int(_definition.acquisition_sound_id),"actor_id":selected})
+					# The original finite-coordinate cargo predicate always reaches
+					# inspection; fresh opening construction already discarded cargo.
+					if _cargo:events.append({"kind":"notification","source_id":int(_definition.empty_cargo_message_id),"actor_id":selected})
+				elapsed=0
+			elif elapsed>0 and candidate!=selected:
+				animation=int(TargetProjection.single(float(_frame_count-1)*TargetProjection.single(TargetProjection.single(float(elapsed))/TargetProjection.single(float(_duration)))))
+		else:
+			elapsed=0
+			if selected<0:candidate=-1
+	_selected=selected;_candidate=candidate;_elapsed=elapsed
+	_sample={"visible":enabled and _equipment>=0,"markers":markers,"events":events,"animation_frame":animation,"aim_pixels":Vector2i(int(point.x),int(point.y)),"viewport_size":viewport}
+	return true
+
+func snapshot() -> Dictionary:
+	if _definition.is_empty():return {}
+	var result := _identity.duplicate()
+	result.merge({"selected_actor_id":_selected,"candidate_actor_id":_candidate,"elapsed_ms":_elapsed,"equipment_id":_equipment,"duration_ms":_duration,"animation_frames":_frame_count})
+	result.merge(_sample.duplicate(true))
+	return result
+
+func fork_for_frame() -> RefCounted:
+	var copy: RefCounted=get_script().new()
+	copy._identity=_identity;copy._definition=_definition;copy._perspective=_perspective;copy._radii=_radii;copy._hulls=_hulls
+	copy._frame_count=_frame_count;copy._equipment=_equipment;copy._duration=_duration;copy._cargo=_cargo
+	copy._selected=_selected;copy._candidate=_candidate;copy._elapsed=_elapsed;copy._sample=_sample.duplicate(true)
+	return copy
+
+func clear() -> void:
+	error="";_identity={};_definition={};_perspective={};_hulls=[];_radii=Vector2.ZERO;_frame_count=0;_equipment=-1;_duration=0;_cargo=false
+	_selected=-1;_candidate=-1;_elapsed=0;_sample={}
+
+func reject(message: String) -> bool:
+	error=message
+	return false

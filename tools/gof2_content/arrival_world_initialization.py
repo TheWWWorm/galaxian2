@@ -1,0 +1,145 @@
+"""Recover the bounded rescue world profile; emit declarative data only."""
+import copy
+from .ship_models import section_bytes
+
+def extract_arrival_world_initialization(mach, arrival, actors, construction, environment):
+    arch=mach.architecture
+    if arch not in LAYOUTS:return {}
+    try:
+        shared=actors['npc_initialization']['world_initialization']
+        cache=actors['player_initialization']['flight_cache']
+        if arrival['campaign_cursor']!=1 or arrival['actor_kind']!=3 or arrival['actor_hull_id']!=30:return {}
+        if not construction or not environment or not shared or cache['quest_kind']!=11:return {}
+        if shared['weapon_item_sequence']!=[0,19] or shared['weapon_effect_capacity']!=4:return {}
+        origin=arrival['provenance']['actor']
+        if origin['bytes']!=(315 if arch=='x86_64' else 310):return {}
+        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
+        proof={}
+        for key,(section,delta,size,pattern) in LAYOUTS[arch].items():
+            found=section_bytes(mach,anchor+delta,size,section.encode())
+            if found is None or found[0]!=bytes.fromhex(pattern):return {}
+            proof[key]={'offset':found[1],'bytes':size}
+        result=copy.deepcopy(VALUES);result['provenance']=proof
+        return result
+    except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
+
+VALUES = {'scope': 'rescue_world_initialization',
+ 'campaign_cursor': 1,
+ 'world_type': 3,
+ 'actor_count': 1,
+ 'quest_kind': 11,
+ 'quest_scripted': True,
+ 'requires_empty_companions': True,
+ 'requires_ordinary_location': True,
+ 'requires_campaign_mode': True,
+ 'center_random_bound': 100000,
+ 'center_offsets': [-50000, -50000, 20000],
+ 'center_after_station_count': True,
+ 'reseed_before_field': True,
+ 'weapon_item_sequence': [0, 25],
+ 'weapon_effect_sequence': [14600, 14606],
+ 'weapon_kind': 0,
+ 'projectile_visual_id': 6802,
+ 'weapon_effect_capacity': 4,
+ 'weapon_effect_random_bound': 2,
+ 'zero_means_flipped': True}
+
+LAYOUTS = {'x86_64': {'quest_wrapper': ['__text', 399256, 10, '554889e55de900000000'],
+            'quest_arguments': ['__text',
+                                399283,
+                                12,
+                                '4189ce4189d74189f44889fb'],
+            'quest_fields': ['__text',
+                             399346,
+                             28,
+                             '4489631044897b444489735048c743380000000048c7430800000000'],
+            'quest_scripted': ['__text',
+                               399523,
+                               45,
+                               'c7838400000001000000c6839400000001c60300c6430100c6437c00c7839000000000000000c7434c00000000'],
+            'quest_absent': ['__text',
+                             400436,
+                             14,
+                             '554889e5837f10ff0f94c05dc390'],
+            'quest_scripted_getter': ['__text',
+                                      400856,
+                                      16,
+                                      '554889e583bf84000000000f95c05dc3'],
+            'world_scripted_gate': ['__text',
+                                    -42348,
+                                    96,
+                                    '418b9e1401000083fb030f85e00000004c89ffe888c1060084c075444c89ffe820c306003c017538418b9e1401000083fb030f85b8000000488d05afe02500488b38e841bd0d003c010f8595000000488d05fce02500f64035010f8584000000'],
+            'world_scripted_loader': ['__text',
+                                      -42120,
+                                      91,
+                                      '418b9e1401000083fb0374114c89f7e86e97000041899e14010000eb3e488d05e6df2500488b38e8a8bc0d004889c7e888c0060084c07523488d05cbdf2500488b38e88dbc0d004889c7e811c206003c0175084c89f7e8bda30000'],
+            'center': ['__text',
+                       -35100,
+                       664,
+                       '4c8d3dc7c42500498b1f498b3ee8eea00d004889c7e89a860d004863f04889dfe8a1a21100498b3fbe50000000e834a411008d7850498bb42480010000e817610200498b3fbea0860100e817a411004189c5498b3fbea0860100e807a41100898550ffffff498b3fbea0860100e8f4a311004189c7498b3ee869a00d0088c3498b3ee8c1a00d0084db7425b990eefeff3d9a00000041bdd08affff440f44e94531f641bf307500004c89e3e93e01000083f8724c89e37530488d05dfc32500488b38e839a00d004889c7e8e5850d0083f853751441bf8038010041bd307500004531f6e906010000488d05afc32500488b38e851a00d0083f8597527488d059bc32500488b38e883d90d0084c0741441bfb03cffff41bd6079feff4531f6e9cb000000488d0574c32500488b38e816a00d0083f85b448bb550ffffff7530488d0559c32500488b38e8b39f0d004889c7e85f850d0083f86e751441bf50c3000041bd60ea00004531f6e980000000488d0529c32500488b38e8cb9f0d003d91000000752d488d0513c32500488b38e86d9f0d004889c7e819850d0083f870751141bf7011010041bd50c300004531f6eb3d4181c5b03cffff4181c6b03cffff4181c7204e0000488d05d1c22500488b38e8739f0d0085c0751531c083bb1401000003440f44e8440f44f0440f44f8488d05a9c22500488b38e86b9f0d004885c07434488d0595c22500488b38e8579f0d004889c7e8cda30600b9f0d8ffff31d2be204e00003db7000000440f44ee440f44f2440f44f9488d0591c22500488b38e861a11100f3410f2ac5f30f118550fffffff30f1145c00f57c0f3410f2ac6f30f118544fffffff30f1145c40f57c0f3410f2ac7f30f118540fffffff30f1145c8488d75c0488dbb200100004889bd30ffffffe82ead1000'],
+            'npc_weapon_enabled': ['__text',
+                                   607329,
+                                   30,
+                                   '41c784242c0100000100000041c64424410141c7842408020000ffffffff'],
+            'weapon_kind_dispatch': ['__text',
+                                     57456,
+                                     56,
+                                     '41c78424a000000000000000498b8778010000488b40084a8b04308b40444883f80a0f8795faffff488d0dd3050000486304814801c8ffe0'],
+            'weapon_kind_table': ['__text',
+                                  58994,
+                                  44,
+                                  '19f4ffff73f4ffff52f4ffff3af4ffffbbf4ffffbbf4ffffbbf4ffffbbf4ffffbbf4ffff01f4ffff88f4ffff'],
+            'rescue_weapon': ['__text',
+                              55980,
+                              24,
+                              '4c89e7be19000000e82b44fcff41bf921a0000e988000000'],
+            'cursor_getter': ['__text', 858156, 12, '554889e58b87780200005dc3'],
+            'effect_model_25': ['__const', 1572942, 4, '0e390000']},
+ 'armv7': {'quest_wrapper': ['__text',
+                             408846,
+                             16,
+                             '90b5044601affff7fbfe204690bd00bf'],
+           'quest_arguments': ['__text', 408362, 8, '03ac84e80e000446'],
+           'quest_fields': ['__text',
+                            408476,
+                            26,
+                            '069805990246039890600029049850624ff000001163d0615060'],
+           'quest_scripted': ['__text',
+                              408628,
+                              24,
+                              '069c0120206584f8600000202070607084f84800e065e062'],
+           'quest_absent': ['__text',
+                            409546,
+                            16,
+                            '81680020b1f1ff3f08bf0120704700bf'],
+           'quest_scripted_getter': ['__text',
+                                     409682,
+                                     12,
+                                     '006d002818bf0120704700bf'],
+           'world_scripted_gate': ['__text',
+                                   -40978,
+                                   88,
+                                   'd5f8c060032e40f0aa804ff0ff3a2046cdf8c0a06df0e2fff0b92046cdf8c0a06ef020f8012817d1d5f8c060032e40f09680d8f800004ff0ff313091ccf0cafe01286cd147f2f870c0f22a007844006890f83500002862d1'],
+           'world_scripted_loader': ['__text',
+                                     -40692,
+                                     80,
+                                     'd5f8c060032e1bd1d8f800004ff0ff343094ccf062fe30946df051ffc0b9d8f800003094ccf059fe30946df08cff01280ed14ff0ff303090284609f03afa07e04ff0ff303090284608f033fcc5f8c060'],
+           'center': ['__text',
+                      -33840,
+                      558,
+                      '45f60a40c0f22a0078440668286814963468cdf8b880cbf0dcf8cdf8b880c9f0b0fb01462046ca17cdf8b880d4f191ff30682821cdf8b880d5f14ff8dbf8fc10283025f070f848f2a0643068c0f20104cdf8b8802146d5f140f8199021463068cdf8b880d5f139f8189021463068cdf8b880d5f132f806462868cdf8b880cbf0a2f804462868aa46cdf8b880cbf0b9f8012c0ed148f6d0244ff00008cff6ff749a2804bf4ef69064cff6fe7447f230567ee0722814d1daf800004ff0ff342e94cbf087f82e94c9f05cfb532808d143f6800647f230544ff00008c0f2010667e0daf800004ff0ff342e94cbf08af8592810d1daf800002e94cef0fbff50b147f6601443f6b046cff6fe744ff00008cff6ff764de0daf800002e94cbf072f85b2812d1daf800004ff0ff342e94cbf051f82e94c9f026fb6e2806d14ef660244ff000084cf2503633e0daf800004ff0ff352e95cbf056f8912812d1daf800002e95cbf037f82e95c9f00cfb702808d141f270164cf250344ff00008c0f2010617e019994cf250300c1a1899a1eb000844f620600644daf800002e95cbf032f838b9dbf8c000032802bf00244ff000080026daf800004ff0ff352e95cbf02cf8002814d0daf80000cdf840a02e95cbf023f82e956cf038f9b72801bf4df6f006cff6ff7644f620644ff0000801e0cdf840a0149800682e95d4f118ff48ec308b0bf1c80046ec326b25a944ec344bbbff24a6bbff2286bbff20968ded25aa8ded269a8ded278a2e9520ef1001cdf112fe'],
+           'npc_weapon_enabled': ['__text',
+                                  547464,
+                                  24,
+                                  '01211598c0f8e010159880f821104ff0ff311598c0f89c11'],
+           'weapon_kind_dispatch': ['__text',
+                                    52314,
+                                    30,
+                                    '269800214ff0ff3bc165d8f8f8001b9940684058406a0a2813d8dfe800f0'],
+           'weapon_kind_table': ['__text', 52344, 11, '06b3bcc81212121212d1da'],
+           'rescue_weapon': ['__text',
+                             52744,
+                             18,
+                             '26981921cdf8c0b0c8f731fc41f6922a4be7'],
+           'cursor_getter': ['__text', 798162, 8, 'd0f8d401704700bf'],
+           'effect_model_25': ['__const', 2459150, 4, '0e390000']}}

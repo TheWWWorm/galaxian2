@@ -1,0 +1,205 @@
+extends Node3D
+## Shared native scene for the first mining world and its modal briefing.
+## Flight time, input, speech and gameplay belong to the session. This renderer
+## currently omits the animated wormhole; station light pulses remain open.
+const Frame=preload("res://src/simulation/first_flight_frame.gd")
+const Geometry=preload("res://src/presentation/opening_geometry.gd")
+const Background=preload("res://src/presentation/opening_sky.gd")
+const Planets=preload("res://src/presentation/opening_planet_geometry.gd")
+const Sun=preload("res://src/presentation/opening_sun_geometry.gd")
+const Lighting=preload("res://src/presentation/opening_lighting.gd")
+const Scenery=preload("res://src/presentation/scenery_geometry.gd")
+const Station=preload("res://src/presentation/station_exterior_geometry.gd")
+const FlightProjection=preload("res://src/presentation/flight_camera.gd")
+const Dialogue=preload("res://src/presentation/station_dialogue_panel.gd")
+const TargetFrame=preload("res://src/presentation/flight_target_frame.gd")
+const Reticle=preload("res://src/presentation/flight_aim_reticle.gd")
+const ScanAnimation=preload("res://src/presentation/flight_scan_animation.gd")
+const MiningPanel=preload("res://src/presentation/mining_panel.gd")
+const NoticePanel=preload("res://src/presentation/flight_notice_panel.gd")
+const EncounterGeometry=preload("res://src/presentation/full_hold_encounter_geometry.gd")
+const DeathEffect=preload("res://src/presentation/npc_death_effect_geometry.gd")
+const GameOver=preload("res://src/presentation/game_over_panel.gd")
+const DamageParticles=preload("res://src/presentation/opening_damage_geometry.gd")
+var error:=""
+var geometry: Node3D
+var sky: Node3D
+var planets: Node3D
+var sun: Node3D
+var scenery: Node3D
+var station: Node3D
+var camera: Camera3D
+var dialogue: Control
+var target_frame: Control
+var reticle: Control
+var scan_animation: Control
+var mining_panel: Control
+var notice_panel: Control
+var _projection: RefCounted
+var _last:={}
+var _last_drill: RefCounted
+var encounter: Node3D
+var _last_encounter: RefCounted
+var player_destruction: Node3D
+var game_over: Control
+var _last_death: RefCounted
+var _last_absolute_ms:=0
+var damage_particles: Node3D
+var _last_particles: RefCounted
+
+func build(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalogues: RefCounted,flight: RefCounted) -> bool:
+	clear()
+	if flight==null or flight.get_script()!=Frame or flight.snapshot().is_empty():return fail("Prepare the first mining flight before building its scene")
+	var state: Dictionary=flight.snapshot()
+	_projection=FlightProjection.new()
+	var message: String=_projection.configure(bindings.flight_projection,state.campaign_cursor,false)
+	if not message.is_empty():return fail(message)
+	camera=Camera3D.new();camera.current=true;add_child(camera)
+	geometry=Geometry.new();add_child(geometry)
+	if not geometry.build_departure(library,visuals,bindings,catalogues,state.player_cache,_player_geometry_state(state),"high",true):return fail(geometry.error)
+	var pirates: RefCounted=flight.encounter_owner()
+	if pirates!=null:
+		encounter=EncounterGeometry.new();add_child(encounter)
+		if not encounter.build(pirates,library,visuals,bindings):return fail(encounter.error)
+	var death: RefCounted=flight.destruction_owner()
+	if death!=null:
+		player_destruction=DeathEffect.new();add_child(player_destruction)
+		if not player_destruction.build(library,visuals,bindings,death):return fail(player_destruction.error)
+	var particles: RefCounted=flight.damage_particle_owner()
+	if particles!=null:
+		damage_particles=DamageParticles.new();add_child(damage_particles)
+		if not damage_particles.build(particles,library,visuals,bindings):return fail(damage_particles.error)
+	sky=Background.new();add_child(sky)
+	if not sky.build_departure(library,visuals,bindings,catalogues,state.player_cache):return fail(sky.error)
+	planets=Planets.new();add_child(planets)
+	if not planets.build_departure(library,visuals,bindings,catalogues,state.player_cache):return fail(planets.error)
+	sun=Sun.new();add_child(sun)
+	if not sun.build_departure(library,visuals,bindings,catalogues,state.player_cache):return fail(sun.error)
+	var lights:=Lighting.new();add_child(lights)
+	if not lights.build_departure(bindings,catalogues,state.player_cache):return fail(lights.error)
+	scenery=Scenery.new();add_child(scenery)
+	if not scenery.build(state.scenery,library,visuals,bindings,"high",true):return fail(scenery.error)
+	if state.has("station_exterior"):
+		station=Station.new();add_child(station)
+		if not station.build(library,visuals,bindings,flight.station_owner()):return fail(station.error)
+	var overlay:=CanvasLayer.new();overlay.layer=10;add_child(overlay)
+	if state.has("mining_targeting"):
+		target_frame=TargetFrame.new();overlay.add_child(target_frame);target_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not target_frame.prepare(library,bindings,visuals):return fail(target_frame.error)
+		reticle=Reticle.new();overlay.add_child(reticle);reticle.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not reticle.prepare(library,bindings,visuals):return fail(reticle.error)
+		scan_animation=ScanAnimation.new();overlay.add_child(scan_animation);scan_animation.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not scan_animation.prepare(library,bindings,visuals,bindings.mining_targeting):return fail(scan_animation.error)
+	if state.has("mining_session"):
+		mining_panel=MiningPanel.new();overlay.add_child(mining_panel);mining_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not mining_panel.configure(library,bindings,visuals):return fail(mining_panel.error)
+	if state.has("flight_notices"):
+		notice_panel=NoticePanel.new();overlay.add_child(notice_panel);notice_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not notice_panel.configure(library,bindings,visuals):return fail(notice_panel.error)
+	dialogue=Dialogue.new();overlay.add_child(dialogue);dialogue.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if state.has("mining_objective"):
+		if not dialogue.configure_mining_objective(library,bindings,visuals,int(state.player.campaign_cursor)):return fail(dialogue.error)
+	elif not dialogue.configure_mining_briefing(library,bindings,visuals,int(state.player.campaign_cursor)):return fail(dialogue.error)
+	if death!=null and not bindings.game_over_presentation.is_empty():
+		game_over=GameOver.new();overlay.add_child(game_over);game_over.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not game_over.configure(library,bindings,visuals,death):return fail(game_over.error)
+	if not present(flight):return fail(error)
+	return true
+
+func present(flight: RefCounted, advance_sun:=false, absolute_milliseconds: Variant=0) -> bool:
+	error=""
+	if _projection==null or flight==null or flight.get_script()!=Frame:return reject("Build a first-flight scene before presenting it")
+	if not absolute_milliseconds is int or absolute_milliseconds<0:return reject("Flight presentation requires a nonnegative absolute clock")
+	var state: Dictionary=flight.snapshot()
+	var drill: RefCounted=flight.drill_owner()
+	var pirates: RefCounted=flight.encounter_owner()
+	var death: RefCounted=flight.destruction_owner()
+	var particles: RefCounted=flight.damage_particle_owner()
+	var prior: float=sun.frame.get("next_intensity" if advance_sun else "previous_intensity",0.0)
+	if not _apply(state,prior,drill,pirates,death,absolute_milliseconds,particles):
+		var reason:=error
+		if not _last.is_empty() and not _apply(_last,sun.frame.get("previous_intensity",0.0),_last_drill,_last_encounter,_last_death,_last_absolute_ms,_last_particles):reason+="; previous scene: "+error
+		return reject(reason)
+	_last=state
+	_last_drill=drill
+	_last_encounter=pirates
+	_last_death=death;_last_absolute_ms=absolute_milliseconds
+	_last_particles=particles
+	return true
+
+func _apply(state: Dictionary, prior_intensity: float, drill: RefCounted, pirates: RefCounted, death: RefCounted, absolute_milliseconds: int, particles: RefCounted) -> bool:
+	if (encounter!=null)!=(pirates!=null):return reject("Pirate presentation support changed within this flight")
+	if (player_destruction!=null)!=(death!=null):return reject("Player destruction support changed within this flight")
+	if (damage_particles!=null)!=(particles!=null):return reject("Damage particle support changed within this flight")
+	var particle_frame:={}
+	if damage_particles!=null:
+		particle_frame=damage_particles.prepare_world(particles,state,state.camera_view.pose)
+		if particle_frame.is_empty():return reject(damage_particles.error)
+	var death_frame:={}
+	if death!=null:
+		var sample: Dictionary=death.snapshot()
+		if sample!=state.get("player_destruction"):return reject("Player effects lost their current destruction owner")
+		if sample.phase!="ready" and (sample.physical_pose!=state.player_pose or sample.statistics_pose!=state.player_statistics_pose or sample.rendered_model_basis!=state.player_model_basis):return reject("Player destruction lost its current flight poses")
+		death_frame=player_destruction.prepare_effect(death,state.camera_view.pose,PackedByteArray([255,255,255,255]),Vector4.ONE,1.0)
+		if death_frame.is_empty():return reject(player_destruction.error)
+	var pirate_frame:={}
+	if encounter!=null:
+		if pirates.snapshot()!=state.get("encounter"):return reject("Pirate geometry lost its current encounter owner")
+		pirate_frame=encounter.prepare_world(pirates,state.camera_view.pose,state.ship_detail)
+		if pirate_frame.is_empty():return reject(encounter.error)
+	if not geometry.apply_state(_player_geometry_state(state)):return reject(geometry.error)
+	if (station!=null)!=state.has("station_exterior"):return reject("Station exterior support changed within a flight")
+	if station!=null and not station.apply_state(state.station_exterior):return reject(station.error)
+	var message: String=_projection.apply(camera,state.camera_view)
+	if not message.is_empty():return reject(message)
+	if not sky.apply_view(state.camera_view):return reject(sky.error)
+	if not planets.apply_view(state.camera_view):return reject(planets.error)
+	if not scenery.apply_state(state.scenery) or not scenery.apply_detail(state.scenery.detail):return reject(scenery.error)
+	if state.scenery.has("bodies") and not scenery.apply_activity(state.scenery.bodies):return reject(scenery.error)
+	var sun_frame: Dictionary=sun.prepare_frame(state.camera_view,Vector2i(camera.get_viewport().get_visible_rect().size),prior_intensity)
+	if sun_frame.has("error"):return reject(sun.error)
+	if not dialogue.present(state):return reject(dialogue.error)
+	if scan_animation!=null:
+		if not reticle.present(state.get("player_aim",{})):return reject(reticle.error)
+		if not scan_animation.present(state.get("mining_targeting",{})):return reject(scan_animation.error)
+		target_frame.set_active(state.get("player_aim",{}).get("visible",false))
+	if mining_panel!=null:
+		if drill==null:mining_panel.clear()
+		elif not mining_panel.present(drill,int(state.cargo.free_space),true):return reject(mining_panel.error)
+	if notice_panel!=null and not notice_panel.present(state.get("flight_notices",{})):return reject(notice_panel.error)
+	if state.dialogue.visible or (death!=null and not state.player_destruction.hud_visible):
+		for control in [target_frame,reticle,scan_animation,mining_panel,notice_panel]:
+			if control!=null:control.visible=false
+	if game_over!=null and not game_over.present(death,absolute_milliseconds):return reject(game_over.error)
+	sun.commit_frame(sun_frame)
+	if encounter!=null:encounter.commit_world(pirate_frame)
+	if damage_particles!=null:damage_particles.commit_world(particle_frame)
+	if death!=null:
+		player_destruction.commit_effect(death_frame)
+		geometry.player.visible=death_frame.body_visible
+	return true
+
+static func _player_geometry_state(state: Dictionary) -> Dictionary:
+	if not state.has("encounter"):return state
+	# The pirate assembly has its own retained effect/cargo owners. Supply only
+	# the player and its selection to the shared departure body renderer.
+	var selected: Dictionary=state.duplicate()
+	selected.actors=[];selected.ship_detail=state.ship_detail.duplicate()
+	selected.ship_detail.selections={"player":state.ship_detail.selections.player}
+	return selected
+
+func set_mobile_layout(value: bool) -> void:
+	if dialogue!=null:dialogue.set_mobile_layout(value)
+	for control in [target_frame,reticle,scan_animation,mining_panel,notice_panel,game_over]:
+		if control!=null:control.set_mobile_layout(value)
+func clear() -> void:
+	for child in get_children():child.free()
+	error="";geometry=null;sky=null;planets=null;sun=null;scenery=null;camera=null;dialogue=null;_projection=null;_last={}
+	target_frame=null;reticle=null;scan_animation=null
+	mining_panel=null;_last_drill=null;notice_panel=null
+	station=null
+	encounter=null;_last_encounter=null
+	player_destruction=null;game_over=null;_last_death=null;_last_absolute_ms=0
+	damage_particles=null;_last_particles=null
+func fail(message: String) -> bool:clear();error=message;return false
+func reject(message: String) -> bool:error=message;return false

@@ -1,0 +1,589 @@
+{
+  "definition": {
+    "scope": "damage_particle_sprite_presets",
+    "presets": [
+      {
+        "preset_id": 15,
+        "material_id": 410,
+        "flags": 33554465,
+        "capacity": 18,
+        "size_jitter": 120,
+        "lifetime_ms": 777,
+        "even_spacing": 1,
+        "fade_in_ms": 60,
+        "size_growth_per_second": 1000,
+        "scatter_xz": 60,
+        "scatter_y": 60,
+        "velocity_scatter": 0,
+        "animation_frames": 4,
+        "size": 128.0,
+        "emission_per_second": 8.0,
+        "relative_velocity_factor": -8.0,
+        "local_velocity_z": 0.0,
+        "local_offset_y": 0.0,
+        "local_offset_z": -32.0,
+        "local_offset_z_jitter": 128.0,
+        "start_rgba": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "end_rgba": [
+          255,
+          255,
+          255,
+          204
+        ],
+        "uv_rect": [
+          0.0,
+          0.0,
+          0.5,
+          0.5
+        ]
+      },
+      {
+        "preset_id": 42,
+        "material_id": 420,
+        "flags": 33554465,
+        "capacity": 9,
+        "size_jitter": 100,
+        "lifetime_ms": 768,
+        "even_spacing": 1,
+        "fade_in_ms": 64,
+        "size_growth_per_second": 120,
+        "scatter_xz": 64,
+        "scatter_y": 64,
+        "velocity_scatter": 0,
+        "animation_frames": 4,
+        "size": 256.0,
+        "emission_per_second": 8.0,
+        "relative_velocity_factor": -8.0,
+        "local_velocity_z": 0.0,
+        "local_offset_y": 0.0,
+        "local_offset_z": 64.0,
+        "local_offset_z_jitter": 64.0,
+        "start_rgba": [
+          255,
+          255,
+          255,
+          112
+        ],
+        "end_rgba": [
+          255,
+          255,
+          255,
+          204
+        ],
+        "uv_rect": [
+          0.0,
+          0.0,
+          0.5,
+          0.5
+        ]
+      }
+    ],
+    "emitter_defaults": {
+      "auxiliary_sizes": [
+        0.0,
+        0.0
+      ],
+      "velocity_size_factor": 0.0,
+      "initial_fade_ms": 0,
+      "velocity_base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "local_velocity_xy": [
+        0.0,
+        0.0
+      ],
+      "local_offset_x": 0.0,
+      "minimum_squared_speed": 0
+    }
+  },
+  "seed": 123456,
+  "vectors": [
+    {
+      "name": "straight",
+      "preset_index": 0,
+      "start": [
+        10,
+        20,
+        30
+      ],
+      "end": [
+        10.0,
+        20.0,
+        55.0
+      ],
+      "axes": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        100.0
+      ],
+      "slots": [
+        {
+          "position": [
+            -3.0,
+            45.0,
+            -30.50000762939453
+          ],
+          "velocity": [
+            -0.0,
+            -0.0,
+            -800.0
+          ],
+          "age_ms": 125,
+          "size": 371
+        },
+        {
+          "position": [
+            34.0,
+            -13.0,
+            9.0
+          ],
+          "velocity": [
+            -0.0,
+            -0.0,
+            -800.0
+          ],
+          "age_ms": 0,
+          "size": 190
+        }
+      ],
+      "random_state": 41346586982347
+    },
+    {
+      "name": "still",
+      "preset_index": 0,
+      "start": [
+        10,
+        20,
+        30
+      ],
+      "end": [
+        10.0,
+        20.0,
+        30.0
+      ],
+      "axes": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "slots": [
+        {
+          "position": [
+            -3.0,
+            45.0,
+            57.0
+          ],
+          "velocity": [
+            -0.0,
+            -0.0,
+            -0.0
+          ],
+          "age_ms": 0,
+          "size": 246
+        }
+      ],
+      "random_state": 198626652705010
+    },
+    {
+      "name": "short",
+      "preset_index": 0,
+      "start": [
+        10,
+        20,
+        30
+      ],
+      "end": [
+        10.0,
+        20.0,
+        30.049999237060547
+      ],
+      "axes": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        0.1999969482421875
+      ],
+      "slots": [
+        {
+          "position": [
+            -3.0,
+            45.0,
+            57.04999923706055
+          ],
+          "velocity": [
+            -0.0,
+            -0.0,
+            -1.5999755859375
+          ],
+          "age_ms": 0,
+          "size": 246
+        }
+      ],
+      "random_state": 198626652705010
+    },
+    {
+      "name": "oblique",
+      "preset_index": 0,
+      "start": [
+        10,
+        20,
+        30
+      ],
+      "end": [
+        40.0,
+        5.0,
+        155.0
+      ],
+      "axes": [
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          1,
+          0,
+          0
+        ]
+      ],
+      "velocity": [
+        120.0,
+        -60.0,
+        500.0
+      ],
+      "slots": [
+        {
+          "position": [
+            -88.00001525878906,
+            97.50000762939453,
+            -400.50006103515625
+          ],
+          "velocity": [
+            -960.0,
+            480.0,
+            -4000.0
+          ],
+          "age_ms": 125,
+          "size": 371
+        },
+        {
+          "position": [
+            71.0,
+            -28.0,
+            102.0
+          ],
+          "velocity": [
+            -960.0,
+            480.0,
+            -4000.0
+          ],
+          "age_ms": 0,
+          "size": 190
+        }
+      ],
+      "random_state": 41346586982347
+    },
+    {
+      "name": "straight",
+      "preset_index": 1,
+      "start": [
+        10,
+        20,
+        30
+      ],
+      "end": [
+        10.0,
+        20.0,
+        55.0
+      ],
+      "axes": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        100.0
+      ],
+      "slots": [
+        {
+          "position": [
+            58.0,
+            16.0,
+            94.49999237060547
+          ],
+          "velocity": [
+            -0.0,
+            -0.0,
+            -800.0
+          ],
+          "age_ms": 125,
+          "size": 309
+        },
+        {
+          "position": [
+            -45.0,
+            24.0,
+            196.0
+          ],
+          "velocity": [
+            -0.0,
+            -0.0,
+            -800.0
+          ],
+          "age_ms": 0,
+          "size": 318
+        }
+      ],
+      "random_state": 41346586982347
+    },
+    {
+      "name": "still",
+      "preset_index": 1,
+      "start": [
+        10,
+        20,
+        30
+      ],
+      "end": [
+        10.0,
+        20.0,
+        30.0
+      ],
+      "axes": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "slots": [
+        {
+          "position": [
+            58.0,
+            16.0,
+            182.0
+          ],
+          "velocity": [
+            -0.0,
+            -0.0,
+            -0.0
+          ],
+          "age_ms": 0,
+          "size": 294
+        }
+      ],
+      "random_state": 198626652705010
+    },
+    {
+      "name": "short",
+      "preset_index": 1,
+      "start": [
+        10,
+        20,
+        30
+      ],
+      "end": [
+        10.0,
+        20.0,
+        30.049999237060547
+      ],
+      "axes": [
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        0.1999969482421875
+      ],
+      "slots": [
+        {
+          "position": [
+            58.0,
+            16.0,
+            182.0500030517578
+          ],
+          "velocity": [
+            -0.0,
+            -0.0,
+            -1.5999755859375
+          ],
+          "age_ms": 0,
+          "size": 294
+        }
+      ],
+      "random_state": 198626652705010
+    },
+    {
+      "name": "oblique",
+      "preset_index": 1,
+      "start": [
+        10,
+        20,
+        30
+      ],
+      "end": [
+        40.0,
+        5.0,
+        155.0
+      ],
+      "axes": [
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          1,
+          0,
+          0
+        ]
+      ],
+      "velocity": [
+        120.0,
+        -60.0,
+        500.0
+      ],
+      "slots": [
+        {
+          "position": [
+            42.99998474121094,
+            68.50000762939453,
+            -345.50006103515625
+          ],
+          "velocity": [
+            -960.0,
+            480.0,
+            -4000.0
+          ],
+          "age_ms": 125,
+          "size": 309
+        },
+        {
+          "position": [
+            68.0,
+            8.999999046325684,
+            213.0
+          ],
+          "velocity": [
+            -960.0,
+            480.0,
+            -4000.0
+          ],
+          "age_ms": 0,
+          "size": 318
+        }
+      ],
+      "random_state": 41346586982347
+    }
+  ]
+}

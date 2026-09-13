@@ -1,0 +1,116 @@
+"""Bounded first-mining notice declarations; no executable runtime payload."""
+import copy
+from .ship_models import section_bytes
+
+def extract_flight_notices(mach, arrival, flight):
+    if mach.architecture!='x86_64' or flight.get('scope')!='first_mining_flight_construction':return {}
+    try:
+        origin=arrival['provenance']['actor']
+        if origin['bytes']!=315:return {}
+        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
+        proof={}
+        for key,(delta,size,section,pattern) in LAYOUTS.items():
+            found=section_bytes(mach,anchor+delta,size,section.encode())
+            if found is None or found[0]!=bytes.fromhex(pattern):return {}
+            proof[key]={'offset':found[1],'bytes':size}
+        result=copy.deepcopy(VALUES);result['provenance']=proof
+        return result
+    except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
+
+VALUES = {'scope': 'first_mining_flight_notices',
+ 'campaign_cursor': 2,
+ 'max_frame_ms': 150,
+ 'pending_capacity': 19,
+ 'retire_at_ms': 4001,
+ 'falling_at_ms': 2001,
+ 'fade_half_ms': 2000.0,
+ 'alpha_max': 255,
+ 'duplicate_key': 'localized_text',
+ 'new_notice_resets_clock': False,
+ 'drilling_holds_clock': True,
+ 'messages': {'6': {'text_ids': [560, 39], 'separator': ' ', 'rgb': [255, 255, 255]},
+              '8': {'text_ids': [528], 'separator': '', 'rgb': [255, 255, 255]},
+              '9': {'text_ids': [529], 'separator': '', 'rgb': [255, 255, 255]},
+              '11': {'text_ids': [535, 539], 'separator': ': ', 'rgb': [255, 255, 255]},
+              '20': {'text_ids': [530], 'separator': '', 'rgb': [255, 255, 255]},
+              '27': {'text_ids': [311], 'separator': '', 'rgb': [255, 42, 0]}},
+ 'background_image_id': 1219,
+ 'background_texture_id': 10062,
+ 'background_region': 118}
+
+LAYOUTS = {'queue_allocation': [-127697,
+                      69,
+                      '__text',
+                      'bf18000000e8f37419004989c6bf08000000e8e07419004989460841c746100100000048c7000000000041c706000000004d89b5f0020000bf140000004c89f6e81f4dffff'],
+ 'queue_resize': [-173421,
+                  86,
+                  '__text',
+                  '554889e54156534889f34189fe8b43104439f07506488b7b08eb284585f6b801000000410f45c689431089c648c1e603488b7b08e874281a004889c748897b088b431089c648c1e603e887271a004489335b415e5dc3'],
+ 'queue_initial': [-127366,
+                   67,
+                   '__text',
+                   '41c685fc0200000041c685b00200000041c685b10200000041c685b20200000041c645010141c685040300000041c785f80200000000000041c7850003000000000000'],
+ 'queue_update': [-118108,
+                  203,
+                  '__text',
+                  '554889e54156534889fb03b3f802000089b3f802000081fea10f00000f8c89000000c783f802000000000000488b83f0020000488b40084c8b304d85f6741b4c89f7e8596c05004c89f7e82d4f1900488b83f0020000488b400848c70000000000488b83f00200008338027220b901000000488b4008488b14c8488954c8f848ffc1488b83f00200003b0872e5488b400848837808007507c683fc02000000c7830003000000000000eb1b83bb0003000000751281fed10700007c0ac78300030000010000005b415e5dc3'],
+ 'duplicate_check': [-117112,
+                     87,
+                     '__text',
+                     '554889e54157415653504989f64989ff498b87f00200008b18ffcb30c085db7e2b4863c3498b8ff0020000488b4908488b04c14885c074e1488b78384c89f6e8aeb8160088c1b00184c975cd4883c4085b415e415f5dc3'],
+ 'insert_dispatch': [-112369,
+                     196,
+                     '__text',
+                     '4d8dbd40020000488d9d58fcffff4889df4c89fe31d2e8d08e16004c89ef4889dee853edffff88c3488dbd58fcffffe82789160084db0f8562ffffffbf70000000e8d73819004989c44183fe2f0f87ec0000004489f048b9000000c800800000480fa3c10f83d5000000bf10000000e8a93819004889c34889df4c89fe31d2e8678e16004c89e74889deba01000000e84d4f0500498b85f00200008b08be010000004889f239ca731b488d7201488b780848833cd70075ea4c8924d741c685fc02000001'],
+ 'ordinary_insert': [-112050,
+                     83,
+                     '__text',
+                     'bf10000000e8d43719004889c34889df4c89fe31d2e8928d16004c89e74889dee8b54d0500498b85f00200008b08be010000004889f239ca0f8347ffffff488d7201488b780848833cd7000f8428ffffffebe0'],
+ 'ordinary_style': [235630, 32, '__text', '48c743400000000048c743380000000048c74354ffffffff48c7434cffffffff'],
+ 'colored_style': [235931, 13, '__text', '4d89663841895e5441c6464800'],
+ 'alpha': [-118642,
+           75,
+           '__text',
+           '488b3bf3410f2a87f8020000f30f5e054cd31900f30f590548d31900f30f2cc8b8fe01000029c881f9ff0000000f4ec1440fb6f0beff000000baff000000b9ff0000004589f0e801c61300'],
+ 'colors_and_text': [-118445,
+                     197,
+                     '__text',
+                     '418b475483f802741b83f8017529488d052a0a2700488b38beff000000ba2a000000eb2c488d05140a2700488b3831f6baed000000eb19488d0d010a2700488b39beff00000083f8037509ba8000000031c9eb0abaff000000b9ff0000004589f0e821c51300488d050e102700448b304d8b7f38488d05d4092700448b20488d05ba0927004c8b284c89ef4489e64c89fae8e121130089c1c1e91f01c1d1f9448b45cc440345d4440345d041d1fe4129ce4c89ef4489e64c89fa4489f14531c9e8e21b1300'],
+ 'alpha_constants': [1573870, 8, '__const', '0000fa4400007f43'],
+ 'drill_gate': [-107442,
+                58,
+                '__text',
+                '4c89f7e82e2a0a0088852cfdffff41f685fc02000001745c80bd2cfdffff00755341f685c80500000175494c89ef488bb530fdffffe81cd6ffff'],
+ 'dispatcher': [-116996, 29, '__text', '418d46ff83f82e0f8706120000488d0db6130000486304814801c8ffe0'],
+ 'cancel_text': [-116162,
+                 126,
+                 '__text',
+                 '488d0555012700488b38be30020000e878dd12004889c34c8dbd18ffffff488d35d5701b004c89ff31d2e8bd9a1600488dbd28ffffff4889de4c89fae8bbb21600488d0514012700488b38be27000000e837dd1200488dbd38ffffff488db528ffffff4889c2e891b21600498dbd40020000488db538ffffffe85ea11600'],
+ 'failure_text': [-115464, 20, '__text', '488d059bfe2600488b38be10020000e9ef0b0000'],
+ 'tractor_text': [-115444, 20, '__text', '488d0587fe2600488b38be11020000e9db0b0000'],
+ 'target_text': [-115424,
+                 126,
+                 '__text',
+                 '488d0573fe2600488b38be17020000e896da12004889c34c8dbd88feffff488d35f06d1b004c89ff31d2e8db971600488dbd98feffff4889de4c89fae8d9af1600488d0532fe2600488b38be1b020000e855da1200488dbda8feffff488db598feffff4889c2e8afaf1600498dbd40020000488db5a8feffffe87c9e1600'],
+ 'drill_text': [-113644, 20, '__text', '488d057ff72600488b38be12020000e9d3040000'],
+ 'full_hold_text': [-113544, 20, '__text', '488d051bf72600488b38be37010000e96f040000'],
+ 'text_separators': [1682229, 5, '__cstring', '3a20002000'],
+ 'action_notices': [344326,
+                    191,
+                    '__text',
+                    '498b7d60e87545030084c00f85e3f7ffff498b7d60e8343b030084c00f85d2f7ffff498bbda0000000e8102505004885c0745b498b7d60e8a4e9030084c0754e4488f8340184c075454489a570ffffff488d0525fa1f00488b38e8a9d607004889c7e83de20500498b5560498bbd8800000085c07f11be1b00000031c9e858f5f8ffe9b2050000be0b000000eb274489a570ffffff498b7d60e842e903004530e484c0741a498b5560498bbd88000000be0600000031c9e81ef5f8ff41b401'],
+ 'background_lookup': [-131356, 20, '__text', '498d95f0030000488b3bbec3040000e832881300'],
+ 'background_alias': [-528604,
+                      64,
+                      '__text',
+                      'bf18000000e8fe921f004889c3bf04000000e8f1921f0066c7004e2766c74002760066c703c304c7430403000000c74308ffffffff4889431048899d60d4ffff'],
+ 'background_draw': [-118567,
+                     70,
+                     '__text',
+                     '4584ed410f95c5488d05f3512700410fb79780040000418bb7f0030000488b3bf600017408450fb7a782040000488d05b50a2700488b00442ba0e40100004489e1e87b321300'],
+ 'dispatch_6': [-111910, 4, '__text', '78efffff'],
+ 'dispatch_8': [-111902, 4, '__text', '32f2ffff'],
+ 'dispatch_9': [-111898, 4, '__text', '46f2ffff'],
+ 'dispatch_11': [-111890, 4, '__text', '5af2ffff'],
+ 'dispatch_20': [-111854, 4, '__text', '4ef9ffff'],
+ 'dispatch_27': [-111826, 4, '__text', 'b2f9ffff']}

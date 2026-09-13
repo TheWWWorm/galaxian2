@@ -1,0 +1,103 @@
+"""Mac cargo-bearing pirate death declarations, without executable runtime code."""
+import copy,hashlib
+from .station_exterior import declaration_bytes
+
+def extract_full_hold_destruction(mach,arrival,control,actors):
+    if mach.architecture!='x86_64':return {}
+    try:
+        if control['scope']!='full_hold_pirate_control':return {}
+        npc=actors['npc_initialization']
+        if not all(npc.get(k) for k in ['destruction','death_accounting','construction']):return {}
+        origin=arrival['provenance']['actor']
+        if origin['bytes']!=315:return {}
+        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
+        for key,(delta,size,section,pattern) in LAYOUTS.items():
+            found=declaration_bytes(mach,anchor+delta,size,section.encode())
+            if found is None:return {}
+            if pattern.startswith('sha256:'):
+                if hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
+            elif found[0]!=bytes.fromhex(pattern):return {}
+            proof[key]={'offset':found[1],'bytes':size}
+        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+    except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
+
+VALUES = {'scope': 'full_hold_pirate_destruction',
+ 'campaign_cursor': 4,
+ 'actor_id': 0,
+ 'actor_kind': 8,
+ 'hull_catalogue_id': 2,
+ 'subtype': 0,
+ 'retains_generated_cargo': True,
+ 'companion': False,
+ 'mission_kind': 154,
+ 'cargo_model_id': 16993,
+ 'cargo_model_resource': 'resources/data/assets/main/3d/meshes/misc/container_002_nivelian.aem',
+ 'cargo_spawn_at_post_tumble_position': True,
+ 'cargo_initial_basis': 'identity',
+ 'cargo_drift_per_positive_update': True,
+ 'cargo_drift_decay': 0.9800000190734863,
+ 'cargo_drift_cutoff': 0.05000000074505806,
+ 'cleanup_after_ms': 60000,
+ 'cleanup_requires_inactive_effect': True,
+ 'cargo_rotation_delta_shift': 1,
+ 'cargo_angle_fraction': 1.52587890625e-05,
+ 'cargo_angle_tau': 6.2831854820251465,
+ 'cargo_angle_truncated_to_integer': True,
+ 'statistics_copy_before_motion': True,
+ 'cargo_statistics_after_positive_update': True,
+ 'cargo_sets_statistics_owner': True,
+ 'counter_population': 1}
+
+LAYOUTS = {'npc_update': [610766,
+                17180,
+                '__text',
+                'sha256:ebf68b2b6ca047e083dacda1f7f7b6c9bd44140189540f8b670a9489112ee495'],
+ 'actor_constructor': [-81548,
+                       948,
+                       '__text',
+                       'sha256:f12861749d41ef2ca9eac32cd4814ba5a3e3e9b12d3d34206d636457a5c0835e'],
+ 'npc_constructor': [605172,
+                     2562,
+                     '__text',
+                     'sha256:9872cce6e7b565f4b3dbeb762598ade1997e62a1d03100f33cfc538edab0800b'],
+ 'cargo_model': [-77266,
+                 246,
+                 '__text',
+                 '554889e541574156534883ec1889f34989ffbfe8000000e8e2af18004989c666b81e4283fb01743e66b81f4283fb02743566b8184283fb03742c418b4f4466b85f4283f901741f66b8144283f909741666b85e4283f903740d85c90f95c00fb6c00d60420000488d0df7682600488b110fb7f04c89f731c9e8831bf6ff4d89b7a8000000498b7f10e8c11ff6fff30f114de0f30f1145d8660f70c001488d75d8f30f1145dc4c89f7e87120f6ff498b5f08498bbfa8000000e82920f6ff4883c3084889df4889c6e800101400498b7f084c89fee8e85909004883c4185b415e415f5dc34889c34c89f7e804af18004889dfe838af1800'],
+ 'cargo_predicate': [-77020,
+                     46,
+                     '__text',
+                     '554889e5488b4f7030c04885c9741d8b1131f6eb044883c60230c039d6730d488b7908b001837cb704007ee95dc3'],
+ 'drift_setter': [537670, 14, '__text', '554889e5f30f1187e00000005dc3'],
+ 'drift_getter': [537698, 14, '__text', '554889e5f30f1087e00000005dc3'],
+ 'cargo_owner': [535790, 14, '__text', '554889e54889b7d80000005dc390'],
+ 'model_constructor': [-725444,
+                       430,
+                       '__text',
+                       '554889e5415741564154534189cc4989d64189f74889fbc783a000000000000000c783a400000000000000c783a800000000000000c783ac0000000000803f48c783b80000000000000048c783b000000000000000c783c00000000000803f488d732048c783cc0000000000000048c783c400000000000000c783d40000000000803fc783d800000000000000c783dc0000000000803fc783e00000000000803fc783e40000000000803f6644897b104c897338c7431400000000c74320000000004c89f7e824cd1c00488d5324410fb6cc4c89f74489fee8d1991c008b73208b53244c89f7e8c3d01c00c7434800000000c7434400000000c7434000000000c743540000803fc743500000803fc7434c0000803fc6435801c6435901c7435c0000000048c7839800000000000000c743300000000048c783880000000000000048c783800000000000000048c743780000000048c743700000000048c74368000000008b7320897314c74328ffffffffc7431cffffffffc74318ffffffffc7432cffffffff4c89f7e8f0d41c00488dbbac0000004889c6e821f31d0048c74308000000005b415c415e415f5dc3'],
+ 'model_position_setter': [-724148,
+                           82,
+                           '__text',
+                           '554889e54883ec50f30f104608f30f1145bcf30f1006f30f1145b4f30f104604f30f1145b88b7714488b7f38e83dd11c00488d7dc04889c6f30f1045b4f30f104db8f30f1055bce862101e004883c4505dc3'],
+ 'model_rotation': [-723090,
+                    140,
+                    '__text',
+                    '554889e5534881ec880000004889fbf30f584340f30f114340f30f584b44f30f114b44f30f585348f30f1153488b7314488b7b38e813cd1c00488d7db88b535cf30f105348f30f104340f30f104b444889c6e8e5ff1d008b7314488b7b38e8e9cc1c00488dbd78fffffff30f105354f30f10434cf30f104b504889c6e8ab0a1e004881c4880000005b5dc390'],
+ 'model_translation': [-722902,
+                       200,
+                       '__text',
+                       '554889e54156534881ec90000000f30f119564fffffff30f118d68fffffff30f11856cffffff4889fb8b7314488b7b38e85bcc1c004c8b4018488b5020488b7028488b78308b4838894de848897de0488975d8488955d04c8945c8488b481048894dc0488b08488b4008488945b848894db0f30f109564fffffff30f5855dcf30f108d68fffffff30f584dccf30f10856cfffffff30f5845bc488dbd70ffffff4c8d75b04c89f6e8240b1e008b7314488b7b384c89f2e8b5c91c004881c4900000005b415e5dc390'],
+ 'effect_update': [-680458,
+                   538,
+                   '__text',
+                   'sha256:035709a7849461056a7236dedc5667679808429d093c403249227d2e4f9e446c'],
+ 'world_death': [106510,
+                 1044,
+                 '__text',
+                 'sha256:fd0da3d850f75ea9a1bff6c2779caf478f3180a7fbe79bef18f0b8d76739bc78'],
+ 'retire': [-78854, 18, '__text', '554889e5488b7f08400fb6f65de9e2740900'],
+ 'pirate_counter': [876300, 26, '__text', '554889e5ff8768020000488d0595dd1700488b385de93a8de7ff'],
+ 'drift_decay': [1582570, 4, '__const', '48e17a3f'],
+ 'drift_cutoff': [1573782, 4, '__const', 'cdcc4c3d'],
+ 'angle_fraction': [1575014, 4, '__const', '00008037'],
+ 'angle_tau': [1575058, 4, '__const', 'db0fc940']}

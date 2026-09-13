@@ -1,0 +1,212 @@
+[
+  {
+    "station_id": -2147483648,
+    "base": 40,
+    "bound": 40,
+    "count": 72,
+    "state": 106906909674100
+  },
+  {
+    "station_id": -2147483648,
+    "base": 80,
+    "bound": 80,
+    "count": 112,
+    "state": 106906909674100
+  },
+  {
+    "station_id": -2147483648,
+    "base": 17,
+    "bound": 37,
+    "count": 53,
+    "state": 106906909674100
+  },
+  {
+    "station_id": -1,
+    "base": 40,
+    "bound": 40,
+    "count": 73,
+    "state": 75700622266165
+  },
+  {
+    "station_id": -1,
+    "base": 80,
+    "bound": 80,
+    "count": 153,
+    "state": 75700622266165
+  },
+  {
+    "station_id": -1,
+    "base": 17,
+    "bound": 37,
+    "count": 21,
+    "state": 75700622266165
+  },
+  {
+    "station_id": 0,
+    "base": 40,
+    "bound": 40,
+    "count": 40,
+    "state": 205749139540596
+  },
+  {
+    "station_id": 0,
+    "base": 80,
+    "bound": 80,
+    "count": 80,
+    "state": 205749139540596
+  },
+  {
+    "station_id": 0,
+    "base": 17,
+    "bound": 37,
+    "count": 23,
+    "state": 205749139540596
+  },
+  {
+    "station_id": 1,
+    "base": 40,
+    "bound": 40,
+    "count": 65,
+    "state": 205723924636679
+  },
+  {
+    "station_id": 1,
+    "base": 80,
+    "bound": 80,
+    "count": 105,
+    "state": 205723924636679
+  },
+  {
+    "station_id": 1,
+    "base": 17,
+    "bound": 37,
+    "count": 48,
+    "state": 205723924636679
+  },
+  {
+    "station_id": 78,
+    "base": 40,
+    "bound": 40,
+    "count": 50,
+    "state": 203883236650738
+  },
+  {
+    "station_id": 78,
+    "base": 80,
+    "bound": 80,
+    "count": 130,
+    "state": 203883236650738
+  },
+  {
+    "station_id": 78,
+    "base": 17,
+    "bound": 37,
+    "count": 26,
+    "state": 203883236650738
+  },
+  {
+    "station_id": 83,
+    "base": 40,
+    "bound": 40,
+    "count": 40,
+    "state": 204564039056497
+  },
+  {
+    "station_id": 83,
+    "base": 80,
+    "bound": 80,
+    "count": 80,
+    "state": 204564039056497
+  },
+  {
+    "station_id": 83,
+    "base": 17,
+    "bound": 37,
+    "count": 39,
+    "state": 204564039056497
+  },
+  {
+    "station_id": 110,
+    "base": 40,
+    "bound": 40,
+    "count": 68,
+    "state": 203076359725394
+  },
+  {
+    "station_id": 110,
+    "base": 80,
+    "bound": 80,
+    "count": 148,
+    "state": 203076359725394
+  },
+  {
+    "station_id": 110,
+    "base": 17,
+    "bound": 37,
+    "count": 30,
+    "state": 203076359725394
+  },
+  {
+    "station_id": 112,
+    "base": 40,
+    "bound": 40,
+    "count": 44,
+    "state": 203731947227236
+  },
+  {
+    "station_id": 112,
+    "base": 80,
+    "bound": 80,
+    "count": 124,
+    "state": 203731947227236
+  },
+  {
+    "station_id": 112,
+    "base": 17,
+    "bound": 37,
+    "count": 32,
+    "state": 203731947227236
+  },
+  {
+    "station_id": 736686762,
+    "base": 40,
+    "bound": 40,
+    "count": 53,
+    "state": 50945674945222
+  },
+  {
+    "station_id": 736686762,
+    "base": 80,
+    "bound": 80,
+    "count": 93,
+    "state": 50945674945222
+  },
+  {
+    "station_id": 736686762,
+    "base": 17,
+    "bound": 37,
+    "count": 40,
+    "state": 50945674945222
+  },
+  {
+    "station_id": 2147483647,
+    "base": 40,
+    "bound": 40,
+    "count": 41,
+    "state": 174542852132661
+  },
+  {
+    "station_id": 2147483647,
+    "base": 80,
+    "bound": 80,
+    "count": 121,
+    "state": 174542852132661
+  },
+  {
+    "station_id": 2147483647,
+    "base": 17,
+    "bound": 37,
+    "count": 28,
+    "state": 174542852132661
+  }
+]

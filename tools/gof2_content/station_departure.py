@@ -1,0 +1,82 @@
+"""First Mac station departure declarations. No original code is executed or emitted."""
+import copy
+from .ship_models import section_bytes
+
+def extract_station_departure(mach, arrival, station, player):
+    if mach.architecture!='x86_64':return {}
+    try:
+        if station['scope']!='first_station_entry' or not player['flight_cache'] or not player['repair']:return {}
+        origin=arrival['provenance']['actor']
+        if origin['bytes']!=315:return {}
+        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
+        proof={}
+        for key,(delta,size,pattern) in LAYOUTS.items():
+            found=section_bytes(mach,anchor+delta,size,b'__text')
+            if found is None or found[0]!=bytes.fromhex(pattern):return {}
+            proof[key]={'offset':found[1],'bytes':size}
+        result=copy.deepcopy(VALUES);result['provenance']=proof
+        return result
+    except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
+
+VALUES = {'scope': 'first_station_departure',
+ 'campaign_cursor': 2,
+ 'station_id': 78,
+ 'system_id': 15,
+ 'ship_id': 0,
+ 'source_state': 2,
+ 'world_type': 3,
+ 'confirmation_text_id': 386,
+ 'confirmation_required': True,
+ 'cache_reset': -1,
+ 'initial_cargo_used': 0,
+ 'audio_selector': 1}
+
+LAYOUTS = {'cargo_gate': [437015,
+                74,
+                '4c8d3d64901e00498b3fe8e86c06004889c7e8467804004189c6498b3fe8d56c06004889c7e8277804004139c67e1b4c8bb3b0000000488d0546901e00488b38bec1000000e9eb000000'],
+ 'cursor_gates_early': [437089,
+                        44,
+                        '488d051a901e00488b38e8bc6c060083f806746c488d0506901e00488b38e8a86c060083f8070f85db000000'],
+ 'cursor_gates_middle': [437352,
+                         207,
+                         '488d05138f1e00488b38e8b56b060083f81475474c8d3dff8e1e00498b3fe8596b06004889c7e8055106004189c6498b3fe89a6b06004889c7e85271ffff4139c675184c8bb3b0000000488d05e18e1e00488b38be08020000eb89488d05b88e1e00488b38e85a6b060083f8150f85c70000004c8d3da08e1e00498b3fe8fa6a06004889c7e8a65006004189c6498b3fe83b6b06004889c7e8f370ffff4139c60f8594000000488d056d8e1e00488b38e8f16a06004889c7be29000000ba01000000e87d77040084c00f8474ffffff'],
+ 'cursor_gate_late': [437666,
+                      79,
+                      '488d05d98d1e00488b38e87b6a060083f84d7581488d05c58d1e00488b38e8496a06004889c7e89372040083f8250f8461ffffff4c8bb3b0000000488d05b68d1e00488b38be3b010000e95bfeffff'],
+ 'confirmation': [437559,
+                  96,
+                  'f6839f000000017557f683a500000001754ef683a60000000175454c8bb3b0000000488d053a8e1e00488b38be82010000e85d6a0a004c89f74889c6ba01000000e8378deeff488bbbb0000000e8d799eeffc6839f00000001c6831a01000001'],
+ 'accept_and_destination': [431746,
+                            142,
+                            '498bbdb00000004489fe4489f2e834b0eeff83f8010f841506000085c00f85f50e000041f6851a010000010f84d200000041c6851a01000000488d1dc0a41e00488b3be862810600488b1b83f830752b488d05a1a41e00488b38be3a000000e8a25befff4889df4889c6e8c97a0600488d05daab1e00c60001eb134889dfe8df8006004889df4889c6e8aa7a0600'],
+ 'cache_reset_and_state': [431888,
+                           113,
+                           '488d056ba41e00488b08c781a8000000ffffffff488b08c781a0000000ffffffff488b08c781a4000000ffffffff488d0d6da51e00488b00c780ac000000ffffffff488b39e8f855eeff488d0569a41e00488d0d56ab1e00c70101000000488b38be02000000e89fee0d0041c6454000e9'],
+ 'current_station': [858084, 12, '554889e5488b87180200005d'],
+ 'mission_selection': [857476,
+                       150,
+                       '498b8710020000488b40084a8b3ce8e89c06f9ff84c00f850bfeffff498b8710020000488b40084a8b3ce8e84408f9ff89c34c89f7e8dae7ffff39c30f85e5fdffff4181fc950000000f8ec8fdffff418d84246affffff83f817770eb92b788b000fa3c10f82bdfdffff498b8710020000488b40084a8b3ce8e8d607f9ff84c00f858dfeffff4183fc0b740a4183fc0d0f857dfeffff'],
+ 'selected_mission': [857239,
+                      27,
+                      '498b8710020000488b40084a8b04e849898708020000e968010000'],
+ 'mission_getter': [858188, 12, '554889e5488b87080200005d'],
+ 'mission_completed': [400436, 12, '554889e5837f10ff0f94c05d'],
+ 'refresh_equipment': [857965,
+                       93,
+                       '498bbf00020000e84b0cfeff4989c64d85f67427418b0685c0742031db498b4e08488b3cd94885ff740a31f6e87c9ef1ff418b0648ffc339c372e241c6876801000000498bbf000200004883c4085b415c415d415e415f5de95202feff'],
+ 'ship_clone_entry': [732832,
+                      28,
+                      '554889e5535089f3e80f00000085db78038958144883c4085b5dc390'],
+ 'ship_clone': [732860,
+                162,
+                '554889e541574156534883ec184989ffbf98000000e856530c004989c6498b7f688b470c412b8790000000458b4714418b4f0c418b37418b5704f3410f104718448b0f8b5f048b7f0889442410897c2408891c24f30f5905a6920c004c89f7e8f8e9ffff498b87880000004885c07424833800741f31db488b40088b34984c89f7e83801000048ffc3498b87880000003b1872e34c89f04883c4185b415e415f5dc3'],
+ 'fresh_ship': [727320,
+                240,
+                '554889e541574156415541545350f30f1145d44589ce4889fb8933895304894b0cc74310000000004489431444894308bf10000000e8d4680c00f30f1045d4f30f5e055fa80c00448b6d208b4d18448b7d1048894368448930448978048948084489680cf30f114318bf18000000e8a1680c004989c4bf08000000e88e680c00498944240841c74424100100000048c7000000000041c70424000000004c8963704501f744037d184501ef4489ff4c89e6e84eb8eaff48c7437800000000c743640000000048c7838800000000000000c78390000000000000004889df4883c4085b415c415d415e415f5de914000000'],
+ 'cargo_used': [729972, 10, '554889e58b47105dc390'],
+ 'world_entry': [335220,
+                 77,
+                 '488d05071e2000488b38e879400800bf50030000e89f6412004889c34889dfbe03000000e8712cfaff49899e900000004889dfe81436faffbb6400000084c00f84630800004c89f7e893080000'],
+ 'audio_selector_consumer': [337212,
+                             42,
+                             '488d057b1d20008b3083feff740f488d0569162000488b38e87f8ef7ff488d055e1d2000c700ffffffff']}
