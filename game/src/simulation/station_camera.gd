@@ -13,7 +13,7 @@ var _elapsed_ms:=0
 
 func configure(data: Dictionary, seed_value: int) -> bool:
 	error="";_rules={};_axes=[];_elapsed_ms=0
-	if not Definitions.parameters(data):return reject("Station camera declarations are unavailable")
+	if not Definitions.view_parameters(data):return reject("Station camera declarations are unavailable")
 	_rules=data.camera.duplicate(true)
 	_random=Random.new();_random.seed_from(seed_value)
 	_position=vector(_rules.position)

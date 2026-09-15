@@ -1,0 +1,11 @@
+extends RefCounted
+## Original ordinary gate layout and model selection.
+const Equal=preload("res://src/content/opening_escape_definitions.gd")
+const VALUES = {"scope":"ordinary_gate_environment","system_type_field":2,"system_gate_station_field":6,"source_kind":15,"arrival_object_index":2,"objects":[{"index":1,"gate_station_only":true,"interactive":true,"radial_base":90000.0},{"index":2,"gate_station_only":false,"interactive":false,"radial_base":120000.0}],"seed_station_multiplier":2,"initial_vector":[0.0,0.0,0.0],"initial_angle_units":0,"sign_bound":2,"negative_sign_draw":0,"increment_bound":500,"increment_offset":250,"increment_multiplier":16,"radial_slope":3.0,"angle_fraction":1.52587890625e-05,"angle_tau":6.2831854820251465,"height":0.0,"model_yaw":3.1415927410125732,"resources":[[15000,15002,15001,15003],[15004,15006,15005,15007],[15008,15010,15009,15011],[15012,15014,15013,15015]],"lod_mesh_ids":[[15016,15020],[15017,15021],[15018,15022],[15019,15023]],"lod_distances":[40000,70000],"child_lod_type":1,"child_lod_mesh_ids":[15024,15025],"collision_radii":[7500,11250,7500,7500]}
+const SPANS = {"gate_zero_origin":[-46492,30],"gate_seed":[-39500,139],"gate_slots":[-39048,98],"gate_placement":[-38940,351],"gate_resources":[-38589,332],"gate_children_lod":[-39361,313],"gate_constructor":[639332,329],"gate_system_loader":[-673478,1100],"gate_system_constructor":[734132,236],"gate_station_predicate":[735100,44],"gate_type_getter":[734664,10],"gate_rotation":[1242570,480],"gate_vector_transform":[1241738,224],"gate_arrival_selection":[-43078,561],"gate_position_getter":[641260,58],"gate_model_lod":[-721642,310],"gate_child_lod":[-722330,282],"gate_radial_slope":[1556910,4],"gate_radial_bases":[1582266,8],"gate_angle_fraction":[1575014,4],"gate_angle_tau":[1575058,4],"gate_model_yaw":[1546070,4],"gate_resource_table":[1576346,32],"gate_lod_table":[1576378,16]}
+
+# Native composition.
+static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
+
+static func available(bindings: RefCounted) -> bool:
+	return bindings!=null and parameters(bindings.mido_travel.get("gate_environment")) and load("res://src/content/free_arrival_definitions.gd").available(bindings)

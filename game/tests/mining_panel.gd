@@ -41,7 +41,7 @@ func verify(args: Array):
 	for language in lib.manifest.languages:
 		check(lib.select_language(language) and panel.configure(lib,bindings,visuals),lib.error+panel.error)
 		for mobile in [false,true]:
-			canvas.size=Vector2i(420,800) if mobile else Vector2i(1280,720);panel.set_mobile_layout(mobile)
+			canvas.size=Vector2i(800,450) if mobile else Vector2i(1280,720);panel.set_mobile_layout(mobile)
 			for key in samples:
 				var before: Dictionary=samples[key].snapshot()
 				check(panel.present(samples[key],0,true),panel.error)

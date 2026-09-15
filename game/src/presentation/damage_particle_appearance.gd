@@ -26,7 +26,7 @@ static func advance(preset: Dictionary,state: Dictionary,delta_ms: Variant) -> D
 	result.size=signed_short(int(state.size)+signed_short(growth))
 	return result
 
-static func sample(preset: Dictionary,state: Dictionary) -> Dictionary:
+static func sample(preset: Dictionary,state: Dictionary,fade_in_rgb:=false) -> Dictionary:
 	if not valid_state(preset,state):return {"error":"Invalid damage particle appearance state"}
 	if int(state.age_ms)==-1:return {"active":false}
 	var fraction:=minf(1.0,single(single(state.age_ms)/single(preset.lifetime_ms)))
@@ -35,7 +35,8 @@ static func sample(preset: Dictionary,state: Dictionary) -> Dictionary:
 		var value:=single(single(single(preset.start_rgba[channel])*remaining)+single(single(preset.end_rgba[channel])*fraction))
 		color.append(single(value*single(1.0/255.0)))
 	if state.age_ms<preset.fade_in_ms:
-		color[3]=single(color[3]*single(single(state.age_ms)/single(preset.fade_in_ms)))
+		var ramp:=single(single(state.age_ms)/single(preset.fade_in_ms))
+		for channel in ([0,1,2] if fade_in_rgb else [3]):color[channel]=single(color[channel]*ramp)
 	# The last animation tile lasts through the inclusive lifetime boundary.
 	@warning_ignore("integer_division")
 	var frame:=maxi(0,(int(state.age_ms)-1)*int(preset.animation_frames)/int(preset.lifetime_ms))
@@ -47,12 +48,17 @@ static func sample(preset: Dictionary,state: Dictionary) -> Dictionary:
 	var us:=[u,single(u+width)];var vs:=[v,single(v+height)]
 	# Source sprite mirroring is stable per slot and independent of the emitter
 	# and world RNG streams. Creating this local generator advances neither.
-	var random:=Random.new();random.seed_from(int(state.slot))
-	var flip:=random.next_int(40000)
+	var flip:=0
+	if (int(preset.flags)&0x02000000)!=0:
+		var random:=Random.new();random.seed_from(int(state.slot))
+		flip=random.next_int(40000)
 	var x_index:=flip&1;var y_index:=(flip>>1)&1
+	# Unanimated EMP sprites retain their initial per-slot mirror. Nozzle sprites
+	# have no mirror flag, so their zero-frame rectangle remains unchanged.
+	var uv:=Vector4(us[x_index],vs[y_index],us[1-x_index],vs[1-y_index])
 	return {"active":true,"size":state.size,"age_ms":state.age_ms,"frame":frame,
 		"color":Color(color[0],color[1],color[2],color[3]),
-		"uv_rect":Vector4(us[x_index],vs[y_index],us[1-x_index],vs[1-y_index])}
+		"uv_rect":uv}
 
 static func valid_state(preset: Dictionary,state: Dictionary) -> bool:
 	return Definitions.sprite_preset(preset) and state.size()==3 and Numbers.integer(state.get("slot"),0,int(preset.capacity)-1) and Numbers.integer(state.get("age_ms"),-1,int(preset.lifetime_ms)) and Numbers.integer(state.get("size"),-32768,32767) and (state.age_ms!=-1 or state.size==0)

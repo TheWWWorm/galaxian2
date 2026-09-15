@@ -115,7 +115,7 @@ func capture(directory: String, name: String):
 	host.session.rebase_time(now_us)
 
 func capture_equipment_phone(directory: String):
-	var canvas:=SubViewport.new();canvas.size=Vector2i(420,800);canvas.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(canvas)
+	var canvas:=SubViewport.new();canvas.size=Vector2i(800,450);canvas.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(canvas)
 	host.reparent(canvas);host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);host.set_mobile_layout(true)
 	var original: Dictionary=host.session.snapshot()
 	for code in lib.manifest.languages:

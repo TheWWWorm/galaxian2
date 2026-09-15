@@ -1,9 +1,9 @@
 extends RefCounted
-## Two supported sprite presets. v70 also supplies proven emitter defaults.
+## Shared sprite shapes; each content owner validates its own supported presets.
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const Fonts=preload("res://src/content/font_definitions.gd")
 const Owners=preload("res://src/content/damage_particle_owner_definitions.gd")
-const FLOATS=["size","emission_per_second","relative_velocity_factor","local_velocity_z","local_offset_y","local_offset_z","local_offset_z_jitter"]
+const FLOATS=["size","relative_velocity_factor","local_velocity_z","local_offset_y","local_offset_z","local_offset_z_jitter"]
 
 static func preset(row: Variant) -> bool:
 	# Preserve the existing smoke/fire contract. Manual sprites are accepted only
@@ -11,17 +11,27 @@ static func preset(row: Variant) -> bool:
 	return sprite_preset(row) and row.flags==0x02000021 and row.even_spacing==1
 
 static func sprite_preset(row: Variant) -> bool:
-	if not row is Dictionary or row.size()!=23:return false
+	if not row is Dictionary:return false
+	var distance_emission: bool=row.get("flags")==0x11
+	var emp: bool=(row.get("preset_id")==17 or row.get("preset_id")==18) and row.get("material_id")==27260 and row.get("flags")==0x02000021
+	if row.size()!=(25 if distance_emission else 23):return false
 	if not Numbers.integer(row.get("preset_id"),0,47) or not Numbers.integer(row.get("material_id"),0,65534):return false
-	if not Numbers.integer(row.get("flags"),0x02000021,0x02000101) or not Numbers.integer(row.get("even_spacing"),0,1):return false
-	if not ((row.flags==0x02000021 and row.even_spacing==1) or (row.flags==0x02000101 and row.even_spacing==0)):return false
-	for rule in [["capacity",1,4096],["lifetime_ms",1,60000],["size_jitter",0,32767],["size_growth_per_second",-32768,32767],["scatter_xz",0,32767],["scatter_y",0,32767],["velocity_scatter",0,32767],["animation_frames",1,256]]:
+	if not Numbers.integer(row.get("flags"),0x11,0x02000101) or not Numbers.integer(row.get("even_spacing"),0,1):return false
+	if not (((row.flags==0x02000021 or distance_emission) and row.even_spacing==1) or (row.flags==0x02000101 and row.even_spacing==0)):return false
+	for rule in [["capacity",1,4096],["lifetime_ms",1,60000],["size_jitter",0,32767],["size_growth_per_second",-32768,32767],["scatter_xz",0,32767],["scatter_y",0,32767],["velocity_scatter",0,32767],["animation_frames",0 if distance_emission or emp else 1,0 if distance_emission or emp else 256]]:
 		if not Numbers.integer(row.get(rule[0]),rule[1],rule[2]):return false
-	if not Numbers.integer(row.get("fade_in_ms"),0,int(row.lifetime_ms)):return false
-	for key in FLOATS:
+	# The short EMP sprite dies before its authored 300 ms brightness ramp ends.
+	# Its content owner still requires both exact preset definitions.
+	if not Numbers.integer(row.get("fade_in_ms"),0,maxi(300,int(row.lifetime_ms)) if emp else int(row.lifetime_ms)):return false
+	var timing_key:="distance_spacing" if distance_emission else "emission_per_second"
+	var floats: Array=FLOATS+[timing_key]
+	if distance_emission:
+		floats.append("local_offset_x")
+		if not Numbers.integer(row.get("minimum_squared_speed"),1,1000000):return false
+	for key in floats:
 		var value: Variant=row.get(key)
 		if not (value is float or value is int) or not is_finite(value) or absf(value)>1e6:return false
-	if row.size<=0 or row.size+row.size_jitter>32767 or row.emission_per_second<=0 or row.emission_per_second>10000 or row.local_offset_z_jitter<0:return false
+	if row.size<=0 or row.size+row.size_jitter>32767 or row[timing_key]<=0 or row[timing_key]>10000 or row.local_offset_z_jitter<0:return false
 	for key in ["start_rgba","end_rgba"]:
 		var color: Variant=row.get(key)
 		if not color is Array or color.size()!=4:return false
@@ -31,7 +41,7 @@ static func sprite_preset(row: Variant) -> bool:
 	if not rect is Array or rect.size()!=4:return false
 	for value in rect:
 		if not (value is float or value is int) or not is_finite(value):return false
-	return rect[0]>=0 and rect[0]<rect[2] and rect[2]<=1 and rect[1]>=0 and rect[1]<rect[3] and rect[3]<=1 and (rect[2]-rect[0])*(rect[3]-rect[1])*row.animation_frames<=1.000001
+	return rect[0]>=0 and rect[0]<rect[2] and rect[2]<=1 and rect[1]>=0 and rect[1]<rect[3] and rect[3]<=1 and (rect[2]-rect[0])*(rect[3]-rect[1])*maxi(1,int(row.animation_frames))<=1.000001
 
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.get("scope")!="damage_particle_sprite_presets":return false

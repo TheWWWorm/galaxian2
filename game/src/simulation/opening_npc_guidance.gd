@@ -1,8 +1,12 @@
 extends RefCounted
+const Alioth=preload("res://src/content/alioth_population_definitions.gd")
+const AliothSequence=preload("res://src/simulation/alioth_attack.gd")
 ## Decisions for verified ordinary NPC target lists. Produces pre-motion
 ## firing intent and inputs to the shared native NPC flight owner.
 ## The world owns scheduling, weapons, death, collision and mission consequences.
 const Training=preload("res://src/content/combat_training_control_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
+const AmbientLife=preload("res://src/content/ambient_lifecycle_definitions.gd")
 const TrainingDeath=preload("res://src/content/combat_training_destruction_definitions.gd")
 const Targeting=preload("res://src/simulation/ordinary_npc_targeting.gd")
 const FullHold=preload("res://src/content/full_hold_control_definitions.gd")
@@ -15,6 +19,10 @@ const Flight = preload("res://src/simulation/npc_flight.gd")
 const Random = preload("res://src/simulation/seeded_random.gd")
 const Vectors = preload("res://src/simulation/source_vectors.gd")
 const Vitals = preload("res://src/simulation/combat_vitals.gd")
+const ContractCombat=preload("res://src/content/contract_ship_combat_definitions.gd")
+const ContractLife=preload("res://src/content/contract_ship_lifecycle_definitions.gd")
+const Convoy=preload("res://src/content/convoy_world_definitions.gd")
+const NPCConstruction=preload("res://src/simulation/opening_npc_construction.gd")
 const DeathDefinitions = preload("res://src/content/npc_destruction_definitions.gd")
 var error := ""
 var _definition := {}
@@ -28,6 +36,10 @@ var _full_hold := {}
 var _pirate := {}
 var _training := {}
 var _training_death := {}
+var _ambient := {}
+var _frame_limit:=0
+var _recycling:=false
+var _boost_enabled:=true
 
 func configure(bindings: RefCounted, catalogues: RefCounted, actor_id: Variant, difficulty: Variant) -> bool:
 	clear()
@@ -110,23 +122,163 @@ func _configure_state(bindings: RefCounted, data: Dictionary, body: Dictionary, 
 		_state.boost_elapsed_ms=int(_holding.boost_elapsed_ms)
 	return true
 
+func configure_local_patrol(bindings: RefCounted, catalogues: RefCounted, world: RefCounted, actor_id: Variant, rank: Variant, difficulty: Variant) -> bool:
+	clear()
+	var actor:=Initial.new()
+	if not actor.configure_local_patrol(bindings,catalogues,world,actor_id,rank,difficulty):return reject(actor.error)
+	var body:=actor.snapshot()
+	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
+	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Local patrol lacks ordinary guidance tuning")
+	_training=Travel.patrol(bindings,world.snapshot(),rank,difficulty)
+	_training_death=bindings.mido_travel.traffic_combat.death.duplicate(true)
+	_training_death.selection_skipped_modes=_training_death.selection_skipped_modes.map(func(mode):return int(mode))
+	_identity.campaign_cursor=int(_training.campaign_cursor);_identity.rank=rank
+	_state.target_index=int(_training.initial_target_index);_state.desired_position=Vector3.ZERO
+	_definition.boost_chance=int(_training.boost_chance)
+	if not set_initial_route(world.route(actor_id)):
+		var message:=error;clear();return reject(message)
+	return true
+
+func configure_ambient(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant,rank: Variant,difficulty: Variant) -> bool:
+	clear()
+	if construction==null:return reject("Ambient guidance requires generated construction")
+	var rules:=AmbientLife.guidance(bindings,construction.snapshot(),rank,difficulty)
+	if rules.is_empty():return reject("Ambient guidance is unavailable in this pack")
+	var actor:=Initial.new()
+	if not actor.configure_ambient(bindings,catalogues,construction,actor_id,rank,difficulty):return reject(actor.error)
+	var body:=actor.snapshot()
+	if body.population_group=="freighter":return reject("Freighters require their own motion owner")
+	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
+	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Ambient guidance lacks ordinary tuning")
+	_training=rules;_training_death=bindings.mido_travel.traffic_combat.death.duplicate(true)
+	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
+	_training_death.selection_skipped_modes=_training_death.selection_skipped_modes.map(func(mode):return int(mode))
+	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=rank
+	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
+	_definition.boost_chance=int(rules.boost_chance)
+	_recycling=AmbientLife.recycling_parameters(bindings.ambient_lifecycle)
+	if _recycling:_state.spawn_generation=0
+	if body.population_group=="travel":
+		_ambient=bindings.ambient_lifecycle.duplicate(true)
+		_state.route_elapsed_ms=0;_state.parked_elapsed_ms=0;_state.travel_cycle=0
+	if not set_initial_route(construction.route(actor_id)):
+		var message:=error;clear();return reject(message)
+	return true
+
+func configure_contract(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction:return reject("Contract guidance requires its generated population")
+	var rules:=ContractCombat.population(bindings,construction.snapshot())
+	if rules.is_empty():return reject("Unsupported contract ship guidance")
+	var actor:=Initial.new()
+	if not actor.configure_contract(bindings,catalogues,construction,actor_id):return reject(actor.error)
+	var body:=actor.snapshot()
+	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
+	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Contract guidance lacks ordinary ship tuning")
+	_training=rules
+	if ContractLife.available(bindings):_training_death=ContractLife.population(bindings,construction.snapshot())
+	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=int(rules.rank)
+	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
+	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
+	_boost_enabled=bool(rules.rival.boost_enabled if body.population_group=="rival" else rules.pirate.boost_enabled)
+	if not _boost_enabled:_state.speed=float(rules.rival.motion_speed)
+	if not set_initial_route(construction.route(actor_id)):
+		var message:=error;clear();return reject(message)
+	return true
+
+func relaunch_ambient(actor: Dictionary) -> bool:
+	error=""
+	if (_ambient.is_empty() and not _recycling) or _route==null:return reject("Traffic relaunch requires its retained route and guidance")
+	for key in _identity:
+		if actor.get(key)!=_identity[key]:return reject("Traffic relaunch belongs to another actor")
+	if actor.get("actor_mode")!=1 or actor.get("active")!=true or actor.get("vitals",{}).get("hull")!=_state.maximum_hull:return reject("Traffic relaunch requires restored source statistics")
+	if _recycling and actor.get("spawn_generation")!=_state.spawn_generation+1:return reject("Traffic relaunch has not advanced to its next instance")
+	if not _ambient.is_empty() and actor.get("travel_cycle")!=_state.travel_cycle+1:return reject("Traffic relaunch has not advanced its route cycle")
+	var route: RefCounted=_route.fork_for_frame()
+	if not route.restart_ambient_route():return reject(route.error)
+	_state.previous_hull=_state.maximum_hull;_state.damage_accumulated=0
+	_state.target_index=-1;_state.target_selected=false;_state.fire_desired=false
+	# Reinitialization clears the damage-trigger flag, but retains any active
+	# boost, its target/duration and both clocks while restoring cruise speed.
+	_state.damage_boost=false;_state.speed=float(_definition.cruise_speed)
+	if not _ambient.is_empty():_state.route_elapsed_ms=0;_state.parked_elapsed_ms=0;_state.travel_cycle=actor.travel_cycle
+	if _recycling:_state.spawn_generation=actor.spawn_generation
+	_route=route
+	return true
+
+func configure_convoy(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction:return reject("Convoy guidance requires its generated encounter")
+	var rules:=Convoy.lifecycle(bindings,construction.snapshot())
+	if rules.is_empty():return reject("Unsupported convoy ship guidance")
+	var actor:=Initial.new()
+	if not actor.configure_convoy(bindings,catalogues,construction,actor_id):return reject(actor.error)
+	var body:=actor.snapshot()
+	if body.population_group!="fighter":return reject("Capital ships require their own motion owner")
+	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
+	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Convoy guidance lacks ordinary ship tuning")
+	_training=rules;_training_death=rules
+	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=int(rules.rank)
+	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
+	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
+	if not set_initial_route(construction.route(actor_id)):
+		var message:=error;clear();return reject(message)
+	return true
+
+func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction:return reject("Alioth guidance requires its generated encounter")
+	var rules:=Alioth.lifecycle(bindings,construction.snapshot())
+	if rules.is_empty():return reject("Unsupported Alioth ship guidance")
+	var actor:=Initial.new()
+	if not actor.configure_alioth_attack(bindings,catalogues,construction,actor_id):return reject(actor.error)
+	var body:=actor.snapshot()
+	if body.population_group!="fighter":return reject("Freighters require their own motion owner")
+	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
+	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Alioth guidance lacks ordinary ship tuning")
+	_training=rules;_training_death=rules
+	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=int(rules.rank)
+	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
+	_boost_enabled=bool(rules.alioth_lifecycle.boost_enabled)
+	_state.alioth_targets_cleared=false
+	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
+	if not set_initial_route(construction.route(actor_id)):
+		var message:=error;clear();return reject(message)
+	return true
+
+func apply_alioth_escape(owner: RefCounted) -> bool:
+	error=""
+	if not owner is AliothSequence or not _training.has("alioth_lifecycle") or _state.get("alioth_targets_cleared",true) or _route==null:return reject("Alioth escape requires its retained combat guidance")
+	var route: RefCounted=_route.fork_for_frame()
+	if not route.replace_with_alioth_escape(owner):return reject(route.error)
+	_route=route;_state.alioth_targets_cleared=true
+	# Clearing the statistics target list does not reset selection/boost clocks,
+	# firing desire, straight-flight state or the preceding desired position.
+	return true
+
 func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Dictionary, random_state: Variant, target_actors: Array=[]) -> Dictionary:
 	error=""
 	if _state.is_empty(): return fail("Configure opening NPC guidance before updating")
 	if not Vitals.integer(delta_ms): return fail("NPC guidance requires integer elapsed milliseconds")
+	if _frame_limit>0 and delta_ms>_frame_limit:return fail("Ambient guidance duration exceeds its source frame limit")
 	for key in _identity:
 		if actor.get(key)!=_identity[key]: return fail("NPC guidance actor identity changed")
+	if _recycling and actor.get("spawn_generation")!=_state.spawn_generation:return fail("NPC guidance belongs to another traffic instance")
 	for key in ["base_content_id","binding_id"]:
 		if player.get(key)!=_identity[key]: return fail("NPC target belongs to another content identity")
 	if not actor.get("active") is bool: return fail("NPC guidance requires explicit activity")
 	var held: bool = not _holding.is_empty() and not actor.active and actor.get("actor_mode")==_holding.actor_mode
 	var pools: Variant = actor.get("vitals")
 	if not pools is Dictionary or not Vitals.integer(pools.get("hull")) or pools.hull>_state.maximum_hull: return fail("NPC guidance requires supported hull state")
+	var waiting: bool=not _ambient.is_empty() and not actor.active and actor.get("actor_mode")==int(_ambient.initial_mode) and pools.hull>0
+	var outbound: bool=not _ambient.is_empty() and actor.active and actor.get("actor_mode")==int(_ambient.departure_mode)
+	if not _ambient.is_empty() and actor.get("travel_cycle")!=_state.travel_cycle:return fail("Traffic body and guidance disagree about their launch cycle")
 	var initializing: bool=not _training.is_empty() and actor.active and actor.get("actor_mode")==0
 	var dying: bool=_has_destruction and pools.hull==0 and actor.active and actor.get("actor_mode") in [1,3,4]
+	if outbound and pools.hull==0:dying=true
 	if not _training_death.is_empty() and initializing and pools.hull==0:dying=true
-	if not dying and (pools.hull==0 or (not held and not initializing and (not actor.active or actor.get("actor_mode")!=1))): return fail("NPC guidance requires supported holding, flight or death mode")
-	if not root_pose is Transform3D or not actor.get("pose") is Transform3D or not root_pose.is_finite() or not actor.pose.is_finite() or root_pose.origin!=actor.pose.origin: return fail("NPC root and combat poses must share a finite source position")
+	if not dying and not waiting and not outbound and (pools.hull==0 or (not held and not initializing and (not actor.active or actor.get("actor_mode")!=1))): return fail("NPC guidance requires supported holding, flight or death mode")
+	if not root_pose is Transform3D or not actor.get("pose") is Transform3D or not root_pose.is_finite() or not actor.pose.is_finite() or (not outbound and not waiting and root_pose.origin!=actor.pose.origin): return fail("NPC root and combat poses must share a finite source position")
 	if not dying and (not Flight.rigid_pose(root_pose) or not Flight.rigid_pose(actor.pose)): return fail("Live NPC guidance requires unscaled source axes")
 	if not Flight.rigid_pose(player.get("pose")) or not player.get("active") is bool or not Vitals.integer(player.get("hull")) or not player.get("special_flight") is bool or not player.get("targeting_blocked") is bool: return fail("NPC guidance requires explicit player pose, activity, hull and targeting/flight state")
 	if _full_hold.is_empty() and _training.is_empty() and held and (not player.targeting_blocked or actor.get("spatial_half_extent")!=_holding.spatial_half_extent): return fail("Opening holding mode requires its initial engagement range and player suppression")
@@ -137,23 +289,39 @@ func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Di
 		var alternate: Variant=player.alternate_position
 		if alternate!=null and (not alternate is Vector3 or not alternate.is_finite()):return fail("Invalid alternate player position")
 	var targets:=[]
+	var without_targets: bool=_state.get("alioth_targets_cleared",false)
 	if not _training.is_empty():
 		targets=training_targets(player,target_actors)
-		if targets.is_empty():return {}
-		if actor.get("hostile")!=(int(actor.actor_kind)==8):return fail("Combat-training guidance requires refreshed source hostility")
+		if not error.is_empty() or (targets.is_empty() and not without_targets):return {}
+		if _identity.campaign_cursor==7 and actor.get("hostile")!=(int(actor.actor_kind)==8):return fail("Combat-training guidance requires refreshed source hostility")
 	for key in ["selection_elapsed_ms","boost_elapsed_ms"]:
 		if _state[key]>Vitals.MAX_INTEGER-delta_ms: return fail("NPC guidance timer overflow")
 	var random := Random.new()
 	if not random.restore(random_state): return fail(random.error)
 	var next := _state.duplicate(true)
+	if waiting:
+		# A parked mode4 ship skips selection. Before its first relaunch, the
+		# source still ages selection/boost clocks through the normal actor pass.
+		if next.parked_elapsed_ms<=int(_ambient.parked_clock_limit_ms):
+			next.selection_elapsed_ms+=delta_ms;next.boost_elapsed_ms+=delta_ms;next.parked_elapsed_ms+=delta_ms
+		var dormant:=_identity.duplicate()
+		dormant.merge({"direction":root_pose.basis.z,"speed":next.speed,"steering_enabled":false,"travel_enabled":false,
+			"fire_requested":false,"holding":false,"initializing":false,"activation":"","node_draw_requested":false,
+			"traffic_waiting":true,"random_state":random.snapshot()})
+		_state=next;_started=true
+		return dormant
 	next.selection_elapsed_ms+=delta_ms
 	next.boost_elapsed_ms+=delta_ms
 	var separation := Vectors.added(player.pose.origin,-root_pose.origin)
 	if not separation.is_finite(): return fail("NPC target separation exceeds source precision")
 	var eligible: bool = player.active and player.hull>0
 	var engaged := inside(separation,float(actor.spatial_half_extent))
-	var target: Dictionary=player if _training.is_empty() else targets[0]
-	if not _training.is_empty():
+	var target: Dictionary=player if _training.is_empty() or without_targets else targets[0]
+	if without_targets:
+		# A null membership bypasses target refresh and its random draws. Route
+		# movement and ordinary boosts still run, including after the final point.
+		target=player.duplicate();target.actor_id=-1;target.target_kind="route"
+	elif not _training.is_empty():
 		if _training_death.is_empty() or actor.get("actor_mode") not in _training_death.selection_skipped_modes:
 			next=Targeting.select(next,actor,targets,random,_definition,_training)
 		if next.target_index>=0:target=targets[int(next.target_index)]
@@ -210,7 +378,7 @@ func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Di
 		_state=next
 		_started=true
 		return held_result
-	var routed: bool = not next.target_selected
+	var routed: bool = without_targets or not next.target_selected
 	var has_target: bool=not routed
 	var target_kind: String="player" if _training.is_empty() else String(target.target_kind)
 	var staged_route: RefCounted = null if _route==null else _route.fork_for_frame()
@@ -222,11 +390,14 @@ func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Di
 		route_event=staged_route.advance(root_pose.origin)
 		if route_event.is_empty(): return fail(staged_route.error)
 		if not _training.is_empty() and route_event.target==null:
-			routed=false
-			if previous_route.get("completed",false):
+			if without_targets:
+				target_position=next.desired_position;target_kind="retained_position"
+			elif previous_route.get("completed",false):
+				routed=false
 				target=targets[0];target_position=target.pose.origin;target_kind="player";has_target=true
 				next.target_index=0;next.target_selected=true
 			else:
+				routed=false
 				# Advancing the last point preserves the preceding desired position
 				# for one pass. The next pass falls back to target zero.
 				target_position=next.desired_position;target_kind="retained_position"
@@ -244,11 +415,24 @@ func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Di
 	if dying:
 		_route=staged_route
 		return _death_decision(next,root_pose,random.snapshot())
+	if not _ambient.is_empty():
+		next.route_elapsed_ms=next.route_elapsed_ms+delta_ms if routed else 0
+		if outbound or next.route_elapsed_ms>=int(_ambient.departure_after_route_ms):
+			if not outbound:next.route_elapsed_ms=0
+			next.speed=Vitals.single(next.speed*float(_ambient.departure_speed_multiplier))
+			var departing:=_identity.duplicate()
+			departing.merge({"target_kind":target_kind,"target_actor_id":-1,"route_event":route_event,
+				"direction":root_pose.basis.z,"speed":next.speed,"steering_enabled":false,"travel_enabled":true,
+				"fire_requested":false,"holding":false,"initializing":false,"activation":"","node_draw_requested":true,
+				"traffic_departure":true,"traffic_parked":next.speed>float(_ambient.park_above_speed),"random_state":random.snapshot()})
+			if departing.traffic_parked:next.parked_elapsed_ms=0
+			_state=next;_route=staged_route;_started=true
+			return departing
 	separation=Vectors.added(target_position,-root_pose.origin)
 	if not separation.is_finite():return fail("Selected NPC target separation exceeds source precision")
 	if activation!="proximity":steering_separation=separation
 	eligible=target.active and target.hull>0
-	if pools.hull<next.previous_hull:
+	if _boost_enabled and pools.hull<next.previous_hull:
 		next.damage_accumulated+=next.previous_hull-pools.hull
 		next.previous_hull=pools.hull
 		var percent := Vitals.single(Vitals.single(Vitals.single(float(next.damage_accumulated))/Vitals.single(float(next.maximum_hull)))*float(_definition.damage_percent_scale))
@@ -256,7 +440,7 @@ func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Di
 			next.damage_accumulated=0
 			next.boost_elapsed_ms=int(_definition.damage_boost_elapsed_ms)
 			next.damage_boost=true
-	if next.boost_elapsed_ms>int(_definition.boost_period_ms) and not next.boost_active:
+	if _boost_enabled and next.boost_elapsed_ms>int(_definition.boost_period_ms) and not next.boost_active:
 		next.boost_elapsed_ms=0
 		if next.damage_boost or random.next_int(int(_definition.boost_roll_bound))<int(_definition.boost_chance):
 			next.boost_duration_ms=int(_definition.boost_duration_base_ms)+random.next_int(int(_definition.boost_duration_bound_ms))
@@ -314,7 +498,7 @@ func _death_decision(next: Dictionary, root_pose: Transform3D, random_state: Dic
 
 
 func training_targets(player: Dictionary, actors: Array) -> Array:
-	if actors.size()!=int(_training.actor_count):fail("Combat-training targeting requires all four bodies");return []
+	if actors.size()!=int(_training.actor_count):fail("Ordinary NPC targeting requires the complete configured population");return []
 	for id in actors.size():
 		var row: Variant=actors[id]
 		if not row is Dictionary or row.get("actor_id")!=id or row.get("actor_kind")!=_training.actor_kinds[id] or row.get("hull_catalogue_id")!=_training.hull_catalogue_ids[id]:fail("Combat-training target membership changed");return []
@@ -323,9 +507,12 @@ func training_targets(player: Dictionary, actors: Array) -> Array:
 		if not row.get("active") is bool or not row.get("statistics_targeting_blocked") is bool or not Vitals.integer(row.get("vitals",{}).get("hull")) or not row.get("pose") is Transform3D or not row.pose.is_finite():fail("Invalid combat-training target statistics");return []
 		if not Vectors.added(row.pose.origin,-player.pose.origin).is_finite():fail("Combat-training target exceeds source precision");return []
 	var result:=[]
+	if _state.get("alioth_targets_cleared",false):return result
 	for id in _training.target_memberships[int(_identity.actor_id)]:
 		if int(id)==int(_training.player_target_id):
-			var target:=player.duplicate(true);target.actor_id=-1;target.target_kind="player";result.append(target)
+			# The source's nonplayer scan classifies player statistics as kind0.
+			# Challenge memberships can place that entry after an NPC.
+			var target:=player.duplicate(true);target.actor_id=-1;target.actor_kind=0;target.target_kind="player";result.append(target)
 		else:
 			var row: Dictionary=actors[int(id)]
 			result.append({"actor_id":int(id),"actor_kind":int(row.actor_kind),"target_kind":"npc","pose":row.pose,
@@ -358,6 +545,10 @@ func fork_for_frame() -> RefCounted:
 	copy._has_destruction=_has_destruction
 	copy._full_hold=_full_hold.duplicate(true);copy._pirate=_pirate.duplicate(true);copy._training=_training.duplicate(true)
 	copy._training_death=_training_death.duplicate(true)
+	copy._ambient=_ambient.duplicate(true)
+	copy._frame_limit=_frame_limit
+	copy._recycling=_recycling
+	copy._boost_enabled=_boost_enabled
 	return copy
 
 static func inside(separation: Vector3, half_extent: float) -> bool:
@@ -366,6 +557,10 @@ static func inside(separation: Vector3, half_extent: float) -> bool:
 func clear() -> void:
 	error="";_definition={};_identity={};_state={};_holding={};_route=null;_started=false
 	_has_destruction=false;_full_hold={};_pirate={};_training={};_training_death={}
+	_ambient={}
+	_frame_limit=0
+	_recycling=false
+	_boost_enabled=true
 
 func reject(message: String) -> bool:
 	error=message

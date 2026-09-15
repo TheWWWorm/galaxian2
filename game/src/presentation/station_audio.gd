@@ -46,9 +46,15 @@ func configure_station_return(library: RefCounted, bindings: RefCounted, campaig
 	clear();_resources=Resources.new()
 	if not _resources.configure_station_return(library,bindings,campaign_cursor):return reject(_resources.error)
 	var ids:=[]
-	for event in StationReturn.station_return(bindings,campaign_cursor).events:
+	for event in StationReturn.station_conversation(bindings,campaign_cursor).events:
 		ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
+
+func adopt_conversation(prepared: Node) -> void:
+	# Retain currently playing payment/equipment effects when story speech opens.
+	if _player!=null:_player.free();_player=null
+	_resources=prepared._resources;_clips=prepared._clips.duplicate();_line=-1
+	diagnostics=prepared.diagnostics.duplicate(true)
 
 func _prepare_voices(ids: Array) -> bool:
 	for id in ids:
@@ -68,12 +74,16 @@ func configure_station_equipment(library: RefCounted, bindings: RefCounted) -> b
 	for event in bindings.station_equipment.events:ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
 
-func prepare_equipment_effects(rules: Dictionary) -> bool:
-	if _resources==null:return reject("Station audio is unavailable")
+func prepare_equipment_effects(rules: Dictionary,library: RefCounted=null,bindings: RefCounted=null) -> bool:
+	var resources: RefCounted=_resources
+	if resources==null:
+		if library==null or bindings==null:return reject("Station audio is unavailable")
+		resources=Resources.new()
+		if not resources.configure_station(library,bindings):return reject(resources.error)
 	var clips:={}
 	for key in ["mount_audio_id","unmount_audio_id"]:
-		var id:=int(rules[key]);var clip: Dictionary=_resources.prepare(id)
-		if clip.is_empty():return reject(_resources.error)
+		var id:=int(rules[key]);var clip: Dictionary=resources.prepare(id)
+		if clip.is_empty():return reject(resources.error)
 		if clip.has("unsupported") or not clip.get("stream") is AudioStream or clip.get("voice",false) or clip.spatial or clip.looping:return reject("Unsupported equipment sound")
 		clips[id]=clip
 	_effect_clips=clips
@@ -88,6 +98,15 @@ func play_equipment_effect(id: int) -> void:
 	player.finished.connect(func():_effects.erase(id);player.queue_free())
 	_effect_history.append(id)
 
+func prepare_contract_effect(library: RefCounted,bindings: RefCounted) -> bool:
+	var resources:=Resources.new()
+	if not resources.configure_station(library,bindings):return reject(resources.error)
+	var id:=int(bindings.early_contracts.delivery_results.notification_sound_id)
+	var clip: Dictionary=resources.prepare(id)
+	if clip.is_empty() or clip.has("unsupported") or not clip.get("stream") is AudioStream or clip.get("voice",false) or clip.spatial or clip.looping:return reject("The contract payment sound is unavailable")
+	_effect_clips[id]=clip
+	return true
+
 func valid_line(line: int) -> bool:return line>=-1 and line<=_clips.size()
 
 func present(line: int) -> bool:
@@ -98,7 +117,7 @@ func present(line: int) -> bool:
 	if line<0 or line>=_clips.size():return true
 	if _clips[line]==null:return true
 	var clip: Dictionary=_clips[line]
-	_player=Streams.player(clip.stream,false);add_child(_player)
+	_player=Streams.player(clip.stream,false,"Voice");add_child(_player)
 	_player.volume_db=linear_to_db(clip.gain);_player.play();_player.stream_paused=_paused
 	_history.append({"line":line,"source_id":clip.id,"source_bank":clip.source_bank,"source_index":clip.source_index})
 	return true

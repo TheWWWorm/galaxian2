@@ -74,7 +74,8 @@ func verify_pack_failures(pack: String, base: Dictionary) -> void:
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		var reader:=Bindings.new();check(reader.open(pack,base),reader.error)
 		var accepted:=reader.open(directory,base)
-		if scenario=="empty":check(accepted and reader.opening_dialogue.voice.is_empty(),"Explicit unsupported voice capability was rejected: "+reader.error)
+		if scenario=="empty" and body.get("combat_training_story",{}).is_empty():check(accepted and reader.opening_dialogue.voice.is_empty(),"Explicit unsupported voice capability was rejected: "+reader.error)
+		elif scenario=="empty":check(not accepted and reader.opening_dialogue.is_empty(),"Training retained its removed shared voice prerequisite")
 		else:check(not accepted and reader.opening_dialogue.is_empty() and reader.audio.is_empty(),"Invalid replacement retained radio/audio data: "+scenario)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)
 

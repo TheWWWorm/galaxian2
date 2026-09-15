@@ -28,7 +28,7 @@ def prepare(source: Path, base: Path, output: Path, checkpoint=lambda *_: None):
         raise ContentError('Keep declarations outside the engine, original app and base cache')
     checkpoint('Verifying imported base', 0.0)
     manifest = verify_cache(original_base, checkpoint)
-    with Bundle(original_source) as bundle:
+    with Bundle(original_source, checkpoint) as bundle:
         if bundle.profile['edition'] != manifest['profile']['edition']:
             raise ContentError('Executable and imported base use different editions')
         resources = bundle.resources()
@@ -135,6 +135,13 @@ def prepare(source: Path, base: Path, output: Path, checkpoint=lambda *_: None):
     combat_training_destruction = declarations.pop('combat_training_destruction')
     combat_training_visuals = declarations.pop('combat_training_visuals')
     combat_training_story = declarations.pop('combat_training_story')
+    mido_travel = declarations.pop('mido_travel')
+    early_contracts = declarations.pop('early_contracts')
+    engine_particles = declarations.pop('engine_particles')
+    ambient_population = declarations.pop('ambient_population')
+    ambient_combat = declarations.pop('ambient_combat')
+    freighter_destruction = declarations.pop('freighter_destruction')
+    ambient_lifecycle = declarations.pop('ambient_lifecycle')
     player_destruction = declarations.pop('player_destruction')
     full_hold_particles = declarations.pop('full_hold_particles')
     game_over_presentation = declarations.pop('game_over_presentation')
@@ -224,6 +231,13 @@ def prepare(source: Path, base: Path, output: Path, checkpoint=lambda *_: None):
                        'combat_training_destruction': combat_training_destruction,
                        'combat_training_visuals': combat_training_visuals,
                        'combat_training_story': combat_training_story,
+                       'mido_travel': mido_travel,
+                       'early_contracts': early_contracts,
+                       'engine_particles': engine_particles,
+                       'ambient_population': ambient_population,
+                       'ambient_combat': ambient_combat,
+                       'freighter_destruction': freighter_destruction,
+                       'ambient_lifecycle': ambient_lifecycle,
                        'player_destruction': player_destruction,
                        'full_hold_particles': full_hold_particles,
                        'game_over_presentation': game_over_presentation,

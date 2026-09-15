@@ -15,13 +15,16 @@ func prepare_model(model: Node3D) -> bool:
 	error=""
 	for i in model.surfaces.size():
 		var surface: Dictionary=model.surfaces[i]
-		if surface.uvs.is_empty() or surface.normals.is_empty() or not surface.colors.is_empty() or not surface.tracks.get("uv",[]).is_empty():
+		if not supported_surface(surface):
 			error="Unsupported additive model vertex or UV animation layout";return false
 		var material:=ShaderMaterial.new();material.shader=ShaderSource
 		material.set_shader_parameter("diffuse_texture",model.materials[i].get_shader_parameter("diffuse_texture"))
 		model.materials[i]=material;model.instances[i].material_override=material
 		model.instances[i].top_level=true
 	return true
+
+static func supported_surface(surface: Dictionary) -> bool:
+	return not surface.uvs.is_empty() and not surface.normals.is_empty() and surface.colors.is_empty() and surface.tracks.get("uv",[]).is_empty()
 
 func prepare_surfaces(animation: Dictionary, root: Transform3D, parent_rgba: PackedByteArray, global_tint: Vector4) -> Array:
 	error=""

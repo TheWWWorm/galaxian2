@@ -144,7 +144,7 @@ func capture(panel: Control, library: RefCounted, event: int, mobile: bool):
 	if directory.is_empty() or DisplayServer.get_name()=="headless":return
 	var surface:=panel.get_viewport() as SubViewport
 	panel.set_mobile_layout(mobile)
-	surface.size=Vector2i(500,850) if mobile else Vector2i(1000,700)
+	surface.size=Vector2i(850,500) if mobile else Vector2i(1000,700)
 	await process_frame;await process_frame;await RenderingServer.frame_post_draw
 	DirAccess.make_dir_recursive_absolute(directory)
 	var name:="%s-%s-%d-%s.png"%[library.manifest.profile.edition,library.active_language,event,"phone" if mobile else "desktop"]

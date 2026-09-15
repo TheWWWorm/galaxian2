@@ -7,8 +7,10 @@ const Portraits=preload("res://src/presentation/portrait_compositor.gd")
 const Definitions=preload("res://src/content/station_presentation_definitions.gd")
 const MiningStory=preload("res://src/content/ordinary_flight_definitions.gd")
 const StationReturn=preload("res://src/content/ordinary_flight_definitions.gd")
+const Art=preload("res://src/presentation/original_ui.gd")
 var error:=""
 var portrait_diagnostics:={}
+var _art: RefCounted
 var _identity:={}
 var _portraits:={}
 var _labels:={}
@@ -51,9 +53,15 @@ func configure(library: RefCounted, bindings: RefCounted, visuals: RefCounted) -
 	if library==null or bindings==null or visuals==null or not Definitions.parameters(bindings.station_presentation):return reject("Station conversation resources are unavailable")
 	return _configure_resources(library,bindings,visuals,bindings.station_presentation.dialogue)
 
-func configure_mining_briefing(library: RefCounted, bindings: RefCounted, visuals: RefCounted, campaign_cursor:=2) -> bool:
+func configure_empty(library: RefCounted,bindings: RefCounted) -> bool:
+	clear()
+	if library.manifest.get("content_id")!=bindings.base_content_id:return reject("Station dialogue belongs to another content identity")
+	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"language":library.active_language}
+	return true
+
+func configure_mining_briefing(library: RefCounted, bindings: RefCounted, visuals: RefCounted, campaign_cursor:=2, ordinary_world:=false) -> bool:
 	if library==null or bindings==null or visuals==null or not Definitions.parameters(bindings.station_presentation):return reject("Mining briefing resources are unavailable")
-	var rules:=MiningStory.briefing(bindings,campaign_cursor)
+	var rules:=MiningStory.briefing(bindings,campaign_cursor,ordinary_world)
 	if rules.is_empty():return reject("Mining briefing resources are unavailable for this departure")
 	return _configure_resources(library,bindings,visuals,rules)
 
@@ -65,22 +73,36 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, visua
 
 func configure_station_return(library: RefCounted, bindings: RefCounted, visuals: RefCounted, campaign_cursor:=3) -> bool:
 	if library==null or bindings==null or visuals==null or not Definitions.parameters(bindings.station_presentation):return reject("Station return resources are unavailable")
-	var rules:=StationReturn.station_return(bindings,campaign_cursor)
+	var rules:=StationReturn.station_conversation(bindings,campaign_cursor)
 	if rules.is_empty():return reject("Station return resources are unavailable for this visit")
 	return _configure_resources(library,bindings,visuals,rules)
 
 func _configure_resources(library: RefCounted, bindings: RefCounted, visuals: RefCounted, rules: Dictionary) -> bool:
 	clear();_identity={};_portraits={};_labels={};portrait_diagnostics={}
+	_art=null;theme=null
 	if library.manifest.get("content_id")!=bindings.base_content_id or visuals.base_content_id!=bindings.base_content_id:return reject("Station conversation belongs to another base content")
 	for key in ["next_text_id","final_text_id"]:
 		var id:=int(rules[key])
 		if id>=library.strings.size() or library.strings[id].is_empty():return reject("Station navigation text is unavailable")
 		_labels[key]=library.strings[id]
 	var composer:=Portraits.new()
-	for id in [0,2,16]:
-		var portrait: Dictionary=composer.compose_definition(library,bindings,visuals,id,"large",bindings.station_presentation.portraits[str(id)])
+	var speakers:=[0,2,16]
+	for event in rules.get("events",[]):
+		var id:=int(event.speaker_id)
+		if not speakers.has(id):speakers.append(id)
+	for id in speakers:
+		var definition: Dictionary=rules.get("portraits",{}).get(str(id),bindings.station_presentation.portraits.get(str(id),{}))
+		if definition.is_empty():definition=bindings.resolve_speaker_portrait(id)
+		if definition.is_empty():return reject(bindings.error)
+		var portrait: Dictionary=composer.compose_definition(library,bindings,visuals,id,"large",definition)
 		if portrait.is_empty():return reject(composer.error)
 		_portraits[id]=ImageTexture.create_from_image(portrait.image)
+	if not bindings.mido_travel.get("map",{}).get("ui",{}).is_empty():
+		var art:=Art.new()
+		if not art.configure(library,bindings,visuals):return reject(art.error)
+		_art=art
+		var original:=Theme.new();original.default_font=art.font;theme=original
+	set_mobile_layout(_mobile)
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"language":library.active_language}
 	return true
 
@@ -92,7 +114,7 @@ func present(state: Dictionary) -> bool:
 	if _identity.is_empty() or not state.get("dialogue") is Dictionary:return reject("Invalid station conversation")
 	var line: Dictionary=state.dialogue
 	if not line.get("visible",false):clear();return true
-	if line.get("speaker_id") not in [0,2,16] or not line.get("text") is String or not line.get("speaker_name") is String:return reject("Invalid station conversation line")
+	if not _portraits.has(line.get("speaker_id")) or not line.get("text") is String or not line.get("speaker_name") is String:return reject("Invalid station conversation line")
 	if not line.get("desktop_text",line.text) is String:return reject("Invalid desktop station text")
 	if _snapshot==line:return true
 	_snapshot=line.duplicate(true);_name.text=line.speaker_name;_body.text=line.text
@@ -110,6 +132,12 @@ func set_active(value: bool) -> void:
 
 func set_mobile_layout(value: bool) -> void:
 	_mobile=value
+	if _art!=null:
+		_panel.add_theme_stylebox_override("panel",_art.styles[value].panel)
+		_name.add_theme_color_override("font_color",Color.WHITE)
+		for label in [_name,_counter]:label.add_theme_font_size_override("font_size",20 if value else 14)
+		_art.apply_button(_previous,value,true);_art.apply_button(_next,value)
+		_relayout();return
 	var scale:=1.0 if value else 0.5
 	_body.add_theme_font_size_override("normal_font_size",int(30*scale))
 	_name.add_theme_font_size_override("font_size",int(32*scale))
@@ -128,11 +156,11 @@ func _relayout() -> void:
 	var width:=minf(1120*scale,maxf(1,size.x-24))
 	var height:=minf(390*scale,maxf(1,size.y-24))
 	var narrow:=_mobile and width<600
-	_body.add_theme_font_size_override("normal_font_size",24 if narrow else int(30*scale))
-	_name.add_theme_font_size_override("font_size",24 if narrow else int(32*scale))
+	_body.add_theme_font_size_override("normal_font_size",(20 if _mobile else 14) if _art!=null else (24 if narrow else int(30*scale)))
+	_name.add_theme_font_size_override("font_size",(20 if _mobile else 14) if _art!=null else (24 if narrow else int(32*scale)))
 	_portrait.custom_minimum_size=Vector2(104,130) if narrow else Vector2(160*scale,180*scale)
 	_body.custom_minimum_size.y=32*scale
-	for button in [_next,_previous]:button.custom_minimum_size=Vector2(44,44) if _mobile else Vector2.ZERO
+	for button in [_next,_previous]:button.custom_minimum_size=Vector2(44,44) if _mobile else Vector2(0,30 if _art!=null else 0)
 	# Child font/touch-target changes invalidate the container's minimum size.
 	# Apply the requested compact size after them and again when that minimum
 	# settles. Position from the actual panel size, including translated labels.

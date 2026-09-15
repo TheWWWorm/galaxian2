@@ -91,7 +91,7 @@ func verify_packs(pack: String,base: Dictionary):
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(header));file.close()
 		var reader:=Bindings.new();check(reader.open(pack,base),reader.error)
 		var accepted:=reader.open(directory,base)
-		var optional_empty: bool=scenario=="empty_dependencies" or (scenario=="empty" and original.get("arrival_session",{}).is_empty())
+		var optional_empty: bool=(scenario=="empty_dependencies" and original.get("station_entry",{}).is_empty()) or (scenario=="empty" and original.get("arrival_session",{}).is_empty())
 		check(accepted==optional_empty,"Binding reader mishandled handoff "+scenario+": "+reader.error)
 		check(reader.opening_handoff.is_empty(),"Replacement retained an old handoff capability")
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)

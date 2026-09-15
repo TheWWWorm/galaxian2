@@ -3,7 +3,7 @@ import importlib.util
 import struct
 from types import SimpleNamespace
 import unittest
-from gof2_content.image_regions import extract_image_bindings, MAC_RECORD, MAC_RANGE, ARM_RANGE
+from gof2_content.image_regions import extract_image_bindings, MAC_RECORD, MAC_STACK_RECORD, MAC_RANGE, ARM_RANGE
 from test_font_selection import expand
 from test_materials import arm_wide
 from test_ship_models import branch
@@ -25,9 +25,10 @@ c4f870050420
 """
 
 
-def fixture(mac, sequence=False, relocation=0):
+def fixture(mac, sequence=False, relocation=0, stacked=False):
     start=0x10000+relocation
     spec=(MAC_RANGE if mac else ARM_RANGE) if sequence else (MAC_RECORD if mac else ARM_RECORD)
+    if stacked:spec=MAC_STACK_RECORD
     code,fields=expand(spec)
     for key,(at,n) in fields.items():
         if key.startswith('call') or key in ['allocate','payload','insert']:
@@ -41,6 +42,7 @@ def fixture(mac, sequence=False, relocation=0):
         elif key.startswith('value'):
             value,reg,top=({'value_16':5,'value_28':900,'value_30':42}[key],{'value_16':0,'value_28':2,'value_30':3}[key],False) if sequence else ({'value_e':5,'value_1e':900,'value_26':7,'value_2a':42}[key],{'value_e':0,'value_1e':2,'value_26':2,'value_2a':3}[key],key=='value_26')
             raw=arm_wide(value,reg,top)
+        elif key=='stack':raw=struct.pack('<i',-0x2c00)
         else:
             value=({'count_d':2,'count_7c':3,'base_31':900,'base_41':42}[key] if sequence else {'texture':900,'region':7,'id':42}[key])
             raw=value.to_bytes(n,'little')

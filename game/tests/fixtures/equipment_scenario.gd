@@ -63,6 +63,13 @@ func fail(message: String) -> RefCounted:
 	error=message
 	return null
 
+static func prepare_alioth_component(equipment: RefCounted,bindings: RefCounted,catalogues: RefCounted) -> bool:
+	# Detached component setup from the verified equipment prerequisite. Apply
+	# supported equipment/location transitions without creating campaign progress.
+	if not equipment.prepare_training_completion(bindings,catalogues) or not equipment.complete_training(equipment.snapshot().cargo) or not equipment.apply_station_exchange(bindings,catalogues,9):return false
+	var arrival:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":10,"from_station_id":78,"station_id":79,"system_id":15,"source_state":2,"world_type":3,"audio_selector":1}
+	return equipment.relocate_local_arrival(bindings,catalogues,arrival) and equipment.relocate_convoy_arrival(bindings,catalogues,bindings.mido_travel.convoy_capture.arrival)
+
 func station_owner(bindings: RefCounted, catalogues: RefCounted) -> RefCounted:
 	# Restore only a capture already checked against the real tutorial producer
 	# and replay every equipment transaction again. This helper never writes a save.

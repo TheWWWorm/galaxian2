@@ -22,7 +22,7 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 	error=""
 	if bindings==null or library==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.flight_notices):return reject("Flight notices require supported departure declarations")
 	var entry: Dictionary=construction.snapshot()
-	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or library.manifest.get("content_id")!=bindings.base_content_id or library.active_language.is_empty() or OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty():return reject("Flight notices belong to another departure or language")
+	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or library.manifest.get("content_id")!=bindings.base_content_id or library.active_language.is_empty() or OrdinaryFlight.for_departure(bindings,entry).is_empty():return reject("Flight notices belong to another departure or language")
 	var messages:={}
 	var definitions: Dictionary=bindings.flight_notices.messages.duplicate(true)
 	if entry.campaign_cursor==7:
@@ -42,7 +42,10 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 		messages[int(key)]={"source_id":int(key),"text_ids":text_ids,"display_text_ids":display_ids,"text":str(rule.separator).join(pieces),"rgb":rgb}
 	if not bindings.station_flight.is_empty():
 		var data: Dictionary=bindings.station_flight
-		if not StationFlight.parameters(data) or entry.location.station_id!=int(data.station_id) or entry.location.system_id!=int(data.system_id):return reject("Station notices belong to another flight location")
+		if not StationFlight.parameters(data):return reject("Station notices require their verified declarations")
+		if entry.campaign_cursor in [10,11,12,13,14,16,18]:
+			data=data.duplicate(true);data.station_id=int(entry.location.station_id);data.system_id=int(entry.location.system_id)
+		if entry.location.station_id!=int(data.station_id) or entry.location.system_id!=int(data.system_id):return reject("Station notices belong to another flight location")
 		var tables: RefCounted=catalogues
 		if tables==null:
 			tables=Catalogues.new()

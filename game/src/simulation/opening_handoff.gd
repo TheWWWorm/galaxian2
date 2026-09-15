@@ -8,7 +8,20 @@ const Loadout=preload("res://src/simulation/opening_loadout.gd")
 const Cache=preload("res://src/simulation/flight_player_cache.gd")
 const Player=preload("res://src/simulation/opening_player_state.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
+const Reputation=preload("res://src/simulation/faction_reputation.gd")
 var error:=""
+
+static func calculate_progress(rules: Dictionary, cursor: Variant, player_kills: Variant, pirate_kills: Variant, other_score: Variant) -> Dictionary:
+	if not Definitions.parameters(rules):return {}
+	for value in [cursor,player_kills,pirate_kills,other_score]:
+		if not Numbers.integer(value,0,2147483647):return {}
+	if pirate_kills>player_kills:return {}
+	var score: int=other_score+player_kills*int(rules.player_kill_weight)+pirate_kills*int(rules.pirate_kill_weight)+cursor*int(rules.cursor_weight)
+	if score>2147483647:return {}
+	var rank:=0
+	for i in rules.rank_thresholds.size():
+		if score>=int(rules.rank_thresholds[i]):rank=i
+	return {"campaign_cursor":cursor,"rank":rank,"rank_score":score,"player_kills":player_kills,"pirate_kills":pirate_kills,"other_score":other_score}
 
 func prepare(bindings: RefCounted, catalogues: RefCounted, opening: Dictionary) -> Dictionary:
 	error=""
@@ -29,9 +42,7 @@ func prepare(bindings: RefCounted, catalogues: RefCounted, opening: Dictionary) 
 	var cached: Variant=world.get("player_cache")
 	if not Cache.matches(cached,seed,int(rules.opening_cursor)):return fail("Opening handoff lacks its retained player cache")
 	if live.get("ship_id")!=seed.ship_id or live.get("equipment_ids")!=seed.equipment_ids:return fail("Opening handoff does not support an altered ship or loadout")
-	# Fresh equipment resets the reputation override and contains no device
-	# capable of replacing it. Source lethal-hit gates can suppress a pirate
-	# adjustment; the retained interval includes every such outcome.
+	# This opening has no device capable of changing the reputation override.
 	for id in seed.equipment_ids:
 		if catalogues.tables.items[id].arrays[2][5]==int(rules.reputation_override_equipment_type):return fail("Opening handoff does not support a reputation override device")
 	var counters:=completed_counters(bindings,opening.get("combat",{}),world.get("controller",{}).get("death_accounting"))
@@ -39,10 +50,8 @@ func prepare(bindings: RefCounted, catalogues: RefCounted, opening: Dictionary) 
 	var player:=Player.new()
 	if not player.configure_arrival(bindings,catalogues,cached):return fail(player.error)
 	var cursor:=int(rules.arrival_cursor)
-	var score: int=int(rules.initial_other_score)+counters.player_kills*int(rules.player_kill_weight)+counters.pirate_kills*int(rules.pirate_kill_weight)+cursor*int(rules.cursor_weight)
-	var rank:=0
-	for i in rules.rank_thresholds.size():
-		if score>=int(rules.rank_thresholds[i]):rank=i
+	var progress:=calculate_progress(rules,cursor,counters.player_kills,counters.pirate_kills,int(rules.initial_other_score))
+	if progress.is_empty():return fail("Opening career exceeds the supported score range")
 	var axis:=int(rules.rescue_reputation_axis)
 	var uncertainty: int=counters.player_kills*int(rules.pirate_reputation_change_maximum)
 	var lower: int=int(rules.initial_reputation[axis])-uncertainty
@@ -52,9 +61,18 @@ func prepare(bindings: RefCounted, catalogues: RefCounted, opening: Dictionary) 
 	# The source getter is cursor >44. There is no independent free-roam
 	# preference in this predicate, and the supported rescue has cursor one.
 	if cursor>int(rules.center_cursor_upper_inclusive) or not conditions.companions_empty or conditions.location_match:return fail("Rescue entry falls outside its supported world profile")
+	if Reputation.available(bindings):
+		var history:=Reputation.new()
+		if not history.restore(bindings,opening.combat.get("reputation")):return fail(history.error)
+		var hits:=history.snapshot()
+		if hits.campaign_cursor!=0 or hits.events.size()!=opening.combat.actors.size():return fail("Opening reputation lacks its three actual lethal hits")
+		for event in hits.events:
+			if event.nonplayer_kill!=opening.combat.actors[event.actor_id].nonplayer_kill:return fail("Opening reputation disagrees with its lethal attribution")
+		progress.reputation=history.apply_to(Reputation.initial(bindings))
+		if progress.reputation.is_empty():return fail(history.error)
 	return {"base_content_id":seed.base_content_id,"binding_id":seed.binding_id,"campaign_cursor":cursor,
 		"previous_cache":cached.duplicate(true),"player_cache":player.cache_snapshot(),"player":player.snapshot(),
-		"progress":{"campaign_cursor":cursor,"rank":rank,"rank_score":score,"player_kills":counters.player_kills,"pirate_kills":counters.pirate_kills,"other_score":int(rules.initial_other_score)},
+		"progress":progress,
 		"entry_conditions":conditions,"rescue_disposition":{"actor_hostile":false,"reputation_axis":axis,"minimum":lower,"maximum":upper,"override":int(rules.initial_reputation_override)}}
 
 func completed_counters(bindings: RefCounted, combat: Dictionary, accounting: Variant) -> Dictionary:

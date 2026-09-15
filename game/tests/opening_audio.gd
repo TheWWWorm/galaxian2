@@ -51,6 +51,7 @@ func verify_source(content: String,pack: String):
 	check(not prepared.is_empty() and audio.snapshot().active.is_empty(),"Preparing audio played before commitment")
 	audio.commit_frame(prepared)
 	check(audio.snapshot().active.has(143) and audio.snapshot().active[143].looping,"Entry music not playing in a loop")
+	check(audio._players[143].node.bus=="GoF2 Music","Original music bypassed the player's music volume")
 	var old: Dictionary=audio.snapshot()
 	audio.commit_frame(prepared)
 	check(audio.snapshot()==old,"Duplicate commit restarted playback")

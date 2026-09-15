@@ -175,7 +175,7 @@ func verify_gpu(args: Array):
 	check(not scene.present(damaged) and scene.notice_panel.snapshot()==before,"Failed notice presentation did not roll back the complete scene")
 	canvas.free()
 	check(lib.select_language("de"),lib.error);var german:=fresh();check(german.enqueue(27),german.error);advance_to(german,2000)
-	var phone:=SubViewport.new();phone.size=Vector2i(420,800);phone.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(phone)
+	var phone:=SubViewport.new();phone.size=Vector2i(800,450);phone.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(phone)
 	var panel:=NoticePanel.new();phone.add_child(panel);panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	check(panel.configure(lib,bindings,visuals),panel.error);panel.set_mobile_layout(true);check(panel.present(german.snapshot()),panel.error)
 	await process_frame;await process_frame;await RenderingServer.frame_post_draw
@@ -188,7 +188,7 @@ func verify_gpu(args: Array):
 		for id in [6,8,9,11,20,27]:
 			var queue:=fresh();check(queue.enqueue(id),queue.error);advance_to(queue,2000)
 			for mobile in [false,true]:
-				phone.size=Vector2i(420,800) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
+				phone.size=Vector2i(800,450) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
 				check(panel.present(queue.snapshot()),panel.error)
 				await process_frame;await process_frame
 				check(panel._bar.get_rect().encloses(panel._label.get_rect()) and panel._label.get_visible_line_count()==panel._label.get_line_count() and panel._label.get_content_height()<=panel._label.size.y,"Localized notice is clipped: "+language+"/"+str(id)+"/"+str(mobile))

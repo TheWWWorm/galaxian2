@@ -3,6 +3,7 @@ extends Node3D
 const Sequence=preload("res://src/simulation/audio_sequence.gd")
 const Streams=preload("res://src/presentation/audio_stream_control.gd")
 var error := ""
+var category:="FX"
 var _definition := {}
 var _sequence: RefCounted
 var _voices := {}
@@ -43,7 +44,7 @@ func commit_step(frame: Dictionary) -> void:
 	for op in frame.operations:
 		stop_voice(op.key)
 		if op.action=="start":
-			var node:=Streams.player(op.sample.stream,_definition.spatial)
+			var node:=Streams.player(op.sample.stream,_definition.spatial,category)
 			var gain_db: float=linear_to_db(op.gain) if op.gain>0 else -80.0
 			var voice:={"node":node,"gain_db":gain_db,"pending_resume":false,"resume_position":0.0,"source_bank":op.sample.source_bank,"source_index":op.sample.source_index,"pitch":op.pitch}
 			add_child(node);_voices[op.key]=voice

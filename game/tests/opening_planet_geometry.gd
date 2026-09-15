@@ -11,6 +11,8 @@ func _initialize() -> void:
 func run() -> void:
 	var args:=OS.get_cmdline_user_args()
 	if not args.is_empty() and args[0].begins_with("--captures="):captures=args[0].trim_prefix("--captures=");args.remove_at(0)
+	if args.size()==4:captures=args[3];args.remove_at(3)
+	if not captures.is_empty():DirAccess.make_dir_recursive_absolute(captures)
 	for i in range(0,args.size(),3):await verify(args[i],args[i+1],args[i+2])
 	print("Opening planet geometry: ",failures," failures");quit(0 if failures==0 else 1)
 func verify(content: String, pack: String, textures: String) -> void:
@@ -81,7 +83,28 @@ func verify(content: String, pack: String, textures: String) -> void:
 	cat.tables.systems[system_id].sky_index=11
 	check(not planets.build(lib,visuals,bindings,cat) and planets.get_child_count()==0,"Unsupported fogged planet mode retained a partial scene")
 	cat.tables.systems[system_id].sky_index=sky
+	if load("res://src/content/local_arrival_environment_definitions.gd").available(bindings):
+		await verify_ordinary(lib,bindings,cat,visuals,viewport,camera,planets)
 	viewport.free()
+
+func verify_ordinary(lib: RefCounted,bindings: RefCounted,cat: RefCounted,visuals: RefCounted,viewport: SubViewport,camera: Camera3D,planets: Node3D) -> void:
+	viewport.size=Vector2i(960,540)
+	for station_id in [95,96,97,98,99]:
+		if not planets.build_lounge(lib,visuals,bindings,cat,station_id,18):check(false,planets.error);return
+		var current: int=planets.selection.selected_index-1
+		check(planets.models.size()==5 and planets.selection.station_id==station_id and planets.selection.campaign_cursor==18,"Ordinary planet scene lost its selected location")
+		camera.position=Vector3.ZERO
+		camera.look_at(planets._layout.entries[current+1].origin,Vector3.UP)
+		if not planets.apply_view({"pose":camera.transform}):check(false,planets.error);return
+		check(planets.models[current].get_meta("source_texture_id")==planets._layout.entries[current+1].texture_id,"Ordinary planet used another original texture")
+		if DisplayServer.get_name()!="headless":
+			var visible:=await capture(viewport)
+			check(variation(visible)>100,"Ordinary planet did not render at%d"%station_id)
+			save(visible,"augmenta-planet-%d"%station_id)
+			planets.models[current].hide()
+			check((await capture(viewport)).get_data()!=visible.get_data(),"Selected planet contributed no pixels at%d"%station_id)
+			planets.models[current].show()
+
 func capture(viewport: SubViewport) -> Image:
 	await process_frame;await process_frame;await RenderingServer.frame_post_draw
 	return viewport.get_texture().get_image()

@@ -109,6 +109,8 @@ func verify_training_death_pass(cat: RefCounted, world: RefCounted, resources: R
 	var combat: RefCounted=live.combat_owner()
 	for id in 4:check(not combat.normal_hit(id,int(combat.snapshot().actors[id].vitals.hull),id%2==1).is_empty(),combat.error)
 	var incoming: Dictionary=combat.snapshot()
+	if incoming.has("reputation"):
+		check(combat.reputation_after({"axes":[30,-3],"override":-1})=={"axes":[30,-5],"override":-1},"Mixed lethal hits lost retained reputation or awarded NPC kill credit")
 	var rng:=training_seed(4)
 	var event:=live.advance(0,player,combat,rng)
 	check(not event.is_empty(),live.error)
@@ -147,6 +149,7 @@ func verify_training_death_pass(cat: RefCounted, world: RefCounted, resources: R
 		event=live.advance(150,player)
 		if event.is_empty():check(false,live.error);return
 	check(live.snapshot().accounting==accounted and live.defeat_status().satisfied,"Effect expiry recounted kills or cleared pirate defeat")
+	if incoming.has("reputation"):check(live.snapshot().combat.reputation==incoming.reputation,"Death animation or effect expiry repeated a lethal reputation change")
 	var original:=live.snapshot();var fork: RefCounted=live.fork_for_frame()
 	check(not fork.advance(1,player).is_empty() and live.snapshot()==original,"Forked destruction changed accepted state")
 
@@ -155,6 +158,8 @@ func verify_initial_gunant_death(cat: RefCounted, world: RefCounted, resources: 
 	check(live.set_destruction(bindings,resources),live.error)
 	var combat: RefCounted=live.combat_owner()
 	check(not combat.normal_hit(3,9999999,false).is_empty(),combat.error)
+	if combat.snapshot().has("reputation"):
+		check(combat.reputation_after({"axes":[30,-3],"override":-1})=={"axes":[30,2],"override":-1},"Gunant's friendly flag incorrectly suppressed a player lethal reputation change")
 	var event:=live.advance(0,training_player(Vector3.ZERO),combat)
 	check(not event.is_empty(),live.error)
 	if event.is_empty():return

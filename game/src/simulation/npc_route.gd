@@ -6,6 +6,11 @@ const OpeningContext = preload("res://src/content/opening_sky_definitions.gd")
 const ArrivalConstruction = preload("res://src/content/arrival_actor_construction_definitions.gd")
 const FullHold = preload("res://src/content/full_hold_flight_definitions.gd")
 const Training = preload("res://src/content/combat_training_definitions.gd")
+const Travel = preload("res://src/content/mido_travel_definitions.gd")
+const Contracts = preload("res://src/content/early_contract_definitions.gd")
+const Convoy = preload("res://src/content/convoy_world_definitions.gd")
+const Alioth = preload("res://src/content/alioth_attack_definitions.gd")
+const AliothSequence = preload("res://src/simulation/alioth_attack.gd")
 const Random = preload("res://src/simulation/seeded_random.gd")
 const Vectors = preload("res://src/simulation/source_vectors.gd")
 const Vitals = preload("res://src/simulation/combat_vitals.gd")
@@ -17,6 +22,7 @@ var _candidates := []
 var _index := 0
 var _loop := true
 var _authored := false
+var _ambient_restart := false
 
 func configure(bindings: RefCounted, actor_id: Variant) -> bool:
 	clear()
@@ -64,6 +70,119 @@ func configure_training_generated(bindings: RefCounted, actor_id: Variant) -> bo
 	if not Definitions.parameters(data):return reject("Generated NPC routes are unavailable in this pack")
 	_configure_generated(bindings,actor_id,data)
 	_identity.campaign_cursor=int(bindings.combat_training.campaign_cursor)
+	return true
+
+func configure_local_generated(bindings: RefCounted, actor_id: int) -> bool:
+	clear()
+	if bindings==null or not Travel.parameters(bindings.mido_travel):return reject("Local traffic routes are unavailable")
+	if actor_id<0 or actor_id>=int(bindings.mido_travel.departure_traffic.empty_population_fallback):return reject("Unknown local traffic route owner")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated NPC routes are unavailable in this pack")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=int(bindings.mido_travel.departure_traffic.campaign_cursor)
+	return true
+
+func configure_ambient_generated(bindings: RefCounted,actor_id: int,cursor: int) -> bool:
+	clear()
+	var rules=preload("res://src/content/ambient_population_definitions.gd")
+	if bindings==null or not rules.parameters(bindings.ambient_population):return reject("Ambient routes require imported population declarations")
+	var population: Dictionary=bindings.ambient_population
+	if not rules.contexts(bindings).any(func(row):return int(row.campaign_cursor)==cursor):return reject("Unsupported ambient route context")
+	var maximum: int=rules.maximum_actor_count(population,bindings.mido_travel.departure_traffic)
+	if actor_id<0 or actor_id>=maximum:return reject("Unknown ambient route owner")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated NPC routes are unavailable in this pack")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=cursor
+	_ambient_restart=rules.contexts(bindings).any(func(row):return int(row.campaign_cursor)==cursor and row.mixed)
+	return true
+
+func configure_free_generated(bindings: RefCounted,actor_id: int,context: Dictionary) -> bool:
+	clear()
+	var rules=preload("res://src/content/free_population_definitions.gd")
+	if not rules.available(bindings):return reject("Ordinary routes require imported population declarations")
+	var limits=preload("res://src/content/opening_definitions.gd")
+	var population: Dictionary=bindings.mido_travel.free_population
+	if context.get("campaign_cursor")!=int(population.campaign_cursor) or not limits.integer(context.get("rank"),0,bindings.opening_handoff.rank_thresholds.size()-1):return reject("Invalid ordinary route context")
+	var difficulty: Variant=context.get("difficulty")
+	if (not difficulty is float and not difficulty is int) or not population.supported_difficulties.any(func(value):return float(value)==float(difficulty)):return reject("Invalid ordinary route difficulty")
+	if actor_id<0 or actor_id>=rules.maximum_actor_count(bindings,int(context.rank),float(context.difficulty),context):return reject("Unknown ordinary traffic route owner")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated NPC routes are unavailable in this pack")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=int(bindings.mido_travel.free_population.campaign_cursor)
+	_ambient_restart=true
+	return true
+
+func configure_contract_generated(bindings: RefCounted,actor_id: int,cursor:=13) -> bool:
+	clear()
+	if bindings==null or not Contracts.encounter_parameters(bindings.early_contracts):return reject("Contract routes require their source encounter declarations")
+	# The early supported difficulty range creates at most four small ships.
+	if actor_id<0 or actor_id>3 or not load("res://src/content/convoy_transit_definitions.gd").supports(bindings.mido_travel,cursor):return reject("Unknown early contract route owner")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated NPC routes are unavailable in this pack")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=cursor
+	return true
+
+func configure_convoy_generated(bindings: RefCounted,actor_id: int) -> bool:
+	clear()
+	if not Convoy.available(bindings):return reject("Convoy routes require their original population and factories")
+	var actors: Array=bindings.mido_travel.convoy_capture.population.actors
+	if actor_id<0 or actor_id>=actors.size() or int(actors[actor_id].subtype)!=0:return reject("This convoy actor has no generated patrol route")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated NPC routes are unavailable in this pack")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=int(bindings.mido_travel.convoy_capture.campaign_cursor)
+	return true
+
+func configure_alioth_generated(bindings: RefCounted,actor_id: int) -> bool:
+	clear()
+	if not Alioth.available(bindings):return reject("Alioth patrol routes require their original population")
+	var actors: Array=bindings.mido_travel.alioth_attack.population.actors
+	if actor_id<0 or actor_id>=actors.size() or int(actors[actor_id].subtype)!=0:return reject("This Alioth actor has no generated patrol")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated NPC routes are unavailable in this pack")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=int(bindings.mido_travel.alioth_attack.campaign_cursor)
+	return true
+
+func replace_with_contract_path(points: Array) -> bool:
+	error=""
+	if _identity.get("campaign_cursor") not in [13,14] or _points.is_empty() or _authored or points.size()<3 or points.size()>4:return reject("Generate the rival route before replacing it with the mission path")
+	if points.any(func(point):return not point is Vector3 or not point.is_finite()):return reject("The mission path contains an invalid waypoint")
+	_points=points.duplicate();_candidates=[];_index=0;_loop=false;_authored=true
+	return true
+
+func replace_with_ambient_destination(point: Variant) -> bool:
+	if _identity.is_empty() or _points.is_empty() or not point is Vector3 or not point.is_finite():return reject("Generate an ambient route before assigning its destination")
+	_points=[point];_candidates=[];_index=0;_loop=false;_authored=true
+	return true
+
+func replace_with_alioth_escape(owner: RefCounted) -> bool:
+	error=""
+	if not owner is AliothSequence or _identity.get("campaign_cursor")!=16 or _points.is_empty() or _authored:return reject("Alioth escape requires its retained generated route")
+	var sequence: Dictionary=owner.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if sequence.get(key)!=_identity[key]:return reject("Alioth escape route belongs to another encounter")
+	if sequence.phase!=AliothSequence.Stage.ESCAPE_VIEW:return reject("No Alioth escape placement is pending")
+	for row in sequence.frame.actor_overrides:
+		if row.actor_id!=_identity.actor_id:continue
+		if row.route_points.size()!=1 or not row.route_points[0] is Vector3 or not row.route_points[0].is_finite() or row.route_initial_index!=0 or row.route_loop:return reject("Unsupported Alioth escape waypoint")
+		_points=row.route_points.duplicate();_candidates=[];_index=0;_loop=false;_authored=true
+		return true
+	return reject("Alioth escape does not replace this actor's route")
+
+func restart_ambient_destination() -> bool:
+	error=""
+	if not _ambient_restart or not _authored or _loop or _points.size()!=1:return reject("Only the generated ambient destination can restart")
+	_index=0
+	return true
+
+func restart_ambient_route() -> bool:
+	error=""
+	if not _ambient_restart or _points.is_empty() or (not _loop and (not _authored or _points.size()!=1)):return reject("Only a retained ambient route can restart")
+	_index=0
 	return true
 
 func configure_training_authored(bindings: RefCounted) -> bool:
@@ -138,10 +257,11 @@ func fork_for_frame() -> RefCounted:
 	copy._identity=_identity.duplicate();copy._definition=_definition.duplicate(true)
 	copy._points=_points.duplicate();copy._candidates=_candidates.duplicate();copy._index=_index
 	copy._loop=_loop;copy._authored=_authored
+	copy._ambient_restart=_ambient_restart
 	return copy
 
 func clear() -> void:
-	error="";_identity={};_definition={};_points=[];_candidates=[];_index=0;_loop=true;_authored=false
+	error="";_identity={};_definition={};_points=[];_candidates=[];_index=0;_loop=true;_authored=false;_ambient_restart=false
 
 func reject(message: String) -> bool:
 	error=message

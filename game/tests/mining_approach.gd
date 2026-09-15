@@ -254,7 +254,7 @@ func render(lib: RefCounted,pixels: String,directory: String,captures: Dictionar
 	var good: Transform3D=scene.geometry.player.transform
 	var bad: RefCounted=captures["approach-ready"].fork_for_frame();bad._model_basis=Basis(Vector3.ZERO,Vector3.ZERO,Vector3.ZERO)
 	check(not scene.present(bad) and scene.geometry.player.transform==good,"Invalid model orientation changed the visible frame")
-	canvas.size=Vector2i(420,800);scene.set_mobile_layout(true);check(scene.present(captures["approach-ready"]),scene.error)
+	canvas.size=Vector2i(800,450);scene.set_mobile_layout(true);check(scene.present(captures["approach-ready"]),scene.error)
 	for i in 3:await process_frame
 	check(canvas.get_texture().get_image().save_png(directory.path_join("approach-ready-phone.png"))==OK,"Could not save phone approach capture")
 	canvas.free()

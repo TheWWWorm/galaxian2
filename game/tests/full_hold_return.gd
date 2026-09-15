@@ -170,7 +170,7 @@ func verify_presentation(args: PackedStringArray):
 				else:check(speech._player==null and speech.snapshot().history.size()==5,"Silent equipment instruction replayed the last voice")
 			if args.size()==4:
 				for mobile in [false,true]:
-					canvas.size=Vector2i(420,800) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
+					canvas.size=Vector2i(800,450) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
 					for f in 3:await process_frame
 					check(Rect2(Vector2.ZERO,canvas.size).encloses(panel._panel.get_rect()) and (panel._body.get_content_height()<=panel._body.size.y or panel._body.scroll_active),"Second-return text escapes viewport: "+language)
 			station.acknowledge()
@@ -193,7 +193,7 @@ func verify_presentation(args: PackedStringArray):
 	for i in 6:
 		if args.size()==4 and i in [0,5]:
 			for mobile in [false,true]:
-				canvas.size=Vector2i(420,800) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
+				canvas.size=Vector2i(800,450) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
 				for f in 8:await process_frame
 				await RenderingServer.frame_post_draw
 				check(canvas.get_texture().get_image().save_png(args[3].path_join("second-return-%d-%s.png"%[i,"phone" if mobile else "desktop"]))==OK,"Could not capture second station return")

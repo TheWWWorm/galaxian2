@@ -195,7 +195,7 @@ func verify_gpu(args: PackedStringArray):
 		for i in 20:notice.advance(100)
 		check(panel.configure(lib,bindings,visuals),panel.error)
 		for phone in [false,true]:
-			canvas.size=Vector2i(420,800) if phone else Vector2i(960,720);panel.set_mobile_layout(phone)
+			canvas.size=Vector2i(800,450) if phone else Vector2i(960,720);panel.set_mobile_layout(phone)
 			check(panel.present(notice.snapshot()),panel.error)
 			for i in 3:await process_frame
 			check(Rect2(Vector2.ZERO,canvas.size).encloses(panel._bar.get_rect()) and panel._label.get_content_height()<=panel._label.size.y+1,"Station notice clipped in "+language+" / "+str(phone))

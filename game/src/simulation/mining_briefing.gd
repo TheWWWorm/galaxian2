@@ -2,8 +2,7 @@ extends RefCounted
 ## Entry and acknowledged briefing for supported ordinary flights. The caller owns
 ## world/camera updates and uses simulation_delta_ms() for this frame. This owner
 ## never mines cargo, completes missions, advances the campaign or grants rewards.
-const Story=preload("res://src/content/full_hold_story_definitions.gd")
-const Training=preload("res://src/content/combat_training_story_definitions.gd")
+const Ordinary=preload("res://src/content/ordinary_flight_definitions.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 var error:=""
@@ -19,8 +18,9 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 	if bindings==null or library==null or construction==null or construction.get_script()!=Construction:return reject("Mining briefing requires a prepared departure")
 	var flight: Dictionary=construction.snapshot()
 	if flight.is_empty() or flight.get("base_content_id")!=bindings.base_content_id or flight.get("binding_id")!=bindings.binding_id or library.manifest.get("content_id")!=bindings.base_content_id:return reject("Mining briefing belongs to another flight or content identity")
+	if Ordinary.for_departure(bindings,flight).is_empty():return reject("This construction has no connected ordinary flight context")
 	var training: bool=flight.get("campaign_cursor")==7
-	var rules:=Training.briefing(bindings) if training else Story.briefing(bindings,flight.get("campaign_cursor"))
+	var rules:=Ordinary.briefing(bindings,flight.get("campaign_cursor"),flight.get("scenery",{}).get("world_initialization",{}).has("contract_context"))
 	if rules.is_empty():return reject("This departure has no supported mining briefing")
 	if flight.activated or flight.entry_released or flight.briefing_started:return reject("Mining briefing requires a fresh prepared departure")
 	if bindings.desktop_text_id(1728 if training else 1703)!=(1729 if training else 1704):return reject("Flight briefing requires its desktop instruction mapping")
@@ -67,6 +67,7 @@ func advance(milliseconds: Variant, paused:=false, defer_poll:=false) -> bool:
 		_state.entry_elapsed_ms+=_simulation_ms
 		if _state.entry_elapsed_ms>=int(_rules.entry_release_ms):
 			_state.entry_elapsed_ms=0;_state.entry_released=true;_state.briefing_pending=true
+			if _lines.is_empty():_state.briefing_pending=false;_state.phase="flight"
 	_controller_holds_clock=not _state.entry_released
 	if not defer_poll:finish_mission_poll(false)
 	return true

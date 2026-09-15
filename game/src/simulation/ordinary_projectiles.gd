@@ -10,6 +10,7 @@ const Vitals = preload("res://src/simulation/combat_vitals.gd")
 const Library = preload("res://src/content/library.gd")
 const Random = preload("res://src/simulation/seeded_random.gd")
 const TrainingWeapons = preload("res://src/content/combat_training_weapon_definitions.gd")
+const Fitting=preload("res://src/content/ordinary_fitting_definitions.gd")
 const MAX_CAPACITY := 4096
 const HIT_LIFETIME_SENTINEL := -1000000
 var error := ""
@@ -39,7 +40,7 @@ func configure(weapon: Dictionary, capacity: Variant = null) -> bool:
 		if not Vitals.integer(weapon.get(field)): return reject("Invalid projectile weapon field: "+field)
 	if weapon.category!=0 or weapon.kind not in [0,1,2] or weapon.get("launch_mode")!="ordinary":
 		return reject("This projectile owner requires a source-declared ordinary primary launch path")
-	if weapon.kind==2 and not TrainingWeapons.dispersed_primary(weapon):return reject("This ordinary kind requires its verified dispersion and capacity")
+	if weapon.kind==2 and not TrainingWeapons.dispersed_primary(weapon) and not Fitting.dispersed(weapon):return reject("This ordinary kind requires its verified dispersion and capacity")
 	if weapon.kind!=2 and weapon.has("dispersion"):return reject("This ordinary kind has no supported dispersion declaration")
 	if weapon.has("campaign_cursor") and not Vitals.integer(weapon.campaign_cursor):return reject("Invalid projectile campaign context")
 	if weapon.has("nonplayer_source") and not weapon.nonplayer_source is bool:return reject("Invalid projectile damage attribution")
@@ -57,6 +58,7 @@ func configure(weapon: Dictionary, capacity: Variant = null) -> bool:
 	if weapon.has("campaign_cursor"):_weapon.campaign_cursor=weapon.campaign_cursor
 	if weapon.has("nonplayer_source"):_weapon.nonplayer_source=weapon.nonplayer_source
 	if weapon.has("dispersion"):_weapon.dispersion=weapon.dispersion.duplicate(true)
+	if weapon.has("fitting_primary"):_weapon.fitting_primary=weapon.fitting_primary
 	if weapon.has("ordinary_hit_policy"): _weapon.ordinary_hit_policy=weapon.ordinary_hit_policy.duplicate(true)
 	if weapon.has("collision_bounds"): _weapon.collision_bounds=weapon.collision_bounds.duplicate(true)
 	_weapon.projectile_capacity=capacity
@@ -72,6 +74,12 @@ func snapshot() -> Dictionary:
 	return {"weapon":_weapon.duplicate(true),"elapsed_ms":_elapsed_ms,
 		"time_ready":_elapsed_ms>int(_weapon.interval_ms),"available_slots":available,
 		"slots":_slots.duplicate(true)}
+
+func reset_fire_interval() -> bool:
+	error=""
+	if _weapon.is_empty():return reject("Configure a weapon before resetting its firing interval")
+	_elapsed_ms=0
+	return true
 
 func fork_state() -> RefCounted:
 	# Native owners stage a multi-weapon operation on private copies before commit.
@@ -158,7 +166,7 @@ func fire_from_mount(mount: Dictionary, ship_transform: Variant, world_direction
 	var up:=scaled(basis.y,1.0)
 	if not up.is_finite():return fail("Weapon up axis exceeds finite world coordinates")
 	var result:=fire(muzzle, world_direction, firing_allowed,random_state)
-	if result.get("fired",false) and _weapon.get("campaign_cursor")==7 and not _weapon.get("nonplayer_source",false):
+	if result.get("fired",false) and _weapon.get("campaign_cursor") in [7,10,11,12,13,14,16,18] and not _weapon.get("nonplayer_source",false):
 		# The original ordinary launch stores the firing matrix's Y column in
 		# each slot. It survives ship rotation and is reused by the draw root.
 		_slots[result.projectile.slot].up=up

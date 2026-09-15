@@ -4,12 +4,16 @@ extends RefCounted
 const FirstFlight=preload("res://src/content/first_flight_definitions.gd")
 const MiningFlight=preload("res://src/content/full_hold_flight_definitions.gd")
 const Training=preload("res://src/content/combat_training_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const Loadout=preload("res://src/simulation/opening_loadout.gd")
 const Definitions = preload("res://src/content/opening_world_initialization_definitions.gd")
 const ArrivalDefinitions = preload("res://src/content/arrival_world_initialization_definitions.gd")
 const ArrivalLocation = preload("res://src/simulation/arrival_location.gd")
 const Construction = preload("res://src/simulation/opening_npc_construction.gd")
 const Random = preload("res://src/simulation/seeded_random.gd")
+const ContractWorld=preload("res://src/content/contract_world_definitions.gd")
+const Convoy=preload("res://src/content/convoy_world_definitions.gd")
+const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 var error := ""
 var _identity := {}
 var _definition := {}
@@ -77,6 +81,99 @@ func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, equ
 	_identity.campaign_cursor=int(data.campaign_cursor);_identity.entry_conditions=entry_conditions.duplicate(true)
 	return true
 
+func configure_contract(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,contracts: RefCounted,player_cache: Dictionary,entry_conditions: Dictionary,unix_seconds: Variant,player_position: Vector3,field_center: Vector3) -> bool:
+	clear()
+	if not ContractWorld.available(bindings) or not is_instance_of(contracts,load("res://src/simulation/contract_session.gd")) or not FirstFlight.entry_conditions(entry_conditions):return reject("Ordinary contract construction needs its retained session and entry conditions")
+	var location:=ArrivalLocation.new()
+	var context:=location.resolve_local_travel(bindings,catalogues,equipment,player_cache)
+	if context.is_empty():return reject(location.error)
+	var data:=ContractWorld.flight(bindings,int(context.station_id),int(context.campaign_cursor))
+	if data.is_empty() or contracts.snapshot().campaign_cursor!=context.campaign_cursor:return reject("Unsupported ordinary contract world location")
+	var accepted: Dictionary=contracts.flight_context(int(context.station_id))
+	if accepted.is_empty():return reject(contracts.error)
+	var construction:=Construction.new()
+	if accepted.mission.is_empty():
+		var ambient:={"system_id":int(context.system_id),"station_id":int(context.station_id),"campaign_cursor":int(context.campaign_cursor),
+			"difficulty":accepted.difficulty,"mission_kind":-1,"mission_completed":true,"mission_story":false,
+			"companions_empty":true,"station_response":false}
+		if not construction.configure_ambient_traffic(bindings,catalogues,equipment,ambient,unix_seconds):return reject(construction.error)
+		data.weapon_groups=Travel.journey(bindings.mido_travel,11).weapon_groups.duplicate()
+	else:
+		if not construction.configure_contract(bindings,catalogues,equipment,contracts,player_position,field_center):return reject(construction.error)
+		data.weapon_groups=["pirate","rival"]
+	if not _bind_faction_weapon_effects(bindings,data):return false
+	if not _configure(bindings,catalogues,data,construction,[],equipment.snapshot().loadout.slots.filter(func(slot):return slot!=null)):return false
+	_identity.merge({"campaign_cursor":int(context.campaign_cursor),"station_id":int(context.station_id),"entry_conditions":entry_conditions.duplicate(true),"contract_context":accepted})
+	return true
+
+func configure_free_factory(bindings: RefCounted,catalogues: RefCounted,player_ship_id: int,equipment_ids: Array,context: Dictionary,unix_seconds: Variant,entry_conditions: Dictionary) -> bool:
+	clear()
+	if not FirstFlight.entry_conditions(entry_conditions):return reject("Ordinary population requires normal placement and no additional companions")
+	var construction:=Construction.new()
+	if not construction.configure_free_factory(bindings,catalogues,player_ship_id,equipment_ids,context,unix_seconds):return reject(construction.error)
+	return _configure_free(bindings,catalogues,construction,player_ship_id,equipment_ids,context,entry_conditions)
+
+func configure_free_traffic(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,unix_seconds: Variant,entry_conditions: Dictionary) -> bool:
+	clear()
+	if not FirstFlight.entry_conditions(entry_conditions):return reject("Ordinary initialization requires ordinary entry with no additional companions")
+	var construction:=Construction.new()
+	if not construction.configure_free_traffic(bindings,catalogues,equipment,context,unix_seconds):return reject(construction.error)
+	var seed: Dictionary=equipment.snapshot().loadout
+	return _configure_free(bindings,catalogues,construction,int(seed.ship_id),seed.equipment_ids,context,entry_conditions)
+
+func _configure_free(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,player_ship_id: int,equipment_ids: Array,context: Dictionary,entry_conditions: Dictionary) -> bool:
+	var data:={"scope":"ordinary_population_initialization","weapon_groups":["patrol","travel","hostile"]}
+	if not context.side_missions_empty:data.weapon_groups.append("delivery_pirate")
+	if not _bind_faction_weapon_effects(bindings,data):return false
+	var equipment: Array=equipment_ids.map(func(id):return {"item_id":id})
+	if not _configure(bindings,catalogues,data,construction,[player_ship_id],equipment):return false
+	_identity.merge({"campaign_cursor":int(context.campaign_cursor),"station_id":int(context.station_id),"entry_conditions":entry_conditions.duplicate(true)})
+	return true
+
+func _bind_faction_weapon_effects(bindings: RefCounted,data: Dictionary) -> bool:
+	# Each armed ship allocates a default item0 pool and then its faction pool.
+	# Both allocate their own four impact flips after all actors are constructed.
+	var shared: Dictionary=bindings.opening_actors.npc_initialization.world_initialization
+	for key in ["weapon_effect_capacity","weapon_effect_random_bound","zero_means_flipped"]:data[key]=shared[key]
+	data.weapon_item_sequence=[];data.weapon_effect_sequence=[];data.faction_weapon_effects={}
+	var default_model:=ContractWorld.impact_model(bindings,0)
+	if default_model<0 or bindings.resolve(default_model,"mesh").is_empty():return reject("Default weapon impact art is unavailable")
+	for row in bindings.early_contracts.ship_combat.weapons.factions:
+		var model:=ContractWorld.impact_model(bindings,int(row.item_id))
+		if model<0 or bindings.resolve(model,"mesh").is_empty():return reject("Faction weapon impact art is unavailable")
+		data.faction_weapon_effects[int(row.actor_kind)]={"items":[0,int(row.item_id)],"resources":[default_model,model]}
+	return true
+
+func configure_convoy(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,entry_conditions: Dictionary) -> bool:
+	clear()
+	if not FirstFlight.entry_conditions(entry_conditions):return reject("Convoy initialization requires an ordinary flight with no extra companions")
+	var construction:=Construction.new()
+	if not construction.configure_convoy(bindings,catalogues,equipment,context):return reject(construction.error)
+	var data:=Convoy.initialization(bindings)
+	for row in data.faction_weapon_effects.values():
+		for resource in row.resources:
+			if resource<0 or bindings.resolve(int(resource),"mesh").is_empty():return reject("Convoy weapon effects are unavailable")
+	var hulls: Array=data.actors.map(func(actor):return int(actor.hull_catalogue_id))
+	if not _configure(bindings,catalogues,data,construction,hulls,equipment.snapshot().loadout.slots.filter(func(slot):return slot!=null)):return false
+	_identity.merge({"campaign_cursor":context.campaign_cursor,"station_id":context.station_id,"entry_conditions":entry_conditions.duplicate(true)})
+	return true
+
+func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,seed: Dictionary,context: Dictionary,player_position: Vector3,entry_conditions: Dictionary) -> bool:
+	clear()
+	if not FirstFlight.entry_conditions(entry_conditions):return reject("Alioth initialization requires ordinary entry with no additional companions")
+	var construction:=Construction.new()
+	if not construction.configure_alioth_attack(bindings,catalogues,seed,context,player_position):return reject(construction.error)
+	var data:=Alioth.initialization(bindings)
+	if data.is_empty():return reject("Alioth weapon-effect construction is unavailable")
+	for row in data.faction_weapon_effects.values():
+		for resource in row.resources:
+			if resource<0 or bindings.resolve(int(resource),"mesh").is_empty():return reject("Alioth weapon effects are unavailable")
+	var hulls: Array=data.actors.map(func(actor):return int(actor.hull_catalogue_id))
+	var equipment: Array=seed.equipment_ids.map(func(id):return {"item_id":id})
+	if not _configure(bindings,catalogues,data,construction,hulls,equipment):return false
+	_identity.merge({"campaign_cursor":context.campaign_cursor,"station_id":context.station_id,"entry_conditions":entry_conditions.duplicate(true)})
+	return true
+
 func _configure(bindings: RefCounted, catalogues: RefCounted, data: Dictionary, construction: RefCounted, hulls: Array, equipment: Array=[]) -> bool:
 	var shared: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("world_initialization",{})
 	if not Definitions.parameters(shared):return reject("Shared world initialization is unavailable in this pack")
@@ -92,6 +189,41 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, data: Dictionary, 
 		if bindings.resolve(int(resource_id),"mesh").is_empty(): return reject(bindings.error)
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	_definition=data.duplicate(true);_construction=construction
+	return true
+
+func configure_local_arrival(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted, player_cache: Dictionary, entry_conditions: Dictionary) -> bool:
+	clear()
+	if not FirstFlight.entry_conditions(entry_conditions):return reject("Local arrival requires ordinary placement and no companions")
+	var location:=ArrivalLocation.new()
+	var context:=location.resolve_local_travel(bindings,catalogues,equipment,player_cache)
+	if context.is_empty():return reject(location.error)
+	var trip:=Travel.journey(bindings.mido_travel,int(context.campaign_cursor))
+	if trip.is_empty() or int(context.station_id)!=int(trip.station_id):return reject("The empty story population belongs only to its mission arrival")
+	var data:=Travel.flight(bindings,int(context.station_id),int(context.campaign_cursor))
+	if data.is_empty():return reject("This local location has no supported story population")
+	if not _configure(bindings,catalogues,data,null,[],equipment.snapshot().loadout.slots.filter(func(slot):return slot!=null)):return false
+	_identity.campaign_cursor=int(context.campaign_cursor);_identity.station_id=int(context.station_id);_identity.entry_conditions=entry_conditions.duplicate(true)
+	return true
+
+func configure_local_traffic(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted, unix_seconds: Variant, entry_conditions: Dictionary, difficulty:=0.5, cursor: int=10) -> bool:
+	clear()
+	if bindings==null or not Travel.parameters(bindings.mido_travel):return reject("Local departure traffic is unavailable")
+	if not FirstFlight.entry_conditions(entry_conditions):return reject("Local departure requires ordinary placement and no companions")
+	var trip:=Travel.journey(bindings.mido_travel,cursor)
+	if trip.is_empty():return reject("Unsupported local traffic mission context")
+	var data:=Travel.flight(bindings,int(trip.from_station_id),cursor)
+	if data.is_empty():return reject("Local traffic lacks its verified lifecycle")
+	if not data.supported_difficulties.any(func(value):return float(value)==difficulty):return reject("This local traffic profile does not support that difficulty")
+	var construction:=Construction.new()
+	if cursor in [11,12]:
+		var context:={"system_id":int(trip.system_id),"station_id":int(trip.from_station_id),"campaign_cursor":cursor,"difficulty":difficulty,
+			"mission_kind":-1,"mission_completed":true,"mission_story":false,"companions_empty":true,"station_response":false}
+		if not construction.configure_ambient_traffic(bindings,catalogues,equipment,context,unix_seconds):return reject(construction.error)
+		data.weapon_groups=trip.weapon_groups.duplicate()
+	elif not construction.configure_local_traffic(bindings,catalogues,equipment,unix_seconds):return reject(construction.error)
+	if not _configure(bindings,catalogues,data,construction,data.hull_candidates,equipment.snapshot().loadout.slots.filter(func(slot):return slot!=null)):return false
+	_identity.campaign_cursor=int(data.campaign_cursor);_identity.station_id=int(data.station_id)
+	_identity.entry_conditions=entry_conditions.duplicate(true)
 	return true
 
 func generate(random_state: Variant) -> Dictionary:
@@ -113,9 +245,14 @@ func generate(random_state: Variant) -> Dictionary:
 	random.restore(generated.random_state)
 	var effects := []
 	for id in generated.actors.size():
+		if _definition.has("weapon_groups") and not _definition.weapon_groups.has(generated.actors[id].get("population_group")):
+			effects.append({"actor_id":id,"unarmed":true});continue
 		var assignments := []
 		var items: Array=_definition.weapon_item_sequence
 		var resources: Array=_definition.weapon_effect_sequence
+		if _definition.has("faction_weapon_effects"):
+			var armory: Dictionary=_definition.faction_weapon_effects[int(generated.actors[id].actor_kind)]
+			items=armory.items;resources=armory.resources
 		if _definition.get("scope")=="combat_training_encounter_construction" and id==int(_definition.companion_actor_id):
 			items=_definition.companion_weapon_item_sequence;resources=_definition.companion_weapon_effect_sequence
 		for index in items.size():
@@ -148,6 +285,10 @@ func arrival_motion_construction() -> Dictionary:
 
 func snapshot() -> Dictionary:
 	return _state.duplicate(true)
+
+func npc_construction_owner() -> RefCounted:
+	# A completed constructor cannot generate again and exposes detached routes.
+	return _construction if not _state.is_empty() else null
 
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()

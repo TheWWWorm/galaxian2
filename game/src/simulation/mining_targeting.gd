@@ -27,7 +27,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	error=""
 	if bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.mining_targeting):return reject("Asteroid selection requires a supported mining departure")
 	var entry: Dictionary=construction.snapshot()
-	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id or OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty():return reject("Asteroid selection belongs to another departure")
+	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id or OrdinaryFlight.for_departure(bindings,entry).is_empty():return reject("Asteroid selection belongs to another departure")
 	var projection:=TargetProjection.new()
 	if not projection.configure(bindings.flight_projection,Vector2i.ONE,frame_radii):return reject(projection.error)
 	if animation_frames<1 or animation_frames>1024:return reject("Invalid source acquisition filmstrip")

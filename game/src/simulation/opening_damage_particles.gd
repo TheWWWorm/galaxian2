@@ -9,6 +9,8 @@ const Vectors=preload("res://src/simulation/source_vectors.gd")
 const Flight=preload("res://src/simulation/npc_flight.gd")
 const FullHold=preload("res://src/content/full_hold_particle_definitions.gd")
 const Training=preload("res://src/content/combat_training_story_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
 var error:=""
 var _identity:={}
 var _rules:={}
@@ -68,6 +70,21 @@ func _configure_owners(bindings: RefCounted,combat: Dictionary,seed_seconds: int
 	_presentation_identity=RefCounted.new()
 	return true
 
+func configure_local_traffic(bindings: RefCounted,combat: Dictionary,seed_seconds: Variant) -> bool:
+	clear()
+	if bindings==null or Travel.flight(bindings,78).is_empty() or not FullHold.parameters(bindings.full_hold_particles) or not Definitions.parameters(bindings.damage_particles.get("owners",{})) or not seed_seconds is int:return reject("Local smoke/fire requires its ordinary particle owners and seed")
+	_rules=bindings.damage_particles.owners.duplicate(true)
+	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(combat.get("campaign_cursor",-1))}
+	var actors: Variant=combat.get("actors")
+	if not OrdinaryFlight.combat_population(bindings,combat):clear();return reject("Local smoke/fire requires the generated population")
+	_npc_count=actors.size()
+	if not valid_combat(combat):clear();return reject("Local smoke/fire requires its initialized ships")
+	var keys:=[]
+	for actor in actors:
+		if combat.campaign_cursor not in [13,14,16,18] and actor.get("actor_kind")!=3:clear();return reject("Local smoke/fire belongs to another faction")
+		if actor.get("population_group") not in ["freighter","capital","debris"]:keys.append("npc%d"%int(actor.actor_id))
+	return _configure_owners(bindings,combat,seed_seconds,keys,actors.map(func(actor):return int(actor.actor_mode) if combat.campaign_cursor in [13,14,16,18] else (4 if actor.get("population_group")=="travel" else 0)))
+
 func presentation_identity() -> RefCounted:return _presentation_identity
 
 func advance(player_root: Variant,delta_ms: Variant) -> bool:
@@ -120,8 +137,13 @@ func finish_npc_pass(before: Dictionary,after: Dictionary,events: Array,delta_ms
 		if not event is Dictionary or event.get("actor_id")!=id or not event.get("decision") is Dictionary or not event.get("movement") is Dictionary or not event.get("destruction",{}) is Dictionary:return reject("Invalid NPC effect event")
 		var actor: Dictionary=before.actors[id];var result: Dictionary=after.actors[id]
 		var death: Dictionary=event.get("destruction",{})
-		var skipped: bool=(event.decision.is_empty() or event.decision.get("retired",false)) and not death.is_empty()
+		var skipped: bool=event.decision.get("script_retired",false) or ((event.decision.is_empty() or event.decision.get("retired",false)) and not death.is_empty())
 		var key:="npc%d" % id
+		if not _emitters.has(key):
+			# Specialized freighter destruction is separate. Its deferred
+			# particles must not borrow small-ship smoke/fire or tumble.
+			next._roots[id]=result.body_pose;next._modes[id]=int(result.actor_mode)
+			continue
 		if not skipped:
 			var threshold:=Emitter.single(Emitter.single(float(actor.max_hull))*Emitter.single(float(_rules.npc_hull_fraction)))
 			var low:=Emitter.single(float(actor.vitals.hull))<threshold
@@ -163,7 +185,7 @@ func valid_combat(combat: Dictionary) -> bool:
 	if not actors is Array or actors.size()!=_npc_count:return false
 	for id in _npc_count:
 		var actor: Variant=actors[id]
-		var minimum_mode:=0 if _identity.get("campaign_cursor")==7 and id==3 else 1
+		var minimum_mode:=0 if _identity.get("campaign_cursor") in [10,11,12,13,14,16,18] or (_identity.get("campaign_cursor")==7 and id==3) else 1
 		if not actor is Dictionary or actor.get("actor_id")!=id or not Flight.rigid_pose(actor.get("pose")) or not Numbers.integer(actor.get("actor_mode"),minimum_mode,9):return false
 		if not actor.get("vitals") is Dictionary or not Numbers.integer(actor.vitals.get("hull"),0,2147483647) or not Numbers.integer(actor.get("max_hull"),1,2147483647):return false
 	return true

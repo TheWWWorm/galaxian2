@@ -9,7 +9,14 @@ const FullHoldParticles=preload("res://src/content/full_hold_particle_definition
 const PlayerDestruction=preload("res://src/content/player_destruction_definitions.gd")
 const CombatTrainingVisuals=preload("res://src/content/combat_training_visual_definitions.gd")
 const CombatTrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
-const MAX_READER_VERSION:=124
+const MidoTravel=preload("res://src/content/mido_travel_definitions.gd")
+const EarlyContracts=preload("res://src/content/early_contract_definitions.gd")
+const EngineParticles=preload("res://src/content/engine_particle_definitions.gd")
+const AmbientPopulation=preload("res://src/content/ambient_population_definitions.gd")
+const AmbientCombat=preload("res://src/content/ambient_combat_definitions.gd")
+const FreighterDestruction=preload("res://src/content/freighter_destruction_definitions.gd")
+const AmbientLifecycle=preload("res://src/content/ambient_lifecycle_definitions.gd")
+const MAX_READER_VERSION:=170
 const CombatTrainingDestruction=preload("res://src/content/combat_training_destruction_definitions.gd")
 const CombatTrainingWeapons=preload("res://src/content/combat_training_weapon_definitions.gd")
 const CombatTrainingControl=preload("res://src/content/combat_training_control_definitions.gd")
@@ -109,6 +116,13 @@ var player_destruction := {}
 var station_equipment := {}
 var combat_training_visuals := {}
 var combat_training_story := {}
+var mido_travel := {}
+var early_contracts := {}
+var engine_particles := {}
+var ambient_population := {}
+var ambient_combat := {}
+var freighter_destruction := {}
+var ambient_lifecycle := {}
 var combat_training_destruction := {}
 var combat_training_weapons := {}
 var combat_training_control := {}
@@ -200,6 +214,13 @@ func open(directory: String, base: Dictionary) -> bool:
 	station_equipment = {}
 	combat_training_visuals = {}
 	combat_training_story = {}
+	mido_travel = {}
+	early_contracts = {}
+	engine_particles = {}
+	ambient_population = {}
+	ambient_combat = {}
+	freighter_destruction = {}
+	ambient_lifecycle = {}
 	combat_training_destruction = {}
 	combat_training_weapons = {}
 	combat_training_control = {}
@@ -959,6 +980,45 @@ func open(directory: String, base: Dictionary) -> bool:
 		staged_combat_training_story=body.combat_training_story
 		if version>=123 and not staged_combat_training_story.is_empty() and not staged_combat_training_story.has("station_return"):return fail("This reader omitted the training station return")
 		if version>=124 and not staged_combat_training_story.is_empty() and not staged_combat_training_story.has("navigation"):return fail("This reader omitted training navigation")
+	var staged_mido_travel:={}
+	if version>=125:
+		var travel_error:=MidoTravel.validate(body.get("mido_travel"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_station_entry,staged_combat_training)
+		if not travel_error.is_empty():return fail(travel_error)
+		staged_mido_travel=body.mido_travel
+		if version>=133 and not staged_mido_travel.is_empty() and not staged_mido_travel.has("return_visit"):return fail("This reader omitted the Kernstal return declarations")
+		if version>=132 and not staged_mido_travel.is_empty() and not staged_mido_travel.has("continuation"):return fail("This reader omitted Yrdal visit declarations")
+	var staged_early_contracts:={}
+	if version>=134:
+		var terms_error:=EarlyContracts.validate(body.get("early_contracts"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_mido_travel)
+		if not terms_error.is_empty():return fail(terms_error)
+		staged_early_contracts=body.early_contracts
+	var staged_engine_particles:={}
+	if version>=126:
+		var exhaust_error:=EngineParticles.validate(body.get("engine_particles"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_particles)
+		if not exhaust_error.is_empty():return fail(exhaust_error)
+		staged_engine_particles=body.engine_particles
+	var staged_ambient_population:={}
+	if version>=127:
+		var population_error:=AmbientPopulation.validate(body.get("ambient_population"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_mido_travel)
+		if not population_error.is_empty():return fail(population_error)
+		staged_ambient_population=body.ambient_population
+	var staged_ambient_combat:={}
+	if version>=128:
+		var combat_error:=AmbientCombat.validate(body.get("ambient_combat"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_ambient_population)
+		if not combat_error.is_empty():return fail(combat_error)
+		staged_ambient_combat=body.ambient_combat
+	var staged_freighter_destruction:={}
+	if version>=129:
+		var death_error:=FreighterDestruction.validate(body.get("freighter_destruction"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_ambient_combat)
+		if not death_error.is_empty():return fail(death_error)
+		staged_freighter_destruction=body.freighter_destruction
+	var staged_ambient_lifecycle:={}
+	if version>=130:
+		var life_error:=AmbientLifecycle.validate(body.get("ambient_lifecycle"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_ambient_combat)
+		if not life_error.is_empty():return fail(life_error)
+		staged_ambient_lifecycle=body.ambient_lifecycle
+		if version>=131 and not staged_ambient_lifecycle.is_empty() and not AmbientLifecycle.recycling_parameters(staged_ambient_lifecycle):return fail("This reader omitted traffic recycling declarations")
+
 	source_architecture=architecture
 	audio=staged_audio
 	scenery_effects=staged_scenery_effects
@@ -1006,6 +1066,13 @@ func open(directory: String, base: Dictionary) -> bool:
 	station_equipment = staged_station_equipment
 	combat_training_visuals = staged_combat_training_visuals
 	combat_training_story = staged_combat_training_story
+	mido_travel = staged_mido_travel
+	early_contracts = staged_early_contracts
+	engine_particles = staged_engine_particles
+	ambient_population = staged_ambient_population
+	ambient_combat = staged_ambient_combat
+	freighter_destruction = staged_freighter_destruction
+	ambient_lifecycle = staged_ambient_lifecycle
 	combat_training_destruction = staged_combat_training_destruction
 	combat_training_weapons = staged_combat_training_weapons
 	combat_training_control = staged_combat_training_control
@@ -1173,6 +1240,24 @@ func resolve_ship_detail(ship_id: int) -> Dictionary:
 			children.append({"resource_id":child_id,"path":child_path})
 		levels.append({"resource_id":id,"path":path,"lights":children})
 	return {"ship_id":ship_id,"levels":levels}
+
+func resolve_player_engine_glow(ship_id: int, quality := "high") -> Dictionary:
+	error = ""
+	# Mac player factory selects hull+17900, independently of the exhaust
+	# particle manager. Only the current Betty flight has been verified.
+	if source_architecture!="x86_64" or ship_id!=0:
+		fail("Player engine-glow assembly is not verified for this content or hull")
+		return {}
+	var path:=resolve(17900,"mesh")
+	if path!="resources/data/assets/main/3d/meshes/ships/ship_000_midorian_engine_glow_add.aem":
+		fail("Unsupported Betty engine-glow resource mapping")
+		return {}
+	var material:=material_for_mesh(path,quality)
+	var slots: Array=material.get("texture_ids",[])
+	if material.get("id")!=34813 or material.get("render_type")!=2 or slots.size()!=8 or slots[0]!=34812 or not slots.slice(1).all(func(id):return id==65535):
+		fail("Unsupported Betty engine-glow material mapping")
+		return {}
+	return {"resource_id":17900,"path":path}
 
 
 func resolve_hangar(station_id: int, catalogues: RefCounted) -> Dictionary:

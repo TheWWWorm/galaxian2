@@ -93,6 +93,13 @@ func accept_visual_response(sample: Vector2, seconds: float, preceding_commands:
 	angular_units=next
 	return true
 
+func coast(pose: Transform3D, throttle: float, seconds: float) -> Transform3D:
+	# Scripted flight retains its root heading and speed without preparing
+	# steering input. Recharge and other player work belong to the caller.
+	var next:=_flight.advance(pose,Vector2.ZERO,throttle,seconds)
+	error=_flight.error
+	return next
+
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy.base_content_id=base_content_id;copy.binding_id=binding_id;copy.angular_units=angular_units

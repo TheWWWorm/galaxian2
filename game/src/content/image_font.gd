@@ -1,6 +1,7 @@
 extends RefCounted
 ## Original AEI bitmap metrics, read from checksum-verified base resources.
-## Pixels are skipped, not decoded. Compressed/cube font envelopes are unsupported.
+## The metrics reader skips pixels; native fonts use the verified visual cache.
+## Compressed/cube font envelopes are unsupported.
 const Library = preload("res://src/content/library.gd")
 const MAX_BYTES := 192 * 1024 * 1024
 var error := ""
@@ -50,6 +51,32 @@ func open_selected(library: RefCounted, bindings: RefCounted, mode := 0, role :=
 	font_id = choice.font_id
 	source_mode = mode
 	return true
+
+func create_font(visuals: RefCounted) -> FontFile:
+	error=""
+	if glyphs.is_empty() or visuals==null or visuals.base_content_id!=content_id:
+		fail("Bitmap glyph pixels belong to another or unprepared content base");return null
+	var pixels: Image=visuals.load_image(resource)
+	if pixels==null:fail(visuals.error);return null
+	var height:=0
+	for rect in glyphs.values():height=maxi(height,rect.size.y)
+	var font:=FontFile.new()
+	font.fixed_size=height
+	font.fixed_size_scale_mode=TextServer.FIXED_SIZE_SCALE_ENABLED
+	font.set_cache_ascent(0,height,height)
+	font.set_cache_descent(0,height,0)
+	font.set_meta("source_height",height)
+	font.set_meta("source_resource",resource)
+	var cache:=Vector2i(height,0)
+	font.set_texture_image(0,cache,0,pixels)
+	for code in glyphs:
+		var region: Rect2i=glyphs[code]
+		font.set_glyph_advance(0,height,code,Vector2(advance(code),0))
+		font.set_glyph_offset(0,cache,code,Vector2(0,-height))
+		font.set_glyph_size(0,cache,code,region.size)
+		font.set_glyph_uv_rect(0,cache,code,region)
+		font.set_glyph_texture_idx(0,cache,code,0)
+	return font
 
 
 func parse(bytes: PackedByteArray) -> Array:

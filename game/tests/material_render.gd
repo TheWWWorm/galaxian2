@@ -84,10 +84,67 @@ func run_checks() -> void:
 	check(lit_pixel.r > 0.1 and lit_pixel.g < 0.05, "Diffuse/normal material failed to render: %s" % lit_pixel)
 	check(Materials.create(999, null, null, false) == null, "Unsupported material mode accepted")
 	clear_models()
+	await check_engine_blending()
+	await check_map_lighting()
+	await check_visitor_cutouts()
 	await check_source_uvs()
 	print("Material render checks: %d failures; pixels %s %s %s %s" % [failures, background, additive, mixed, behind])
 	clear_models()
 	quit(1 if failures else 0)
+
+func check_engine_blending() -> void:
+	quad(Color(0, 0, 0.25, 1), 0, -0.1)
+	var background := await pixel()
+	var glow := quad(Color(0.25, 0, 0, 0), 3)
+	var front := await pixel()
+	check(front.r > background.r + 0.15 and absf(front.b - background.b) < 0.04, "Engine sprites must add RGB independently of texture alpha")
+	glow.rotation.y = PI
+	check((await pixel()).is_equal_approx(front), "Engine sprites incorrectly culled their reverse face")
+	var rear := quad(Color(0, 0.25, 0, 0), 3, -0.05, 1)
+	check((await pixel()).g > 0.15, "Engine sprites incorrectly wrote depth before a later sprite")
+	var opaque := quad(Color.BLUE, 0, 0.05)
+	check((await pixel()).is_equal_approx(Color.BLUE), "Engine sprites ignored the opaque depth buffer")
+	opaque.hide();rear.hide();glow.hide()
+	var ordinary := quad(Color(0.25, 0, 0, 0), 2)
+	ordinary.rotation.y = PI
+	check((await pixel()).is_equal_approx(background), "Ordinary additive surfaces lost their back-face culling")
+	clear_models()
+
+func check_map_lighting() -> void:
+	quad(Color.BLUE, 0, -0.1)
+	# Map type 6 is opaque even when its texture has zero alpha. Its light is
+	# explicitly configured by the map, independently of Godot scene lights.
+	var planet := quad(Color(1, 0, 0, 0), 6)
+	var material: ShaderMaterial = planet.materials[0]
+	material.set_shader_parameter("ambient_color", Vector3.ONE * 0.2)
+	material.set_shader_parameter("diffuse_color", Vector3.ONE * 0.6)
+	material.set_shader_parameter("light_position", Vector3(0, 0, -10))
+	var shadow := await pixel()
+	check(shadow.r > 0.15 and shadow.r < 0.25 and shadow.b < 0.03, "Map ambient lighting or opaque texture alpha failed: %s" % shadow)
+	material.set_shader_parameter("light_position", Vector3(0, 0, 10))
+	var facing := await pixel()
+	check(facing.r > shadow.r + 0.5 and facing.r < 0.85, "Map surface normal or point-light direction failed: %s" % facing)
+	quad(Color.GREEN, 1, -0.05, 1)
+	check((await pixel()).is_equal_approx(facing), "Map planet failed to write depth before the alpha pass")
+	planet.rotation.y = PI
+	check((await pixel()).g > 0.9, "Map planet back-face culling failed")
+	clear_models()
+
+func check_visitor_cutouts() -> void:
+	quad(Color.BLUE,0,-0.1)
+	var cutout:=quad(Color(1,0,0,0.49),10)
+	check((await pixel()).is_equal_approx(Color.BLUE),"Transparent visitor texels blocked the room")
+	cutout.hide()
+	var body:=quad(Color(1,0,0,0.51),10)
+	check((await pixel()).is_equal_approx(Color.RED),"Visitor cutouts blended instead of retaining the original RGB")
+	quad(Color.GREEN,1,-0.05,1)
+	check((await pixel()).is_equal_approx(Color.RED),"Visitor body failed to write depth")
+	body.rotation.y=PI
+	check((await pixel()).g>0.9,"Visitor cutouts lost their original back-face culling")
+	body.rotation.y=0
+	body.materials[0].set_shader_parameter("surface_tint",Vector4.ZERO)
+	check((await pixel()).g>0.9,"Source zero-opacity animation covered the room")
+	clear_models()
 
 func check_source_uvs() -> void:
 	var texture := Image.create(4,4,false,Image.FORMAT_RGBA8)
@@ -97,9 +154,12 @@ func check_source_uvs() -> void:
 	input.uvs=PackedVector2Array([Vector2(0.1,0.1),Vector2(0.9,0.1),Vector2(0.5,0.4)])
 	var original_uvs: PackedVector2Array=input.uvs.duplicate()
 	for version in [2,3,4,5]:
-		for mode in [0,1,2,18,28]:
+		for mode in [0,1,2,3,6,10,18,28]:
 			var model := Model.new();viewport.add_child(model)
 			model.build({"version":version,"surfaces":[input]},texture,null,mode)
+			if mode==6:
+				model.materials[0].set_shader_parameter("ambient_color",Vector3.ONE)
+				model.materials[0].set_shader_parameter("diffuse_color",Vector3.ZERO)
 			var sample := await pixel()
 			check(sample.b>sample.r+0.2 if version>=4 else sample.r>sample.b+0.2,"Wrong default UV convention for V%d material %d: %s" % [version,mode,sample])
 			check(input.uvs==original_uvs,"Rendering mutated raw decoded UV data")

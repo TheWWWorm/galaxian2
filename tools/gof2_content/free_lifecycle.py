@@ -1,0 +1,62 @@
+"""Source-bound ordinary combat lifecycle parameters."""
+import copy
+from .station_exterior import hashed_declarations
+
+def extract_free_lifecycle(mach, arrival):
+    proof=hashed_declarations(mach, arrival, LAYOUTS)
+    return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
+
+VALUES = {'scope': 'augmenta_ordinary_lifecycle',
+ 'campaign_cursor': 18,
+ 'system_id': 19,
+ 'standing': {'axes': [0, 0, 1, 1],
+              'hostile_signs': [-1, 1, -1, 1],
+              'threshold': 70,
+              'unconditional_hostiles': [8]},
+ 'reactions': {'primary_faction': 0,
+               'eligible_factions': [0, 1],
+               'radio_requires_empty_mission': True,
+               'empty_mission_kind': -1,
+               'force_matching_faction_only': True},
+ 'recycling_groups': ['patrol', 'travel'],
+ 'hostile_relaunch_security': [0, 1],
+ 'unrestricted_relaunch_faction': 9,
+ 'nivelian_death': {'model_id': 18301,
+                    'model_resource': 'resources/data/assets/main/3d/meshes/ships/cargo_002_nivelian_explosion_anim.aem',
+                    'model_scale': 1.0,
+                    'initial_material_id': 34704,
+                    'wreck_layout_id': 2,
+                    'wreck_material_id': 33353}}
+
+LAYOUTS = {'free_lifecycle_hostile': [807440,
+                            128,
+                            '__text',
+                            '209daf40d4ec5e88c1313c37445ee4a0ef33d73404653b3a058a617a037fae4d'],
+ 'free_lifecycle_friendly': [807568,
+                             128,
+                             '__text',
+                             'a32c7ef7f73abed32663bdf810d8affba26b4f3c3dccb168afc7abfaa939f8ed'],
+ 'free_lifecycle_secondary': [734674,
+                              76,
+                              '__text',
+                              '433abfe7fa1b346202bfe1cb54dae5907afbb6497173385ce1b574fe8cfdde65'],
+ 'free_lifecycle_hostile_relaunch': [113209,
+                                     238,
+                                     '__text',
+                                     '51107402d028bf94a2f9e23a9697b9176a8e57832d49ee24b4c7304311f618a8'],
+ 'free_lifecycle_nivelian_death': [80766,
+                                   17,
+                                   '__text',
+                                   '5eef5b6741b3d7c71f5ac05c0b0097e4a595c3c862a7cbbeb88a4dd0a23395be'],
+ 'free_lifecycle_wreck_kind': [633786,
+                               41,
+                               '__text',
+                               '8894666878ea18b59b5fa5e3ed9cdc8848525836630ce74a6568f68227cc7e35'],
+ 'free_lifecycle_wreck_material': [637724,
+                                   129,
+                                   '__text',
+                                   'c2c94f74f621ab82c7e3f52d5591f4be3f85c6de1c51a1837dcfe64034278a11'],
+ 'free_lifecycle_wreck_table': [638178,
+                                20,
+                                '__text',
+                                'de6e6debcec626d191654edde387c465fcd9775a9e266ee12caebb9ab3827d1c']}

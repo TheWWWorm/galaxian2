@@ -11,29 +11,51 @@ keyboard/touch routing and focus handling. Its deadzone is a configurable remake
 input preference, not a recovered original flight parameter. No GoF1 campaign
 logic, content or compiled products are copied.
 
-GoF1 previously incorporated DEEP import/save architecture. No additional DEEP
-implementation is bundled in this foundation.
+Native station persistence follows the same content isolation, staged write and
+previous-save backup approach as GoF3D's `game/src/simulation/session.gd` and
+`save_transfer.gd`. Its explicit data schema and owner restoration are designed
+for the GoF2 engine; the two games' save formats are separate.
 
-Godot is MIT licensed: https://godotengine.org/license/ . It is a separately
-installed runtime at this stage and is not bundled in source packages.
+GoF1 previously incorporated DEEP import/save architecture. The release notice
+exporter adapts DEEP's Apache-2.0 `tools/export_notices.gd`; desktop packaging
+also follows its isolated staging and offline helper pattern.
+
+Godot is MIT licensed: https://godotengine.org/license/ . Desktop releases include
+its runtime and complete notices in `GODOT_LICENSES.txt`. Source packages require
+a separately installed Godot editor.
 
 Original Galaxy on Fire content belongs to its respective rights holders.
-The engine license covers this engine's code only. No original content is bundled.
+The engine license covers this engine's code only. Promotional screenshots show
+locally imported content; no playable original resources are bundled.
 
 AEM/AEI layout investigation consulted BaalNetbek's AEMesh format research:
 https://github.com/BaalNetbek/AEMesh . No implementation from that repository is
 bundled; native readers and samplers are independently implemented.
 
-Optional import-time texture decompression uses `texture2ddecoder` 1.0.6,
+Import-time texture decompression uses `texture2ddecoder` 1.0.6,
 Copyright (c) 2020 K0lb3, under the MIT license:
-https://github.com/K0lb3/texture2ddecoder . It is installed separately and its
-compiled library is not bundled in the engine source ZIP. Its package carries
-its license and upstream third-party notices.
+https://github.com/K0lb3/texture2ddecoder . Desktop packages include its wheel,
+license and upstream notices in the importer's Python site-packages directory.
+Its compiled library is not bundled in the engine source ZIP.
 
-Optional import-time ARM declaration inspection uses Capstone 5.0.6, Copyright
-(c) 2013 COSEINC, under its BSD 3-clause license. It is installed separately;
-neither its compiled library nor original-game executable bytes are included in
-engine source packages. Capstone: https://www.capstone-engine.org/ .
+Import-time declaration inspection uses Capstone 5.0.6, Copyright (c) 2013
+COSEINC, under its BSD 3-clause license. Desktop packages include its wheel and
+license in the importer's Python site-packages directory. Neither its compiled
+library nor original-game executable bytes are included in source packages.
+Capstone: https://www.capstone-engine.org/ .
+
+Desktop import helpers include CPython 3.12.14 from Astral's
+[python-build-standalone](https://github.com/astral-sh/python-build-standalone)
+20260901 builds. Python and bundled dependency licenses are included under
+`importer/licenses/python/`, along with Python's own license in its installation.
+Python uses the PSF license; its bundled dependencies have their own licenses.
+
+DMG extraction uses [7-Zip 26.03](https://github.com/ip7z/7zip/releases/tag/26.03),
+Copyright (C) Igor Pavlov, under GNU LGPL with the BSD and unRAR restrictions
+described in its included `importer/7zip/License.txt`. Corresponding source is
+available with that release. The helper is a separate, replaceable executable.
+Pinned download URLs and SHA-256 hashes for all desktop dependencies are recorded
+in `tools/desktop-dependencies.json` and shipped as `importer/dependencies.json`.
 
 The FEV layout reader and native FSB5/IMA/MPEG audio reader use format research
 from [vgmstream](https://github.com/vgmstream/vgmstream): `src/meta/fsb_fev.h`,
@@ -63,3 +85,8 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+The source DMG importer invokes a separately installed 7-Zip command-line tool
+(`7zz` or `7z`) to read disk-image files. No 7-Zip binary is included in this
+source tree. Distribution of packaged helpers must include the applicable
+7-Zip licensing and notices.

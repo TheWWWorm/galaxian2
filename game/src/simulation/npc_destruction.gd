@@ -1,10 +1,18 @@
 extends RefCounted
+const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
+const Alioth=preload("res://src/content/alioth_population_definitions.gd")
+const AliothSequence=preload("res://src/simulation/alioth_attack.gd")
 ## Native NPC death motion and retained animation clocks. The encounter owner must
 ## enter at a verified lethal frame, after selection and before live-mode flight.
 ## Accounting, particles, sound playback and camera shake have separate owners.
 const Definitions = preload("res://src/content/npc_destruction_definitions.gd")
 const FullHold = preload("res://src/content/full_hold_destruction_definitions.gd")
 const Training = preload("res://src/content/combat_training_destruction_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
+const Ambient=preload("res://src/content/ambient_combat_definitions.gd")
+const ContractLife=preload("res://src/content/contract_ship_lifecycle_definitions.gd")
+const Convoy=preload("res://src/content/convoy_world_definitions.gd")
+const Construction=preload("res://src/simulation/opening_npc_construction.gd")
 const Appearance=preload("res://src/content/full_hold_appearance_definitions.gd")
 const Resources = preload("res://src/content/npc_destruction_resources.gd")
 const Library = preload("res://src/content/library.gd")
@@ -90,6 +98,100 @@ func _configure_cargo(bindings: RefCounted, resources: RefCounted, actor: Dictio
 		"model_id":int(rules.cargo_model_id),"resource":String(model.resource),"pose":Transform3D.IDENTITY,"rotation_radians":Vector3.ZERO}
 	return true
 
+func configure_contract(bindings: RefCounted,resources: RefCounted,construction: RefCounted,actor: Dictionary) -> bool:
+	clear()
+	if not construction is Construction or not resources is Resources:return reject("Contract death requires its generated population and cargo resources")
+	var packet: Dictionary=construction.snapshot()
+	var data:=ContractLife.population(bindings,packet)
+	var id: Variant=actor.get("actor_id")
+	if data.is_empty() or not Vitals.integer(id) or id>=int(data.actor_count):return reject("Unsupported contract death actor")
+	for key in ["actor_kind","hull_catalogue_id","subtype","population_group","cargo","fragments"]:
+		if actor.get(key)!=packet.actors[id].get(key):return reject("Contract death changed its retained construction")
+	var pack: Dictionary=resources.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if actor.get(key)!=packet.get(key) or pack.get(key)!=packet.get(key):return reject("Contract death belongs to another encounter")
+	if pack.get("contract_encounter")!=packet.contract_encounter or not pack.get("cargo_models") is Array or pack.cargo_models.size()!=int(data.actor_count):return reject("Contract death lacks its prepared cargo models")
+	var rules: Dictionary=data.cargo.duplicate(true)
+	rules.merge(data.actors[id]);rules.campaign_cursor=int(data.campaign_cursor)
+	return _configure_cargo(bindings,resources,actor,rules,pack.cargo_models[id])
+
+func configure_convoy(bindings: RefCounted,resources: RefCounted,construction: RefCounted,actor: Dictionary) -> bool:
+	clear()
+	if not construction is Construction or not resources is Resources:return reject("Convoy death requires its generated population and resources")
+	var packet: Dictionary=construction.snapshot()
+	var data:=Convoy.lifecycle(bindings,packet)
+	var id: Variant=actor.get("actor_id")
+	if data.is_empty() or not Vitals.integer(id) or id>=int(data.actor_count) or actor.get("population_group")!="fighter":return reject("Unsupported convoy small-ship death")
+	for key in ["actor_kind","hull_catalogue_id","subtype","population_group","cargo","fragments"]:
+		if actor.get(key)!=packet.actors[id].get(key):return reject("Convoy death changed its retained construction")
+	var pack: Dictionary=resources.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if actor.get(key)!=packet.get(key) or pack.get(key)!=packet.get(key):return reject("Convoy death belongs to another encounter")
+	if pack.get("convoy_context")!=packet.convoy_context or not pack.get("cargo_models") is Array or pack.cargo_models.size()!=int(data.actor_count):return reject("Convoy death lacks its cargo models")
+	var rules: Dictionary=data.cargo.duplicate(true)
+	rules.merge(data.actors[id]);rules.campaign_cursor=int(data.campaign_cursor)
+	return _configure_cargo(bindings,resources,actor,rules,pack.cargo_models[id])
+
+func configure_alioth_attack(bindings: RefCounted,resources: RefCounted,construction: RefCounted,actor: Dictionary) -> bool:
+	clear()
+	if not construction is Construction or not resources is Resources:return reject("Alioth death requires its generated population and resources")
+	var packet: Dictionary=construction.snapshot()
+	var data:=Alioth.lifecycle(bindings,packet)
+	var id: Variant=actor.get("actor_id")
+	if data.is_empty() or not Vitals.integer(id) or id>=int(data.actor_count) or actor.get("population_group")!="fighter":return reject("Unsupported Alioth small-ship death")
+	for key in ["actor_kind","hull_catalogue_id","subtype","population_group","cargo","fragments"]:
+		if actor.get(key)!=packet.actors[id].get(key):return reject("Alioth death changed its retained construction")
+	var pack: Dictionary=resources.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if actor.get(key)!=packet.get(key) or pack.get(key)!=packet.get(key):return reject("Alioth death belongs to another encounter")
+	if pack.get("alioth_context")!=packet.alioth_context or not pack.get("cargo_models") is Array or pack.cargo_models.size()!=int(data.actor_count):return reject("Alioth death lacks its cargo models")
+	var rules: Dictionary=data.cargo.duplicate(true)
+	rules.merge(data.actors[id]);rules.campaign_cursor=int(data.campaign_cursor)
+	return _configure_cargo(bindings,resources,actor,rules,pack.cargo_models[id])
+
+
+func configure_local_traffic(bindings: RefCounted, resources: RefCounted, actor: Dictionary, data: Dictionary) -> bool:
+	clear()
+	if not bindings is Bindings or not resources is Resources or not Travel.destruction_parameters(bindings,data):return reject("Local death requires its own cargo resources and declarations")
+	var id: Variant=actor.get("actor_id")
+	if not id is int or id<0 or id>=int(data.get("actor_count",0)) or data.actor_count not in [1,4]:return reject("Local death is outside its generated population")
+	for key in ["actor_id","actor_kind","hull_catalogue_id","subtype"]:
+		if not actor.get(key) is int or actor[key]!=int(data.actors[id][key]):return reject("Local death actor changed")
+	for key in ["base_content_id","binding_id"]:
+		if actor.get(key)!=bindings.get(key):return reject("Local death belongs to another content pack")
+	var pack: Dictionary=resources.snapshot()
+	if actor.get("campaign_cursor")!=10 or pack.get("campaign_cursor")!=10:return reject("Local death belongs to another encounter")
+	var rules: Dictionary=data.cargo.duplicate(true)
+	rules.merge(data.actors[id]);rules.campaign_cursor=10
+	return _configure_cargo(bindings,resources,actor,rules,pack.get("cargo_model"))
+
+func configure_ambient(bindings: RefCounted,resources: RefCounted,construction: RefCounted,actor: Dictionary) -> bool:
+	clear()
+	if not construction is Construction or not resources is Resources:return reject("Ambient death requires its generated construction and cargo resources")
+	var packet: Dictionary=construction.snapshot()
+	var ordinary:=FreeLife.population(bindings,packet) if packet.has("free_context") else {}
+	if (packet.has("free_context") and ordinary.is_empty()) or (not packet.has("free_context") and Ambient.population(bindings,packet,0,0.5).is_empty()):return reject("Unsupported ambient death population")
+	var id: Variant=actor.get("actor_id")
+	if not Vitals.integer(id) or id>=packet.actors.size():return reject("Ambient death actor is outside its population")
+	for key in ["actor_kind","hull_catalogue_id","subtype","population_group"]:
+		if actor.get(key)!=packet.actors[id].get(key):return reject("Ambient death actor changed construction")
+	if actor.population_group=="freighter":return reject("Freighter destruction has a separate native owner")
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if actor.get(key)!=packet.get(key) or resources.snapshot().get(key)!=packet.get(key):return reject("Ambient death belongs to another content identity")
+	var rules: Dictionary=bindings.combat_training_destruction.cargo.duplicate(true)
+	rules.merge(bindings.mido_travel.traffic_combat.death,true)
+	rules.actor_id=id;rules.campaign_cursor=int(packet.campaign_cursor)
+	var model: Variant=resources.snapshot().get("cargo_model")
+	if not ordinary.is_empty():
+		var models: Variant=resources.snapshot().get("cargo_models")
+		if resources.snapshot().get("free_context")!=packet.free_context or not models is Array or models.size()!=packet.actors.size():return reject("Ordinary death requires its faction cargo models")
+		rules.merge(ordinary.actors[id],true);model=models[id]
+	if not _configure_cargo(bindings,resources,actor,rules,model):return false
+	if actor.has("spawn_generation"):
+		if not Vitals.integer(actor.spawn_generation):clear();return reject("Invalid ambient death generation")
+		_state.spawn_generation=actor.spawn_generation
+	return true
+
 static func model_clock(model: Variant) -> Dictionary:
 	return Explosion.model_clock(model)
 
@@ -114,6 +216,22 @@ func reposition_full_hold(declarations: Dictionary, pose: Variant, statistics_po
 	_state.phase="ready";_state.mode=1
 	_state.appearance_applied=true
 	return true
+
+func apply_alioth_escape(owner: RefCounted) -> bool:
+	error=""
+	if not owner is AliothSequence or _state.get("campaign_cursor")!=16 or _cargo_rules.is_empty():return reject("Alioth placement requires its retained destruction owner")
+	var sequence: Dictionary=owner.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if sequence.get(key)!=_state[key]:return reject("Alioth destruction belongs to another sequence")
+	if sequence.phase!=AliothSequence.Stage.ESCAPE_VIEW:return reject("No Alioth escape placement is pending")
+	for row in sequence.frame.actor_overrides:
+		if row.actor_id!=_state.actor_id:continue
+		if not Flight.rigid_pose(row.body_pose):return reject("Invalid Alioth body placement")
+		# The story moves the body even during breakup. It neither restarts death
+		# nor moves already separated cargo, debris, or the statistics sample.
+		_state.pose=row.body_pose
+		return true
+	return reject("Alioth escape does not relocate this actor")
 
 func retires_before_update() -> bool:
 	if _state.is_empty():return false

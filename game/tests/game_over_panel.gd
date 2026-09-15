@@ -97,13 +97,13 @@ func verify(args: PackedStringArray):
 		panel.set_mobile_layout(false);panel.size=Vector2(960,720)
 		check(panel.present(death,524) and panel.snapshot().text_id==189 and panel.snapshot().text==lib.strings[189],"Desktop continuation alias lost: "+language)
 		check(panel.snapshot().image_rect.size==Vector2(147,68),"Desktop game-over composition is not compact")
-		panel.set_mobile_layout(true);panel.size=Vector2(420,800)
+		panel.set_mobile_layout(true);panel.size=Vector2(800,450)
 		check(panel.present(death,524) and panel.snapshot().text_id==188 and panel.snapshot().text==lib.strings[188],"Mobile continuation text lost: "+language)
 		await process_frame
 		var state: Dictionary=panel.snapshot()
 		check(state.image_rect.size==Vector2(294,136) and state.prompt_rect.end.y<=800 and state.prompt_rect.end.x<=420,"Phone art/prompt exceeds its viewport: "+language)
 	check(lib.select_language("ja") and panel.configure(lib,bindings,visuals,death),"Japanese capture resources unavailable")
-	canvas.size=Vector2i(420,800);panel.size=canvas.size
+	canvas.size=Vector2i(800,450);panel.size=canvas.size
 	check(panel.present(death,524),panel.error);await capture("phone-japanese")
 	check(not death.request_exit().is_empty() and panel.present(death,524) and not panel.handle_event(enter()),"Committed exit still accepts duplicate continuation")
 	check(construction.snapshot()==entry,"Game-over presentation changed departure, cargo or progress")

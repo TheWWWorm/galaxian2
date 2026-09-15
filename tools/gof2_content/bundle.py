@@ -45,7 +45,7 @@ def selected(name: str) -> bool:
 
 
 class Bundle:
-    def __init__(self, source: Path):
+    def __init__(self, source: Path, checkpoint=lambda *_: None):
         self.source = source.absolute()
         self.zip = None
         self.entries = {}
@@ -53,6 +53,8 @@ class Bundle:
         self.profile = {}
         self.info_path = ''
         self.executable_name = None
+        self.dmg = None
+        self.checkpoint = checkpoint
 
     def __enter__(self):
         try:
@@ -65,10 +67,20 @@ class Bundle:
     def __exit__(self, *_):
         if self.zip:
             self.zip.close()
+        if self.dmg:
+            self.dmg.__exit__(None, None, None)
 
     def _discover(self):
         if self.source.is_symlink():
             raise ContentError('Choose a regular archive or extracted .app, not a symbolic link')
+        if self.source.suffix.lower() == '.dmg':
+            from .dmg import DmgApp
+            self.dmg = DmgApp(self.source, self.checkpoint)
+            self.source = self.dmg.__enter__()
+            self._discover()
+            if self.profile.get('edition') != 'mac-full-hd':
+                raise ContentError('The DMG must contain Galaxy on Fire 2 Full HD for Mac')
+            return
         if self.source.is_dir():
             if self.source.suffix != '.app':
                 raise ContentError('Choose the extracted .app directory itself')
@@ -89,8 +101,6 @@ class Bundle:
                         self.entries[rel] = (path.stat().st_size, path)
             candidates = [n for n in ('Info.plist', 'Contents/Info.plist') if n in self.entries]
         else:
-            if self.source.suffix.lower() == '.dmg':
-                raise ContentError('Direct DMG import is not implemented. Extract the .app with an archive tool, then select it or ZIP that app.')
             try:
                 self.zip = zipfile.ZipFile(self.source)
             except (zipfile.BadZipFile, OSError) as error:

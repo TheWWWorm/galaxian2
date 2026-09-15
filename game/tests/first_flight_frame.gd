@@ -136,7 +136,7 @@ func render(directory: String,lib: RefCounted,bindings: RefCounted,visuals: RefC
 		var capture:=canvas.get_texture().get_image()
 		check(capture.get_size()==canvas.size and capture.save_png(directory.path_join(label+".png"))==OK,"Could not save flight capture")
 		if label=="briefing":
-			canvas.size=Vector2i(420,800);scene.set_mobile_layout(true);check(scene.present(flight),scene.error)
+			canvas.size=Vector2i(800,450);scene.set_mobile_layout(true);check(scene.present(flight),scene.error)
 			for i in 3:await process_frame
 			check(Rect2(Vector2.ZERO,canvas.size).encloses(scene.dialogue._panel.get_rect()),"Live phone briefing extends beyond viewport")
 			canvas.get_texture().get_image().save_png(directory.path_join("briefing-phone.png"))

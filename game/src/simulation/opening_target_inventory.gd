@@ -11,6 +11,9 @@ const Ores = preload("res://src/simulation/scenery_ores.gd")
 const Field = preload("res://src/simulation/scenery_field.gd")
 const Player=preload("res://src/simulation/opening_player_state.gd")
 const Training=preload("res://src/content/combat_training_weapon_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
+const Ambient=preload("res://src/content/ambient_population_definitions.gd")
+const ContractWorld=preload("res://src/content/contract_world_definitions.gd")
 const REQUIRED_EQUIPMENT_TYPE := 33
 var error := ""
 var _state := {}
@@ -36,17 +39,25 @@ func configure(bindings: RefCounted, catalogues: RefCounted, opening_field: Dict
 	return _configure_source(bindings,catalogues,source,actors.snapshot().actors,opening_field,count)
 
 func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, player: RefCounted, scenery: RefCounted) -> bool:
+	return _configure_equipped(bindings,catalogues,player,scenery,7)
+
+func configure_local_travel(bindings: RefCounted, catalogues: RefCounted, player: RefCounted, scenery: RefCounted, cursor: int=10) -> bool:
+	if bindings==null or not Travel.parameters(bindings.mido_travel):clear();return reject("Local targets require their source declarations")
+	if not (cursor==18 and load("res://src/content/free_flight_definitions.gd").available(bindings)) and not (cursor==16 and load("res://src/content/alioth_flight_definitions.gd").available(bindings)) and not (cursor==14 and not load("res://src/content/convoy_world_definitions.gd").flight(bindings,79).is_empty()) and not (ContractWorld.supports(bindings,cursor)) and (cursor not in [10,11,12] or Travel.journey(bindings.mido_travel,cursor).is_empty()):clear();return reject("Unsupported local target context")
+	return _configure_equipped(bindings,catalogues,player,scenery,cursor)
+
+func _configure_equipped(bindings: RefCounted, catalogues: RefCounted, player: RefCounted, scenery: RefCounted, cursor: int) -> bool:
 	clear()
 	# Scenery also owns primary contact staging; avoid a preload cycle through
 	# its primary owner while still requiring the native scenery implementation.
 	if bindings==null or not player is Player or scenery==null or scenery.get_script()==null or scenery.get_script().resource_path!="res://src/simulation/opening_scenery.gd" or not Training.parameters(bindings.combat_training_weapons):return reject("Training targets require the native equipped player and scenery")
 	var source: Dictionary=player.loadout();var field: Dictionary=scenery.snapshot()
-	if source.get("campaign_cursor")!=7 or source.get("binding_id")!=bindings.binding_id or source.get("base_content_id")!=bindings.base_content_id:return reject("Training target equipment has a different identity")
+	if source.get("campaign_cursor")!=cursor or source.get("binding_id")!=bindings.binding_id or source.get("base_content_id")!=bindings.base_content_id:return reject("Equipped target entry has a different identity")
 	var world: RefCounted=scenery.world_initialization_owner()
-	if world==null or world.snapshot().get("campaign_cursor")!=7:return reject("Training targets require completed world construction")
+	if world==null or world.snapshot().get("campaign_cursor")!=cursor:return reject("Equipped targets require completed world construction")
 	var population:=Population.new()
 	if not population.configure(bindings):return reject(population.error)
-	var count:=population.for_departure(source.station_id,world.snapshot().entry_conditions,7)
+	var count:=population.for_departure(source.station_id,world.snapshot().entry_conditions,cursor)
 	if count.is_empty():return reject(population.error)
 	return _configure_source(bindings,catalogues,source,world.snapshot().npc_construction.actors,field,count)
 
@@ -106,11 +117,20 @@ func _configure_source(bindings: RefCounted, catalogues: RefCounted, source: Dic
 	var npc_ids := []
 	var cast:=[]
 	for actor in actor_rows:
-		var model: String=bindings.resolve_ship_model(int(actor.hull_catalogue_id))
+		var free_freight: bool=source.get("campaign_cursor")==18 and actor.get("population_group")=="freighter"
+		if free_freight and not load("res://src/content/free_traffic_definitions.gd").actor_matches(bindings,actor,"freighter"):return reject("Ordinary target changed its source freighter assembly")
+		var alioth_freight: bool=source.get("campaign_cursor")==16 and actor.get("population_group")=="freighter"
+		if alioth_freight and actor.get("assembly")!=bindings.mido_travel.alioth_attack.population.freighter_assembly:return reject("Alioth target changed its original freighter assembly")
+		var freight: bool=source.get("campaign_cursor") in [11,12,13,14] and actor.get("population_group")=="freighter"
+		var capital: bool=source.get("campaign_cursor")==14 and actor.get("population_group")=="capital"
+		if capital and actor.get("assembly")!=bindings.mido_travel.convoy_ship.assembly:return reject("Convoy target changed its source capital assembly")
+		var debris: bool=source.get("campaign_cursor") in [13,14] and actor.get("population_group")=="debris"
+		if freight and not Ambient.assembly_matches(bindings.ambient_population,actor.get("assembly")):return reject("Mixed target lacks its original freighter assembly")
+		var model: String=bindings.resolve(int(actor.assembly.body_resource_ids[0]),"mesh") if capital or alioth_freight or free_freight else bindings.resolve(int(actor.resource_id),"mesh") if debris else (bindings.resolve(int(actor.assembly.root_model_id),"mesh") if freight else bindings.resolve_ship_model(int(actor.hull_catalogue_id)))
 		if model.is_empty():return reject(bindings.error)
 		npc_ids.append(actor.actor_id)
 		cast.append({"actor_id":actor.actor_id,"actor_kind":actor.actor_kind,
-			"hull_catalogue_id":actor.hull_catalogue_id,"hull_resource":model})
+			"hull_catalogue_id":-1 if debris else actor.hull_catalogue_id,"hull_resource":model})
 	var canonical := {}
 	for key in ["base_content_id","binding_id","ship_id","slots","equipment_ids"]:canonical[key]=source[key]
 	if source.has("campaign_cursor"):canonical.campaign_cursor=source.campaign_cursor

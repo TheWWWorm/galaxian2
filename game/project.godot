@@ -14,6 +14,7 @@ window/size/viewport_height=720
 window/size/window_width_override=1120
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
+window/handheld/orientation=0
 
 [rendering]
 renderer/rendering_method="gl_compatibility"

@@ -1,0 +1,58 @@
+"""Source-bound Alioth portal and ordinary flight declarations."""
+import copy
+from .station_exterior import hashed_declarations
+
+def extract_alioth_flight(mach,arrival):
+    proof=hashed_declarations(mach,arrival,LAYOUTS)
+    return (copy.deepcopy(VALUES),proof) if proof else ({},{})
+
+VALUES = {'scope': 'alioth_flight_environment',
+ 'campaign_cursor': 16,
+ 'station_id': 98,
+ 'system_id': 19,
+ 'portal': {'model_id': 16994,
+            'environment_slot': 3,
+            'initial_elapsed_ms': 0,
+            'initial_extent': 4096,
+            'open_duration_ms': 3000,
+            'close_start_ms': 60000,
+            'hide_at_ms': 63001,
+            'extent_scale': 4096,
+            'model_scale_shift': 4,
+            'model_scale_fraction': 1.52587890625e-05,
+            'facing_x_offset': 0.5,
+            'animation_advances_while_hidden': True,
+            'closed_relocates': False}}
+
+LAYOUTS = {'alioth_flight_portal_update': [655588,
+                                 1380,
+                                 '__text',
+                                 '89f80ffadde43646b4c1835e9d937383e24ee8c0a882b7ef82e2261216b5f48c'],
+ 'alioth_flight_portal_vtable': [2401610,
+                                 192,
+                                 '__const',
+                                 '0a963858cb5fc394999ebd61ba2f26b5a9e8ad750b567160454cc4abf66127ff'],
+ 'alioth_flight_portal_draw': [656968,
+                               34,
+                               '__text',
+                               '2e6d1c311034330e95a597ba4646344a83a04ec5084b193e93c7280bbb55ea84'],
+ 'alioth_flight_portal_facing': [655548,
+                                 26,
+                                 '__text',
+                                 '3f78d8ccdbeeb4ae6d48960cb5ac43e19e1078243e4251553eb31b603e8e0f0e'],
+ 'alioth_flight_portal_duration': [1546010,
+                                   4,
+                                   '__const',
+                                   '99157bb0f934b23e522c1509fced2b666b562a3fa366b3c8857144536d43033a'],
+ 'alioth_flight_portal_extent': [1588942,
+                                 4,
+                                 '__const',
+                                 'a34908edd12760df9e8f2b8a4afc349744ea5772b0ab93d3aff276d21b17b4f0'],
+ 'alioth_flight_portal_scale': [1575014,
+                                4,
+                                '__const',
+                                '54e347282ecf0fd46f002970fa012534725e0bf3b2ad2f4ca0efc0134d7e1d28'],
+ 'alioth_flight_portal_facing_offset': [1544586,
+                                        4,
+                                        '__const',
+                                        'd99e58435243d9fef9c88273b8d553b4fba4d0baf8009d29eae74fa99e0d9f57']}

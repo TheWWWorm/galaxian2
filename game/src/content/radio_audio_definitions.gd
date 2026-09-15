@@ -7,7 +7,7 @@ const VALUES := {"trigger":"radio_display","repeat":"once_per_event","spatial":f
 const SPANS := {"x86_64":{"duration":[-352,32],"selection":[-212,44],"text_getter":[1153,10],"lookup":[-898405,59],"lookup_return":[-896090,14],"display_delay":[0,26],"display":[22,39],"finish":[443,90],"language":[-1347499,52],"language_init":[-1349369,16],"language_getter":[436837,13],"lookup_table":[876965,12032],"language_table":[1714117,16],"default_name":[1007365,8],"override_name":[1007373,8]},"armv7":{"duration":[-420,32],"selection":[-308,46],"text_getter":[978,4],"lookup":[-814366,40],"lookup_found":[-814216,8],"lookup_return":[-813426,10],"display_delay":[0,44],"display":[44,58],"finish":[514,132],"language":[-1624698,52],"language_init":[-1625040,12],"language_getter":[1444774,16],"lookup_table":[1834414,12032],"language_table":[2135054,8],"default_name":[1578070,8],"override_name":[1578078,8]}}
 
 static func parameters(data: Variant, count: int = 23) -> bool:
-	if count not in [2, 3, 23]: return false
+	if count not in [2, 3, 5, 23]: return false
 	if not data is Dictionary or data.size()!=VALUES.size()+3 or not data.get("provenance") is Dictionary:return false
 	for key in VALUES:
 		var value: Variant=data.get(key)

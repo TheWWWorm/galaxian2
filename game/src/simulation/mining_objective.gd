@@ -7,6 +7,7 @@ const Construction=preload("res://src/simulation/first_flight_construction.gd")
 const Cargo=preload("res://src/simulation/flight_cargo.gd")
 const Scenery=preload("res://src/simulation/opening_scenery.gd")
 const Encounter=preload("res://src/simulation/full_hold_encounter.gd")
+const Career=preload("res://src/simulation/opening_handoff.gd")
 var error:=""
 var _state:={}
 var _rules:={}
@@ -20,6 +21,7 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 	if bindings==null or library==null or construction==null or construction.get_script()!=Construction:return reject("Mining objective requires a prepared departure")
 	var flight: Dictionary=construction.snapshot()
 	if flight.is_empty() or flight.get("base_content_id")!=bindings.base_content_id or flight.get("binding_id")!=bindings.binding_id or library.manifest.get("content_id")!=bindings.base_content_id:return reject("Mining objective belongs to another departure or content identity")
+	if Story.for_departure(bindings,flight).is_empty():return reject("This construction has no connected ordinary flight context")
 	var rules:=Story.objective(bindings,flight.get("campaign_cursor"))
 	if rules.is_empty():return reject("This departure has no supported mining objective")
 	if flight.campaign_cursor!=int(rules.campaign_cursor) or flight.activated or flight.entry_released or flight.briefing_started:return reject("Mining objective requires its fresh prepared departure")
@@ -50,15 +52,27 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 		"required_cargo":int(rules.required_cargo),"mission":mission.duplicate(true),"progress":flight.departure.progress.duplicate(true),
 		"reward_credits":0,"mining_completed":false}
 	_initial_progress=flight.departure.progress.duplicate(true)
-	if rules.has("defeat_condition"):
+	if rules.has("defeat_condition") or rules.get("local_visit",false) or rules.get("capture_controlled",false) or rules.get("alioth_attack",false):
 		_state.combat_objective_satisfied=false;_state.combat_objective_acknowledged=false
 	return true
 
-func poll(cargo: RefCounted, scenery: RefCounted, player_alive:=true, encounter: RefCounted=null) -> bool:
+func poll(cargo: RefCounted, scenery: RefCounted, player_alive:=true, encounter: RefCounted=null,radio: RefCounted=null) -> bool:
 	error=""
 	if _state.is_empty() or cargo==null or cargo.get_script()!=Cargo or scenery==null or scenery.get_script()!=Scenery:return reject("Mining objective needs its owned cargo and field")
 	var held: Dictionary=cargo.snapshot()
 	if held.get("base_content_id")!=_state.base_content_id or held.get("binding_id")!=_state.binding_id or cargo.field_identity()!=_field_identity or scenery.presentation_identity()!=_field_identity or not cargo.matches_mined_field(scenery.snapshot()):return reject("Mining objective cargo and field history do not match")
+	if _rules.get("alioth_attack",false):
+		if not is_instance_of(radio,load("res://src/simulation/radio_sequence.gd")):return reject("Alioth completion requires its live radio sequence")
+		var transmission: Dictionary=radio.snapshot()
+		for key in ["base_content_id","binding_id"]:
+			if transmission.get(key)!=_state[key]:return reject("Alioth completion belongs to another radio")
+		if transmission.get("campaign_cursor")!=16 or not transmission.get("finished") is Array or transmission.finished.size()!=5:return reject("Alioth completion lost its five source events")
+		if not observe_combat(encounter):return false
+		if _state.phase=="collecting" and player_alive and transmission.finished[4]:
+			_state.combat_objective_satisfied=true;_state.phase="return_instructions"
+		return true
+	# A visit is completed by its destination station, never by cargo or combat.
+	if _rules.get("local_visit",false) or _rules.get("capture_controlled",false):return observe_combat(encounter)
 	if _rules.has("defeat_condition"):
 		if not encounter is Encounter or encounter.snapshot().get("campaign_cursor")!=7:return reject("Training completion requires the retained four-actor encounter")
 		var combat: Dictionary=encounter.snapshot()
@@ -78,18 +92,23 @@ func poll(cargo: RefCounted, scenery: RefCounted, player_alive:=true, encounter:
 
 func observe_combat(encounter: RefCounted) -> bool:
 	error=""
-	if not _rules.has("defeat_condition") or not encounter is Encounter:return reject("Training progress requires its native encounter")
+	if _state.is_empty() or not encounter is Encounter:return reject("Combat progress requires its configured objective and native encounter")
 	var state: Dictionary=encounter.snapshot()
 	for key in ["base_content_id","binding_id"]:
-		if state.get(key)!=_state[key]:return reject("Training progress belongs to another encounter")
-	if state.get("campaign_cursor")!=7:return reject("Training progress has another mission")
-	var counters: Dictionary=state.controller.accounting.counter_deltas
+		if state.get(key)!=_state[key]:return reject("Combat progress belongs to another encounter")
+	if state.get("campaign_cursor")!=int(_rules.campaign_cursor):return reject("Combat progress has another mission")
 	var progress:=_initial_progress.duplicate(true)
-	progress.player_kills+=int(counters.player_kills);progress.pirate_kills+=int(counters.pirate_kills)
-	progress.campaign_cursor=_state.campaign_cursor
-	progress.rank_score=progress.other_score+progress.player_kills*int(_progress_rules.player_kill_weight)+progress.pirate_kills*int(_progress_rules.pirate_kill_weight)+progress.campaign_cursor*int(_progress_rules.cursor_weight)
-	for i in _progress_rules.rank_thresholds.size():
-		if progress.rank_score>=int(_progress_rules.rank_thresholds[i]):progress.rank=i
+	if _rules.has("defeat_condition") or _rules.get("local_visit",false) or _rules.get("capture_controlled",false) or _rules.get("alioth_attack",false):
+		var counters: Dictionary=state.controller.accounting.counter_deltas
+		progress.player_kills+=int(counters.player_kills);progress.pirate_kills+=int(counters.pirate_kills)
+		if _rules.get("capture_controlled",false):progress.capital_ship_kills=int(_initial_progress.get("capital_ship_kills",0))+int(counters.capital_ship_kills)
+	if progress.has("reputation"):
+		var combat: RefCounted=encounter.combat_owner()
+		progress.reputation=combat.reputation_after(_initial_progress.reputation)
+		if progress.reputation.is_empty():return reject(combat.error)
+	var score:=Career.calculate_progress(_progress_rules,_state.campaign_cursor,progress.player_kills,progress.pirate_kills,progress.other_score)
+	if score.is_empty():return reject("Combat progress exceeds the supported career range")
+	progress.merge(score,true)
 	_state.progress=progress
 	return true
 
@@ -101,7 +120,7 @@ func navigate(action: String) -> bool:
 		_state.line_index-=1
 	elif _state.line_index<_lines.size()-1:_state.line_index+=1
 	else:
-		if _rules.has("defeat_condition"):_state.combat_objective_acknowledged=true
+		if _rules.has("defeat_condition") or _rules.get("alioth_attack",false):_state.combat_objective_acknowledged=true
 		else:_state.cargo_objective_acknowledged=true
 		_state.phase="return_required";_state.station_return_required=true
 		_state.campaign_cursor=int(_rules.cursor_after_acknowledgement)
@@ -110,6 +129,7 @@ func navigate(action: String) -> bool:
 		for i in _progress_rules.rank_thresholds.size():
 			if _state.progress.rank_score>=int(_progress_rules.rank_thresholds[i]):_state.progress.rank=i
 		_state.mission={"kind":int(_rules.next_kind),"station_id":int(_rules.station_id),"reward":0,"bonus":0}
+		if _rules.get("alioth_attack",false):_state.mission.source_parameter=0
 	return true
 
 func snapshot() -> Dictionary:

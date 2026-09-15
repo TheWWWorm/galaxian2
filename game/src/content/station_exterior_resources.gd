@@ -9,6 +9,7 @@ const AEM=preload("res://src/content/aem.gd")
 const Tracks=preload("res://src/content/animation_tracks.gd")
 const Volumes=preload("res://src/content/station_collision_volumes.gd")
 const Vectors=preload("res://src/simulation/source_vectors.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
 # V4 vertex/normal buffers already use engine axes. Only stored sphere centers
 # need the authoring-to-engine conversion performed by the source sphere reader.
 const MESH_AXES:=Basis.IDENTITY
@@ -20,8 +21,30 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	error=""
 	if library==null or bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.station_exterior):return reject("This pack has no supported mining station exterior")
 	if not Library.valid_hash(bindings.base_content_id) or not Library.valid_hash(bindings.binding_id) or library.manifest.get("content_id")!=bindings.base_content_id or catalogues.content_id!=bindings.base_content_id:return reject("Station exterior resources belong to different content identities")
-	var entry: Dictionary=construction.snapshot();var data: Dictionary=bindings.station_exterior
-	if entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty() or entry.get("location",{}).get("station_id")!=int(data.station_id) or entry.get("location",{}).get("system_id")!=int(data.system_id):return reject("Station exterior requires the supported mining location")
+	var entry: Dictionary=construction.snapshot()
+	if entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id:return reject("Station exterior belongs to another construction")
+	var context: Variant=entry.get("location")
+	if not context is Dictionary:return reject("Station exterior requires its constructed location")
+	var cursor:=int(entry.get("campaign_cursor",-1));var station_id:=int(context.get("station_id",-1));var system_id:=int(context.get("system_id",-1))
+	if cursor in [10,11,12,13,14,16,18]:
+		if OrdinaryFlight.for_departure(bindings,entry).is_empty():return reject("This local exterior has no supported flight world")
+	elif OrdinaryFlight.select(bindings,cursor).is_empty():return reject("Station exterior requires a supported flight")
+	return _prepare_location(library,bindings,catalogues,station_id,system_id)
+
+func configure_ordinary_location(library: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int) -> bool:
+	# Resource preparation is independent of earning a journey to this station.
+	# The flight constructor still owns actual departure and arrival permission.
+	error=""
+	if library==null or bindings==null or not Definitions.parameters(bindings.station_exterior):return reject("Station exterior requires its original resource declarations")
+	if not Library.valid_hash(bindings.base_content_id) or not Library.valid_hash(bindings.binding_id) or library.manifest.get("content_id")!=bindings.base_content_id:return reject("Station exterior resources belong to different content identities")
+	var world: Dictionary=load("res://src/content/ordinary_world_definitions.gd").catalogue_location(bindings,catalogues,station_id)
+	if world.is_empty():return reject("Station exterior requires a supported ordinary location")
+	return _prepare_location(library,bindings,catalogues,station_id,int(world.system_id))
+
+func _prepare_location(library: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int,system_id: int) -> bool:
+	if station_id<0 or station_id>=catalogues.tables.stations.size():return reject("Station exterior is absent from the source catalogue")
+	var data:=Definitions.for_location(bindings,station_id,system_id,int(catalogues.tables.stations[station_id].planet_type))
+	if data.is_empty():return reject("Station exterior requires a supported ordinary location")
 	var stations: Array=catalogues.tables.get("stations",[]);var systems: Array=catalogues.tables.get("systems",[])
 	if stations.size()<=int(data.station_id) or systems.size()<=int(data.system_id):return reject("Station exterior is absent from the source catalogues")
 	var station: Dictionary=stations[int(data.station_id)];var system: Dictionary=systems[int(data.system_id)]
@@ -29,7 +52,7 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	var volume_reader:=Volumes.new()
 	var bytes: PackedByteArray=library.read_resource(data.collision_resource,Volumes.MAX_BYTES)
 	if bytes.is_empty():return reject(library.error)
-	var collision:=volume_reader.decode(bytes,int(data.station_id),int(data.collision_record_limit))
+	var collision:=volume_reader.decode(bytes,int(data.station_id),int(data.collision_record_limit),float(data.get("collision_sphere_scale",0.0)))
 	if collision.is_empty():return reject(volume_reader.error)
 	var layers:=[];var sphere:=Vector4.ZERO
 	for index in data.model_ids.size():
@@ -42,7 +65,7 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 		if model_bytes.is_empty():return reject(library.error)
 		var reader:=AEM.new();var model:=reader.decode(model_bytes)
 		if model.is_empty():return reject(reader.error)
-		if model.version!=4 or model.surfaces.size()!=([1,1,2][index]):return reject("Unsupported station exterior mesh layout: "+path)
+		if model.version!=4 or model.surfaces.is_empty() or model.surfaces.size()>256:return reject("Unsupported station exterior mesh layout: "+path)
 		var layer_sphere:=Vector4.ZERO
 		for surface in model.surfaces:
 			if not initial_transform_supported(surface,index==2):return reject("Unsupported station exterior transform or initial light sample: "+path)
@@ -64,6 +87,7 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	return true
 
 static func initial_transform_supported(surface: Dictionary, allow_light_scalar: bool) -> bool:
+	if Tracks.has_identity_tracks([surface]):return true
 	var copy:=surface.duplicate(true)
 	var scalar: Array=copy.tracks.get("scalar",[])
 	if allow_light_scalar:
@@ -86,9 +110,13 @@ static func merge_spheres(current: Vector4, incoming: Vector4) -> Vector4:
 
 func point_volume(point: Vector3) -> int:
 	if _state.is_empty() or not Volumes.contains_point(point,_state.pose.origin,Vector3.ONE*float(_state.bounds_half_extent)):return -1
-	for i in _state.collision.boxes.size():
-		var box: Dictionary=_state.collision.boxes[i]
-		if Volumes.contains_point(point,box.center+_state.pose.origin,box.half_extents):return i
+	var shapes: Array=_state.collision.get("shapes",_state.collision.boxes)
+	for i in shapes.size():
+		var shape: Dictionary=shapes[i]
+		var center: Vector3=Vectors.added(shape.center,_state.pose.origin)
+		if shape.get("kind",1)==0:
+			if Volumes.contains_sphere(point,center,float(shape.radius)):return i
+		elif Volumes.contains_point(point,center,shape.half_extents):return i
 	return -1
 
 func snapshot() -> Dictionary:return _state.duplicate(true)

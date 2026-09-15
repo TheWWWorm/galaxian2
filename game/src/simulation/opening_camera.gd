@@ -121,10 +121,13 @@ func view(scene: Dictionary) -> Dictionary:
 
 static func target_pose(shot: Dictionary, scene: Dictionary) -> Dictionary:
 	if scene.get("base_content_id") != shot.get("base_content_id") or scene.get("binding_id") != shot.get("binding_id"): return {"error": "Scene belongs to another opening content identity"}
-	if shot.get("target") not in ["player", "actor"]: return {"error": "Unknown camera target selector"}
+	if shot.get("target") not in ["player", "actor", "environment"]: return {"error": "Unknown camera target selector"}
 	var target: Variant = scene.get("player_pose")
+	if shot.target == "environment":
+		if not Numbers.integer(shot.get("slot"),0,2147483647):return {"error":"Invalid environment camera slot"}
+		target=scene.get("environment",{}).get(shot.slot)
 	if shot.target == "actor":
-		if not Numbers.integer(shot.get("actor_id"), 0, 2): return {"error": "Invalid opening camera actor selector"}
+		if not Numbers.integer(shot.get("actor_id"), 0, 2147483647): return {"error": "Invalid opening camera actor selector"}
 		target = null
 		var actors: Variant = scene.get("actors")
 		if not actors is Array: return {"error": "Opening camera actor poses are unavailable"}

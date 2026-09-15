@@ -40,10 +40,9 @@ func configure(bindings: RefCounted, catalogues: RefCounted, equipment_ids: Arra
 	for id in bindings.scenery_resources.get("ore_item_ids",[]):
 		if ore_id==int(id):ore_supported=true
 	if not ore_supported:return reject("Asteroid does not declare a supported ore")
-	var selected:={};var drill_id:=-1;var seen:={}
+	var selected:={};var drill_id:=-1
 	for id in equipment_ids:
-		if not Numbers.integer(id,0,items.size()-1) or seen.has(int(id)):return reject("Invalid installed drill equipment")
-		seen[int(id)]=true
+		if not Numbers.integer(id,0,items.size()-1):return reject("Invalid installed drill equipment")
 		var properties: Dictionary=items[int(id)].properties
 		if properties.get(int(rules.item_kind_property))!=int(rules.equipment_kind):continue
 		if properties.get(int(rules.item_category_property))==int(rules.drill_category):

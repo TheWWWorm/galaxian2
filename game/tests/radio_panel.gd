@@ -46,7 +46,7 @@ func run() -> void:
 	var desktop_width: float = view._panel.size.x
 	for phone in [true, false]:
 		view.set_mobile_layout(phone)
-		for viewport in [Vector2(1120, 720), Vector2(390, 844), Vector2(320, 200)]:
+		for viewport in [Vector2(1120, 720), Vector2(844, 390), Vector2(320, 200)]:
 			view.size = viewport
 			await process_frame
 			check(view._panel.position.x >= 0 and view._panel.position.y >= 0 and view._panel.position.x + view._panel.size.x <= viewport.x + 1 and view._panel.position.y + view._panel.size.y <= viewport.y + 1, "Radio panel escaped viewport")

@@ -7,6 +7,10 @@ const Definitions = preload("res://src/content/dialogue_definitions.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Library = preload("res://src/content/library.gd")
 const Combat = preload("res://src/simulation/opening_combat_group.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
+const ContractWorld=preload("res://src/content/contract_world_definitions.gd")
+const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
+const Alioth=preload("res://src/content/alioth_attack_definitions.gd")
 var error := ""
 var _definition := {}
 var _lines: Array = []
@@ -38,6 +42,10 @@ func configure(bindings: RefCounted, library: RefCounted, source_line_counts: Ar
 	if not Library.valid_hash(content_id) or content_id != bindings.base_content_id or not Library.valid_hash(bindings.binding_id): return fail("Radio belongs to another or unavailable content identity")
 	var data: Dictionary = Definitions.select(bindings, campaign_cursor)
 	if not Definitions.valid_parameters(data, campaign_cursor) or source_line_counts.size() != data.events.size(): return fail("Scene radio or source text layout is unavailable")
+	return _configure_records(bindings,library,data,source_line_counts,campaign_cursor)
+
+func _configure_records(bindings: RefCounted, library: RefCounted, data: Dictionary, source_line_counts: Array, campaign_cursor: int) -> bool:
+	var content_id: String=library.manifest.get("content_id", "")
 	if library.active_language.is_empty(): return fail("Select a verified content language before starting radio")
 	for i in data.events.size():
 		var text_id := int(data.events[i].text_id)
@@ -52,6 +60,18 @@ func configure(bindings: RefCounted, library: RefCounted, source_line_counts: Ar
 	_identity = {"base_content_id": content_id, "binding_id": bindings.binding_id, "language": library.active_language}
 	if campaign_cursor != 0: _identity.campaign_cursor = campaign_cursor
 	return true
+
+func configure_local_message(bindings: RefCounted, library: RefCounted, layout: RefCounted, text_id: int, cursor: int=10) -> bool:
+	clear()
+	if bindings==null or library==null or layout==null or (Travel.journey(bindings.mido_travel,cursor).is_empty() and not ContractWorld.supports(bindings,cursor) and not (cursor==18 and FreeFlight.available(bindings))) or not Definitions.valid_parameters(bindings.opening_dialogue,0):return fail("Local radio requires its verified dialogue and clock")
+	if library.manifest.get("content_id")!=bindings.base_content_id or layout.content_id!=bindings.base_content_id or layout.binding_id!=bindings.binding_id or layout.language!=library.active_language:return fail("Local radio layout belongs to another content or language")
+	var rule: Dictionary=bindings.mido_travel.traffic_combat.radio
+	if not rule.warning_text_ids.any(func(value):return int(value)==text_id) and not rule.response_text_ids.any(func(value):return int(value)==text_id):return fail("Local radio text is outside the verified faction messages")
+	if text_id>=library.strings.size() or not library.strings[text_id] is String:return fail("Local radio text is unavailable")
+	var lines: PackedStringArray=layout.wrap(library.strings[text_id])
+	if not layout.error.is_empty():return fail(layout.error)
+	var row:={"speaker_id":int(rule.speaker_id),"text_id":text_id,"condition":int(rule.condition),"values":[int(rule.value)]}
+	return _configure_records(bindings,library,{"events":[row],"timing":bindings.opening_dialogue.timing.duplicate(true)},[lines.size()],cursor)
 
 func configure_from_layout(bindings: RefCounted, library: RefCounted, layout: RefCounted, campaign_cursor: int = 0) -> bool:
 	clear()
@@ -69,8 +89,8 @@ func configure_from_layout(bindings: RefCounted, library: RefCounted, layout: Re
 	return configure(bindings, library, counts, campaign_cursor)
 
 func step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int) -> Array:
-	if _identity.get("campaign_cursor")==7:
-		fail("Training radio requires its typed actor activity context")
+	if _identity.get("campaign_cursor") in [7,14,16]:
+		fail("Encounter radio requires its verified target context")
 		return []
 	return _step(elapsed_ms,actor_hulls,cinematic_phase,false)
 
@@ -98,7 +118,66 @@ func step_combat_training(elapsed_ms: int, combat: RefCounted) -> Array:
 		hostile_active=hostile_active or (actor.active and not actor.friendly)
 	return _step(elapsed_ms,{},0,hostile_active)
 
-func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hostile_active: bool) -> Array:
+func step_convoy(elapsed_ms: int, targets: Dictionary) -> Array:
+	error=""
+	if _identity.get("campaign_cursor")!=14:
+		fail("Convoy radio requires its original dialogue")
+		return []
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if targets.get(key)!=_identity[key]:
+			fail("Convoy target list belongs to another encounter")
+			return []
+	var rows: Variant=targets.get("player_targets")
+	if not rows is Array or rows.size()>4096:
+		fail("Convoy radio requires the player's current target list")
+		return []
+	var defeated:=0
+	for row in rows:
+		if not row is Dictionary or not row.get("scenery") is bool:
+			fail("Convoy target has no scenery classification")
+			return []
+		# Source condition20 skips scenery before reading hull. Activity and
+		# hostility do not participate, and this is not the lifetime kill count.
+		if row.scenery:continue
+		if not Numbers.integer(row.get("current_hull"),-2147483648,2147483647):
+			fail("Convoy target has no current hull")
+			return []
+		if row.current_hull<=0:defeated+=1
+	return _step(elapsed_ms,{},0,false,defeated)
+
+func step_alioth_attack(elapsed_ms: int, combat: Dictionary) -> Array:
+	error=""
+	if _identity.get("campaign_cursor")!=16:
+		fail("Alioth radio requires its original encounter")
+		return []
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if combat.get(key)!=_identity[key]:
+			fail("Alioth actors belong to another encounter")
+			return []
+	var actors: Variant=combat.get("actors")
+	var expected: Array=Alioth.VALUES.population.actors
+	if not actors is Array or actors.size()!=expected.size():
+		fail("Alioth radio requires its complete authored population")
+		return []
+	var hulls:={}
+	for id in actors.size():
+		var row: Variant=actors[id]
+		if not row is Dictionary:
+			fail("Alioth radio lost an authored actor")
+			return []
+		for key in ["actor_id","actor_kind","hull_catalogue_id"]:
+			if row.get(key)!=int(expected[id][key]):
+				fail("Alioth radio changed its authored actor membership")
+				return []
+		if not Numbers.integer(row.get("current_hull"),-2147483648,2147483647):
+			fail("Alioth radio requires current actor hulls")
+			return []
+		hulls[id]=int(row.current_hull)
+	# Condition9 observes the three freighter hulls. Visibility, activity,
+	# retirement and the player's lifetime kill count are unrelated.
+	return _step(elapsed_ms,hulls,0,false)
+
+func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hostile_active: bool, defeated_targets:=0) -> Array:
 	error = ""
 	if _identity.is_empty() or elapsed_ms < 0 or elapsed_ms < _last_time or elapsed_ms > 2147483647:
 		fail("Invalid radio context or simulation time")
@@ -107,7 +186,7 @@ func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hosti
 	var changes := []
 	if _active < 0:
 		for i in _started.size():
-			if not _started[i] and eligible(_definition.events[i], elapsed_ms, actor_hulls, cinematic_phase,hostile_active):
+			if not _started[i] and eligible(_definition.events[i], elapsed_ms, actor_hulls, cinematic_phase,hostile_active,defeated_targets):
 				_active = i
 				_started[i] = true
 				_activated_at = elapsed_ms
@@ -129,7 +208,7 @@ func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hosti
 		_visible = false
 	return changes
 
-func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int, hostile_active:=false) -> bool:
+func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int, hostile_active:=false, defeated_targets:=0) -> bool:
 	var value := int(row.values[0])
 	match int(row.condition):
 		5: return elapsed_ms >= value
@@ -141,6 +220,7 @@ func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int, h
 			return true
 		27: return phase == value
 		16: return hostile_active
+		20: return defeated_targets>=value
 	return false
 
 func snapshot() -> Dictionary:

@@ -87,7 +87,7 @@ func verify_camera(data: Dictionary) -> void:
 			check(camera.global_transform.is_equal_approx(view.pose), "Camera pose changed during presentation")
 	# Check actual Camera3D projection, including live viewport resizes. The test
 	# oracle uses analytic frustum corners independently of Godot's matrix builder.
-	for size in [Vector2i(1600,900), Vector2i(900,1600), Vector2i(1024,1024)]:
+	for size in [Vector2i(1600,900), Vector2i(1280,800), Vector2i(1024,1024)]:
 		viewport.size = size
 		var projection := camera.get_camera_projection()
 		var tangent := tan(float(data.vertical_fov_radians) / 2.0)

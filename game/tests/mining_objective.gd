@@ -163,7 +163,7 @@ func verify_presentation(args: Array):
 				else:check(speech._player==null and speech.snapshot().history.size()==2,"Silent return instruction retained speech")
 			if args.size()==4:
 				for mobile in [false,true]:
-					canvas.size=Vector2i(420,800) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
+					canvas.size=Vector2i(800,450) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
 					for f in 3:await process_frame
 					check(Rect2(Vector2.ZERO,canvas.size).encloses(panel._panel.get_rect()),"Return panel escapes viewport: "+language)
 					check(panel._body.get_content_height()<=panel._body.size.y or panel._body.scroll_active,"Return text cannot be read: "+language)

@@ -1,9 +1,16 @@
 extends RefCounted
+const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 ## Native ordinary NPC bodies for verified encounter populations.
 ## Encounter logic supplies poses, lifecycle changes and already-resolved hits.
 const TrainingControl=preload("res://src/content/combat_training_control_definitions.gd")
 const TrainingDeath=preload("res://src/content/combat_training_destruction_definitions.gd")
 const TrainingWorld=preload("res://src/simulation/opening_world_initialization.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
+const AmbientCombat=preload("res://src/content/ambient_combat_definitions.gd")
+const AmbientLife=preload("res://src/content/ambient_lifecycle_definitions.gd")
+const NPCConstruction=preload("res://src/simulation/opening_npc_construction.gd")
+const ContractCombat=preload("res://src/content/contract_ship_combat_definitions.gd")
+const ContractLife=preload("res://src/content/contract_ship_lifecycle_definitions.gd")
 const ControlDefinitions=preload("res://src/content/full_hold_control_definitions.gd")
 const Appearance=preload("res://src/content/full_hold_appearance_definitions.gd")
 const Flight=preload("res://src/simulation/npc_flight.gd")
@@ -14,10 +21,19 @@ const Activation = preload("res://src/content/npc_activation_definitions.gd")
 const Holding = preload("res://src/content/npc_holding_definitions.gd")
 const Hostility = preload("res://src/content/npc_hostility_definitions.gd")
 const DeathAccounting = preload("res://src/content/npc_death_accounting_definitions.gd")
+const FreighterDeath=preload("res://src/simulation/freighter_destruction.gd")
+const SmallShipDeath=preload("res://src/simulation/npc_destruction.gd")
+const Junk=preload("res://src/content/contract_junk_definitions.gd")
+const DebrisDeath=preload("res://src/simulation/debris_destruction.gd")
 const Hull = preload("res://src/content/npc_hull_definitions.gd")
 const InitialActors = preload("res://src/simulation/opening_actor_state.gd")
 const Definitions = preload("res://src/content/npc_initialization_definitions.gd")
 const Vitals = preload("res://src/simulation/combat_vitals.gd")
+const Convoy = preload("res://src/content/convoy_world_definitions.gd")
+const ConvoyShip = preload("res://src/content/convoy_ship_definitions.gd")
+const ConvoyCapture = preload("res://src/simulation/convoy_capture.gd")
+const Alioth = preload("res://src/content/alioth_population_definitions.gd")
+const AliothAttack = preload("res://src/simulation/alioth_attack.gd")
 var error := ""
 var _initial_training_death := false
 var _state := {}
@@ -131,6 +147,325 @@ func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, wor
 	_initial_training_death=companion and TrainingDeath.parameters(bindings.combat_training_destruction)
 	return set_pose(row.statistics_pose,row.body_pose)
 
+func configure_local_patrol(bindings: RefCounted, catalogues: RefCounted, world: RefCounted, actor_id: Variant, rank: Variant, difficulty: Variant) -> bool:
+	clear()
+	if not world is TrainingWorld or catalogues==null:return reject("Local patrol bodies require prepared source traffic")
+	var data:=Travel.patrol(bindings,world.snapshot(),rank,difficulty)
+	if data.is_empty() or bindings.base_content_id!=catalogues.content_id or not actor_id is int or actor_id<0 or actor_id>=int(data.actor_count):return reject("Unsupported local patrol population or context")
+	var row: Dictionary=world.snapshot().npc_construction.actors[actor_id]
+	if not Flight.rigid_pose(row.get("body_pose")) or row.body_pose!=row.get("statistics_pose"):return reject("Local patrol factory poses disagree")
+	var model: String=bindings.resolve_ship_model(int(row.hull_catalogue_id))
+	if model.is_empty():return reject(bindings.error)
+	var base: int=int(data.rank_base)+int(data.rank_multiplier)*rank+int(data.cursor_multiplier)*int(data.campaign_cursor)
+	var source_difficulty:=Vitals.single(float(difficulty))
+	var factory_hull:=scaled_hull(float(base),source_difficulty,float(data.difficulty_offset))
+	var actor:={"actor_id":actor_id,"actor_kind":int(row.actor_kind),"hull_catalogue_id":int(row.hull_catalogue_id),"hull_resource":model,"position":row.statistics_pose.origin,"current_hull":factory_hull}
+	var policy:={"initial_hostile":bool(data.initial_hostile),"updated_hostile":bool(data.initial_hostile)}
+	if not _initialize_body(bindings,bindings.opening_actors.npc_initialization,actor,source_difficulty,factory_hull,float(data.percentage_scale),policy):return false
+	_state.merge({"campaign_cursor":int(data.campaign_cursor),"rank":rank,"friendly":bool(data.friendly),"local_patrol":true,
+		"actor_mode":int(data.initial_actor_mode),"active":bool(data.initial_active),
+		"targeting_blocked":bool(data.initial_actor_targeting_blocked),"statistics_targeting_blocked":bool(data.initial_statistics_targeting_blocked),
+		"spatial_half_extent":int(data.engagement_half_extent),"model_draw_enabled":bool(data.initial_model_draw_enabled),
+		"node_draw_requested":bool(data.initial_node_draw_requested),"engine_draw_enabled":bool(data.initial_engine_draw_enabled)},true)
+	return set_pose(row.statistics_pose,row.body_pose)
+
+func configure_ambient(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant,rank: Variant,difficulty: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction or catalogues==null:return reject("Ambient combat requires its generated population")
+	var packet: Dictionary=construction.snapshot()
+	var data:=AmbientCombat.population(bindings,packet,rank,difficulty)
+	if data.is_empty() or catalogues.content_id!=bindings.base_content_id or not actor_id is int or actor_id<0 or actor_id>=data.actor_count:return reject("Unsupported ambient combat identity or context")
+	var row: Dictionary=packet.actors[actor_id]
+	if not Flight.rigid_pose(row.get("body_pose")) or row.body_pose!=row.get("statistics_pose"):return reject("Ambient actor poses disagree")
+	var freight: bool=row.population_group=="freighter"
+	var root_id: int=int(row.assembly.body_resource_ids[0] if data.has("free_traffic") else row.assembly.root_model_id) if freight else -1
+	var model: String=bindings.resolve(root_id,"mesh") if freight else bindings.resolve_ship_model(int(row.hull_catalogue_id))
+	if model.is_empty():return reject(bindings.error)
+	var base: int=int(data.rank_base)+int(data.rank_multiplier)*rank+int(data.cursor_multiplier)*int(data.campaign_cursor)
+	if freight:base*=int(data.freighter.hull_multiplier)
+	var source_difficulty:=Vitals.single(float(difficulty))
+	var factory_hull:=scaled_hull(float(base),source_difficulty,float(data.difficulty_offset))
+	var actor:={"actor_id":actor_id,"actor_kind":int(row.actor_kind),"hull_catalogue_id":int(row.hull_catalogue_id),"hull_resource":model,"position":row.statistics_pose.origin,"current_hull":factory_hull}
+	var policy:={"initial_hostile":bool(data.initial_hostile),"updated_hostile":row.actor_kind==8 if data.has("free_traffic") else bool(data.initial_hostile)}
+	if not _initialize_body(bindings,bindings.opening_actors.npc_initialization,actor,source_difficulty,factory_hull,float(data.percentage_scale),policy):return false
+	_state.merge({"campaign_cursor":int(data.campaign_cursor),"rank":rank,"friendly":bool(data.friendly),"ambient_traffic":true,
+		"population_group":row.population_group,"subtype":int(row.subtype),"actor_mode":int(data.initial_actor_mode),"active":bool(data.initial_active),
+		"targeting_blocked":bool(data.initial_actor_targeting_blocked),"statistics_targeting_blocked":bool(data.initial_statistics_targeting_blocked),
+		"spatial_half_extent":int(data.engagement_half_extent),"model_draw_enabled":bool(data.initial_model_draw_enabled),
+		"node_draw_requested":bool(data.initial_node_draw_requested),"engine_draw_enabled":bool(data.initial_engine_draw_enabled)},true)
+	if data.has("free_traffic"):_state.free_traffic=true
+	if freight:
+		_state.point_boxes=[]
+		var boxes: Array=data.freighter_boxes[row.actor_kind] if data.has("free_traffic") else data.freighter.boxes
+		for box in boxes:
+			_state.point_boxes.append({"offset":Vector3(box.offset[0],box.offset[1],box.offset[2]),"half_extents":Vector3(box.half_extents[0],box.half_extents[1],box.half_extents[2])})
+		_state.point_box_index=0
+	elif AmbientLife.parameters(bindings.ambient_lifecycle) and row.population_group=="travel":
+		_state.actor_mode=int(bindings.ambient_lifecycle.initial_mode)
+		_state.active=bool(bindings.ambient_lifecycle.initial_active)
+		_state.travel_cycle=0
+	if AmbientLife.recycling_parameters(bindings.ambient_lifecycle):_state.spawn_generation=0
+	return set_pose(row.statistics_pose,row.body_pose)
+
+func configure_convoy(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction or catalogues==null:return reject("Convoy bodies require their generated original population")
+	var packet: Dictionary=construction.snapshot()
+	var data:=Convoy.population(bindings,packet)
+	if data.is_empty() or catalogues.content_id!=bindings.base_content_id or not actor_id is int or actor_id<0 or actor_id>=data.actor_count:return reject("Unsupported convoy body identity or context")
+	var row: Dictionary=packet.actors[actor_id]
+	var capital: bool=row.population_group=="capital"
+	var source: Dictionary=bindings.mido_travel.convoy_ship
+	var model: String=bindings.resolve(int(source.assembly.body_resource_ids[0]),"mesh") if capital else bindings.resolve_ship_model(row.hull_catalogue_id)
+	if model.is_empty():return reject(bindings.error)
+	var base: int=int(data.rank_base)+int(data.rank_multiplier)*int(data.rank)+int(data.cursor_multiplier)*int(data.campaign_cursor)
+	if capital:base*=int(source.combat.hull_multiplier)
+	var factory_hull:=scaled_hull(float(base),float(data.difficulty),float(data.difficulty_offset))
+	var initial:={"actor_id":actor_id,"actor_kind":row.actor_kind,"hull_catalogue_id":row.hull_catalogue_id,"hull_resource":model,"position":row.statistics_pose.origin,"current_hull":factory_hull}
+	var policy:={"initial_hostile":bool(data.pirate_initial_hostile),"updated_hostile":bool(data.pirate_updated_hostile) if row.actor_kind==8 else false}
+	if not _initialize_body(bindings,bindings.opening_actors.npc_initialization,initial,float(data.difficulty),factory_hull,float(data.percentage_scale),policy):return false
+	var ordinary: Dictionary=bindings.mido_travel.traffic_control
+	_state.merge({"campaign_cursor":int(data.campaign_cursor),"station_id":int(data.station_id),"rank":int(data.rank),"convoy":true,"convoy_script_retired":false,"convoy_phase":ConvoyCapture.Stage.INTERCEPTION,
+		"population_group":row.population_group,"subtype":row.subtype,"friendly":bool(ordinary.friendly),"actor_mode":int(ordinary.initial_actor_mode),
+		"active":bool(ordinary.initial_active),"targeting_blocked":bool(ordinary.initial_actor_targeting_blocked),"statistics_targeting_blocked":bool(data.npc_statistics_targeting_blocked),
+		"spatial_half_extent":int(data.engagement_half_extent),"model_draw_enabled":bool(data.initial_model_draw_enabled),"node_draw_requested":bool(data.initial_node_draw_requested),"engine_draw_enabled":bool(data.initial_engine_draw_enabled)},true)
+	if capital:
+		_state.point_boxes=ConvoyShip.boxes(bindings);_state.point_box_index=0
+	var capture: Dictionary=bindings.mido_travel.convoy_capture
+	_state.convoy_retirement={"first_actor":int(capture.first_pulse_actor_id),"actor_kind":int(capture.disabled_actor_kind),"mode":int(capture.retired_actor_mode),"active":bool(capture.retired_actor_active),"hull":int(capture.retired_actor_hull)}
+	_initial_training_death=true
+	return set_pose(row.statistics_pose,row.body_pose)
+
+func enable_convoy_combat() -> bool:
+	if not _state.get("convoy",false):return reject("Convoy combat requires its generated body")
+	_state.local_combat=true;_state.forced_hostile=false
+	return true
+
+func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction or catalogues==null:return reject("Alioth bodies require their generated original population")
+	var packet: Dictionary=construction.snapshot()
+	var data:=Alioth.population(bindings,packet)
+	if data.is_empty() or catalogues.content_id!=bindings.base_content_id or not actor_id is int or actor_id<0 or actor_id>=data.actor_count:return reject("Unsupported Alioth body identity or context")
+	var row: Dictionary=packet.actors[actor_id]
+	var source: Dictionary=bindings.mido_travel.alioth_attack
+	var freight: bool=row.population_group=="freighter"
+	var model: String=bindings.resolve(int(row.assembly.body_resource_ids[0]),"mesh") if freight else bindings.resolve_ship_model(row.hull_catalogue_id)
+	if model.is_empty():return reject(bindings.error)
+	var base: int=int(data.rank_base)+int(data.rank_multiplier)*int(data.rank)+int(data.cursor_multiplier)*int(data.campaign_cursor)
+	if freight:base*=int(source.population.freighter_combat.hull_multiplier)
+	var factory_hull:=scaled_hull(float(base),float(data.difficulty),float(data.difficulty_offset))
+	var current_hull:=factory_hull
+	if freight:
+		for divisor in row.hull_divisors:
+			@warning_ignore("integer_division")
+			current_hull=current_hull/int(divisor)
+	elif row.actor_kind==9:current_hull*=int(source.population.void_hull_multiplier)
+	else:current_hull=int(row.current_hull_override)
+	var initial:={"actor_id":actor_id,"actor_kind":row.actor_kind,"hull_catalogue_id":row.hull_catalogue_id,"hull_resource":model,"position":row.statistics_pose.origin,"current_hull":current_hull}
+	# Kind8/9 share unconditional hostility. Alioth's Terran actors retain
+	# the mission's forced friendship through later standing/provocation updates.
+	var policy:={"initial_hostile":bool(data.initial_hostile),"updated_hostile":row.actor_kind==9}
+	if not _initialize_body(bindings,bindings.opening_actors.npc_initialization,initial,float(data.difficulty),factory_hull,float(data.percentage_scale),policy):return false
+	# The freighter/ Void setters replace both hull values. The escort setter
+	# replaces current hull and raises capacity only when necessary.
+	if freight or row.actor_kind==9:_state.max_hull=current_hull
+	_state.merge({"campaign_cursor":int(data.campaign_cursor),"station_id":int(data.station_id),"rank":int(data.rank),"alioth_attack":true,
+		"alioth_phase":AliothAttack.Stage.ATTACK,"alioth_elapsed_ms":0,"alioth_script_retired":false,
+		"population_group":row.population_group,"subtype":row.subtype,"friendly":bool(row.get("friendly",data.friendly)),
+		"actor_mode":int(data.initial_actor_mode),"active":bool(data.initial_active),
+		"targeting_blocked":bool(data.initial_actor_targeting_blocked),"statistics_targeting_blocked":bool(data.initial_statistics_targeting_blocked),
+		"spatial_half_extent":int(data.engagement_half_extent),"model_draw_enabled":bool(data.initial_model_draw_enabled),
+		"node_draw_requested":bool(data.initial_node_draw_requested),"engine_draw_enabled":bool(data.initial_engine_draw_enabled)},true)
+	if freight:
+		_state.point_boxes=source.population.freighter_combat.boxes.map(func(box):return {"offset":AliothAttack.vec(box.offset),"half_extents":AliothAttack.vec(box.half_extents)})
+		_state.point_box_index=0
+	_state.alioth_retirement={"actor_kind":int(source.choreography.escaping_actor_kind),"mode":int(source.choreography.retire_mode),
+		"active":bool(source.choreography.retire_active),"visible":bool(source.choreography.retire_visible)}
+	return set_pose(row.statistics_pose,row.body_pose)
+
+func enable_alioth_combat() -> bool:
+	if not _state.get("alioth_attack",false):return reject("Alioth combat requires its generated body")
+	_state.local_combat=true;_state.forced_hostile=false;_initial_training_death=true
+	return true
+
+func refresh_alioth_hostility(forced: bool) -> bool:
+	if not _state.get("alioth_attack",false) or not _state.get("local_combat",false):return reject("Alioth hostility requires connected combat")
+	# The mission's persistent friendship overrides standing AND retaliation.
+	# The requested-damage/force history still belongs to the normal hit owner.
+	_state.forced_hostile=forced;_state.hostile=bool(_hostility.updated_hostile)
+	_state.friendly=not _state.hostile
+	return true
+
+func apply_alioth_guidance(decision: Dictionary) -> bool:
+	if not _state.get("alioth_attack",false) or _state.population_group!="fighter":return reject("Alioth guidance requires a small ship")
+	return _apply_guidance_activity(decision,true)
+
+func apply_alioth_retirement(owner: RefCounted) -> bool:
+	error=""
+	if not _state.get("alioth_attack",false) or not owner is AliothAttack:return reject("Alioth retirement requires its native body and sequence")
+	var sequence: Dictionary=owner.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if sequence.get(key)!=_state[key]:return reject("Alioth retirement belongs to another encounter")
+	if sequence.phase<_state.alioth_phase or sequence.elapsed_ms<_state.alioth_elapsed_ms:return reject("Alioth retirement cannot regress")
+	var rules: Dictionary=_state.alioth_retirement
+	if sequence.phase>=AliothAttack.Stage.FAREWELL and _state.actor_kind==rules.actor_kind:
+		# Scripted escape changes visibility and activity, not vitals or hit
+		# attribution. A living escaped ship must not count as a combat kill.
+		_state.actor_mode=rules.mode;_state.active=rules.active
+		_state.model_draw_enabled=rules.visible;_state.node_draw_requested=rules.visible
+		_state.alioth_script_retired=true
+	_state.alioth_phase=sequence.phase;_state.alioth_elapsed_ms=sequence.elapsed_ms
+	return true
+
+func refresh_convoy_hostility(reputation: Dictionary,forced: bool,rules: Dictionary) -> bool:
+	if not _state.get("convoy",false) or not _state.get("local_combat",false):return reject("Convoy hostility requires connected combat")
+	if _state.actor_kind==8:
+		_state.hostile=bool(_hostility.updated_hostile);_state.friendly=false
+	else:
+		# Terran standing is the opposite end of axis zero. The shared source
+		# predicates use strict thresholds, including a neutral boundary at 70.
+		var standing: int=reputation.axes[int(rules.axis)]
+		_state.hostile=forced or standing<int(rules.hostile_below)
+		_state.friendly=not forced and standing>int(rules.friendly_above)
+	_state.forced_hostile=forced
+	return true
+
+func apply_convoy_guidance(decision: Dictionary) -> bool:
+	if not _state.get("convoy",false) or _state.population_group!="fighter":return reject("Convoy guidance requires a small ship")
+	return _apply_guidance_activity(decision,true)
+
+func apply_convoy_capture(owner: RefCounted) -> bool:
+	error=""
+	if not _state.get("convoy",false) or not owner is ConvoyCapture:return reject("Capture retirement requires its native convoy actors and choreography")
+	var state: Dictionary=owner.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if state.get(key)!=_state[key]:return reject("Capture retirement belongs to another encounter")
+	if state.phase<int(_state.convoy_phase):return reject("Capture retirement cannot regress")
+	# The original story retires pirates directly. It does not inflict a
+	# projectile hit, assign kill credit or trigger a new destruction reward.
+	var rules: Dictionary=_state.convoy_retirement
+	var retired: bool=state.phase>=ConvoyCapture.Stage.PULSE and _state.actor_id==rules.first_actor
+	retired=retired or (state.phase>=ConvoyCapture.Stage.DISABLED and _state.actor_kind==rules.actor_kind)
+	if retired:
+		var pools: Dictionary=_vitals.snapshot()
+		_vitals.configure(rules.hull,pools.armor,pools.shield)
+		_state.actor_mode=rules.mode;_state.active=rules.active;_state.convoy_script_retired=true
+	_state.convoy_phase=state.phase
+	return true
+
+func configure_contract(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction or catalogues==null:return reject("Contract ship bodies require their generated accepted population")
+	var packet: Dictionary=construction.snapshot()
+	if packet.get("contract_encounter",{}).get("kind")==7:return _configure_debris(bindings,catalogues,packet,actor_id)
+	var data:=ContractCombat.population(bindings,packet)
+	if data.is_empty() or catalogues.content_id!=bindings.base_content_id or not actor_id is int or actor_id<0 or actor_id>=data.actor_count:return reject("Unsupported contract ship population or identity")
+	var row: Dictionary=packet.actors[actor_id]
+	if not Flight.rigid_pose(row.get("body_pose")) or row.body_pose!=row.get("statistics_pose"):return reject("Contract ship factory poses disagree")
+	var model: String=bindings.resolve_ship_model(int(row.hull_catalogue_id))
+	if model.is_empty():return reject(bindings.error)
+	var rival: bool=row.population_group=="rival"
+	var base: int=int(data.rank_base)+int(data.rank_multiplier)*int(data.rank)+int(data.cursor_multiplier)*int(data.campaign_cursor)
+	var factory_hull:=scaled_hull(float(base),float(data.difficulty),float(data.difficulty_offset))
+	var initial:={"actor_id":actor_id,"actor_kind":int(row.actor_kind),"hull_catalogue_id":int(row.hull_catalogue_id),
+		"hull_resource":model,"position":row.statistics_pose.origin,"current_hull":int(row.current_hull_override) if rival else factory_hull}
+	var policy: Dictionary=data.rival if rival else data.pirate
+	if not _initialize_body(bindings,bindings.opening_actors.npc_initialization,initial,float(data.difficulty),factory_hull,float(data.percentage_scale),policy):return false
+	_state.merge({"campaign_cursor":int(data.campaign_cursor),"station_id":int(data.station_id),"rank":int(data.rank),"contract_ship":true,
+		"population_group":row.population_group,"subtype":int(row.subtype),"friendly":bool(policy.friendly),"actor_mode":int(data.rival.initial_mode) if rival else int(row.mode),
+		"active":bool(data.rival.initial_active) if rival else bool(row.active),"targeting_blocked":bool(data.rival.initial_targeting_blocked) if rival else bool(row.targeting_blocked),
+		"statistics_targeting_blocked":bool(data.npc_statistics_targeting_blocked),"spatial_half_extent":int(data.engagement_half_extent),
+		"model_draw_enabled":bool(data.initial_model_draw_enabled),"node_draw_requested":bool(data.initial_node_draw_requested),"engine_draw_enabled":bool(data.initial_engine_draw_enabled)},true)
+	if rival:_state.name=row.name
+	return set_pose(row.statistics_pose,row.body_pose)
+
+func _configure_debris(bindings: RefCounted,catalogues: RefCounted,packet: Dictionary,actor_id: Variant) -> bool:
+	var data:=Junk.population(bindings,packet)
+	if data.is_empty() or catalogues.content_id!=bindings.base_content_id or not actor_id is int or actor_id<0 or actor_id>=data.actor_count:return reject("Unsupported contract debris population or identity")
+	var row: Dictionary=packet.actors[actor_id]
+	if row.body_pose.basis!=Basis.IDENTITY:return reject("Contract debris requires its stationary source pose")
+	var model: String=bindings.resolve(int(row.resource_id),"mesh")
+	if model.is_empty():return reject(bindings.error)
+	var initial:={"actor_id":actor_id,"actor_kind":int(row.actor_kind),"hull_catalogue_id":-1,
+		"hull_resource":model,"position":row.statistics_pose.origin,"current_hull":int(row.hull)}
+	if not _initialize_body(bindings,bindings.opening_actors.npc_initialization,initial,float(data.difficulty),int(row.hull),float(bindings.combat_training_control.percentage_scale),{"initial_hostile":true,"updated_hostile":true}):return false
+	var rules: Dictionary=data.lifecycle
+	_state.merge({"campaign_cursor":int(data.campaign_cursor),"station_id":int(data.station_id),"rank":int(data.rank),"contract_debris":true,
+		"resource_id":int(row.resource_id),"population_group":"debris","friendly":bool(row.friendly),
+		"actor_mode":int(row.mode),"active":bool(rules.initial_active),"targeting_blocked":bool(rules.initial_targeting_blocked),
+		"half_extent":int(row.half_extent),"spatial_half_extent":int(row.half_extent),
+		"model_draw_enabled":bool(rules.initial_model_draw_enabled)},true)
+	return set_pose(row.statistics_pose,row.body_pose)
+
+func apply_contract_guidance(decision: Dictionary) -> bool:
+	error=""
+	if not _state.get("contract_ship",false):return reject("Contract guidance requires its prepared ship body")
+	return _apply_guidance_activity(decision,true)
+
+func enable_contract_combat(bindings: RefCounted) -> bool:
+	var supported: bool=Junk.available(bindings) if _state.get("contract_debris",false) else _state.get("contract_ship",false) and ContractLife.available(bindings)
+	if not supported:return reject("Contract damage requires verified lifecycle declarations")
+	if bindings.base_content_id!=_state.base_content_id or bindings.binding_id!=_state.binding_id:return reject("Contract lifecycle belongs to another content pack")
+	_state.contract_combat=true;_state.forced_hostile=false
+	return true
+
+func refresh_contract_hostility(forced: bool) -> bool:
+	if not _state.get("contract_combat",false):return reject("Contract hostility requires connected combat reactions")
+	_state.forced_hostile=forced
+	# The rival's authored friendship takes precedence over faction provocation.
+	return refresh_hostility()
+
+func relaunch_ambient(bindings: RefCounted,death_owner: RefCounted=null) -> bool:
+	error=""
+	if bindings==null or not AmbientLife.parameters(bindings.ambient_lifecycle):return reject("Traffic launch requires supported lifecycle declarations")
+	var recycling:=AmbientLife.recycling_parameters(bindings.ambient_lifecycle)
+	if _state.get("population_group") not in (["patrol","travel"] if recycling else ["travel"]):return reject("Traffic launch requires a supported small ship")
+	for key in ["base_content_id","binding_id"]:
+		if _state.get(key)!=bindings.get(key):return reject("Traffic launch belongs to another content identity")
+	if _state.actor_mode!=int(bindings.ambient_lifecycle.initial_mode) or _state.active:return reject("Only inactive traffic can relaunch")
+	if _vitals.snapshot().hull==0:
+		if not recycling or not death_owner is SmallShipDeath:return reject("Destroyed traffic requires its retired native death owner")
+		var death: Dictionary=death_owner.snapshot()
+		for key in ["base_content_id","binding_id","campaign_cursor","actor_id","spawn_generation"]:
+			if death.get(key)!=_state.get(key):return reject("Retired traffic belongs to another instance")
+		if death.get("phase")!="retired" or death.get("mode")!=4 or death.get("pose")!=_state.body_pose or death.get("statistics_pose")!=_state.pose:return reject("Traffic destruction has not finished retiring")
+	elif death_owner!=null:return reject("A surviving ship cannot borrow a destruction owner")
+	if recycling and (not _state.get("spawn_generation") is int or _state.spawn_generation>=2147483647):return reject("Traffic instance counter is exhausted")
+	var pools:=Vitals.new()
+	if not pools.configure(_state.max_hull,0,0.0):return reject(pools.error)
+	var root: Transform3D=_state.body_pose
+	root.origin=Vector3.ZERO
+	var banked: Transform3D=root if recycling else _state.pose
+	banked.origin=Vector3.ZERO
+	if not set_pose(banked,root):return false
+	_vitals=pools;_state.actor_mode=int(bindings.ambient_lifecycle.launch_mode);_state.active=true
+	_state.statistics_targeting_blocked=false;_state.nonplayer_kill=false
+	_state.contact=false;_state.impact_vector=Vector3.ZERO
+	_state.engine_draw_enabled=true;_state.node_draw_requested=true;_state.model_draw_enabled=true
+	if _state.has("travel_cycle"):_state.travel_cycle+=1
+	if recycling:_state.spawn_generation+=1
+	return true
+
+func apply_ambient_guidance(decision: Dictionary) -> bool:
+	error=""
+	if not _state.get("ambient_traffic",false) or _state.get("population_group")=="freighter":return reject("Ambient guidance requires its small-ship body")
+	for key in ["base_content_id","binding_id","campaign_cursor","actor_id"]:
+		if decision.get(key)!=_state.get(key):return reject("Ambient guidance belongs to another actor")
+	if decision.get("traffic_departure",false):
+		if not _state.has("travel_cycle") or not _state.active or _state.actor_mode not in [1,6] or _vitals.snapshot().hull==0 or not decision.get("traffic_parked") is bool:return reject("Invalid outbound traffic transition")
+		_state.actor_mode=4 if decision.traffic_parked else 6
+		if decision.traffic_parked:_state.active=false
+		return true
+	if decision.get("traffic_waiting",false):return _state.get("travel_cycle",-1)>=0 and not _state.active and _state.actor_mode==4 and _vitals.snapshot().hull>0
+	return _apply_guidance_activity(decision,true)
+
+func apply_ambient_departure_pose(root: Variant) -> bool:
+	error=""
+	if not _state.has("travel_cycle") or _state.actor_mode not in [4,6] or _vitals.snapshot().hull==0 or not Flight.rigid_pose(root):return reject("Departure motion requires a living outbound traffic ship")
+	_state.body_pose=root
+	return true
+
 static func full_hold_initial(bindings: RefCounted, catalogues: RefCounted, construction: RefCounted) -> Dictionary:
 	if bindings==null or catalogues==null or not construction is Construction:return {}
 	if not Library.valid_hash(bindings.base_content_id) or not Library.valid_hash(bindings.binding_id) or bindings.base_content_id!=catalogues.content_id:return {}
@@ -206,6 +541,33 @@ func refresh_hostility() -> bool:
 	_state.hostile=_hostility.updated_hostile
 	return true
 
+func enable_local_combat() -> bool:
+	if not _state.get("local_patrol",false) and not _state.get("ambient_traffic",false):return reject("Local combat requires its generated body")
+	_state.local_combat=true;_state.forced_hostile=false
+	return true
+
+func apply_local_hostility(reputation: Dictionary, forced: bool, rules: Dictionary) -> bool:
+	if not _state.get("local_combat",false):return reject("Local hostility requires connected combat reactions")
+	var value: int=reputation.axes[int(rules.axis)]
+	_state.hostile=forced or value>int(rules.hostile_above)
+	_state.friendly=not forced and value<int(rules.friendly_below)
+	_state.forced_hostile=forced
+	return true
+
+func apply_free_hostility(reputation: Dictionary,forced: bool,rules: Dictionary) -> bool:
+	if not _state.get("free_traffic",false) or not _state.get("local_combat",false):return reject("Ordinary hostility requires connected faction reactions")
+	var standing:=FreeLife.standing(rules,int(_state.actor_kind),reputation,forced)
+	if standing.is_empty():return reject("Unsupported ordinary faction standing")
+	_state.merge(standing,true);_state.forced_hostile=forced
+	return true
+
+func retain_local_force(forced: bool) -> bool:
+	if not _state.get("local_combat",false) and not _state.get("contract_combat",false):return reject("Local force requires connected combat reactions")
+	# The hit changes the force flag now; ordinary actor update refreshes the
+	# displayed/targeting hostility later in the same frame.
+	_state.forced_hostile=forced
+	return true
+
 func snapshot() -> Dictionary:
 	if _state.is_empty(): return {}
 	var result := _state.duplicate(true)
@@ -244,7 +606,7 @@ func apply_scene(scene: Variant) -> bool:
 func set_pose(pose: Variant, physical_pose: Variant=null) -> bool:
 	error = ""
 	if _state.is_empty() or not pose is Transform3D or not pose.is_finite(): return reject("Actor pose requires a configured body and finite transform")
-	if physical_pose!=null and (_state.get("campaign_cursor") not in [4,7] or not Flight.rigid_pose(physical_pose)):return reject("Separate physical motion requires a supported finite flight root")
+	if physical_pose!=null and ((_state.get("campaign_cursor") not in [4,7,10] and not _state.get("ambient_traffic",false) and not _state.get("contract_ship",false) and not _state.get("contract_debris",false) and not _state.get("convoy",false) and not _state.get("alioth_attack",false)) or not Flight.rigid_pose(physical_pose)):return reject("Separate physical motion requires a supported finite flight root")
 	# The actor's source-space transform is also the collision-center authority.
 	var source_pose: Transform3D = pose
 	for axis in 3:
@@ -267,6 +629,7 @@ func set_permissions(active: Variant, damage_allowed: Variant, firing_allowed: V
 
 func apply_destruction(death: Dictionary) -> bool:
 	error=""
+	if _state.get("population_group") in ["freighter","debris"]:return reject("This actor requires its separate destruction lifecycle")
 	if _state.is_empty() or _vitals.snapshot().hull!=0: return reject("NPC destruction requires an exhausted hull")
 	for key in ["base_content_id","binding_id","actor_id"]:
 		if death.get(key)!=_state[key]: return reject("NPC destruction belongs to another actor")
@@ -274,16 +637,43 @@ func apply_destruction(death: Dictionary) -> bool:
 	var phase: Variant=death.get("phase")
 	if phase not in ["tumble","explosion","retired"] or death.get("mode")!=(3 if phase=="tumble" else 4): return reject("Unsupported NPC destruction phase")
 	var previous: Variant=_state.get("actor_mode")
-	var initial_training: bool=previous==0 and _initial_training_death
-	if (previous not in [1,3,4] and not initial_training) or (previous==4 and phase=="tumble") or (not _state.active and phase!="retired"): return reject("NPC destruction phase regressed")
-	if ((previous==1 or initial_training) and phase!="tumble") or (previous==3 and phase=="retired"): return reject("NPC destruction skipped a lifecycle phase")
+	var initial_death: bool=previous==0 and (_initial_training_death or _state.get("local_combat",false) or _state.get("contract_combat",false))
+	if previous==6 and _state.has("travel_cycle"):initial_death=true
+	if _state.has("spawn_generation") and death.get("spawn_generation")!=_state.spawn_generation:return reject("Destruction belongs to an earlier traffic instance")
+	if (previous not in [1,3,4] and not initial_death) or (previous==4 and phase=="tumble") or (not _state.active and phase!="retired"): return reject("NPC destruction phase regressed")
+	if ((previous==1 or initial_death) and phase!="tumble") or (previous==3 and phase=="retired"): return reject("NPC destruction skipped a lifecycle phase")
 	var body_pose: Variant=death.get("pose")
 	if not body_pose is Transform3D or not body_pose.is_finite():return reject("NPC destruction lacks its finite hull transform")
 	if _state.has("campaign_cursor") and (not death.get("statistics_pose") is Transform3D or not death.statistics_pose.is_finite()):return reject("Cargo destruction lacks its finite statistics transform")
 	if not set_pose(death.get("statistics_pose",body_pose),body_pose if _state.has("campaign_cursor") else null): return false
-	if _state.has("engine_draw_enabled") and (previous==1 or initial_training):_state.engine_draw_enabled=false
+	if _state.has("engine_draw_enabled") and (previous==1 or initial_death):_state.engine_draw_enabled=false
 	_state.actor_mode=int(death.mode)
 	if phase=="retired": _state.active=false
+	return true
+
+func apply_freighter_destruction(owner: RefCounted) -> bool:
+	error=""
+	if not owner is FreighterDeath or _state.get("population_group") not in ["freighter","capital"] or _vitals.snapshot().get("hull")!=0:return reject("Freighter lifecycle requires its exhausted combat body")
+	var death: Dictionary=owner.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor","actor_id","actor_kind","hull_catalogue_id","subtype"]:
+		if death.get(key)!=_state.get(key):return reject("Freighter lifecycle belongs to another actor")
+	var mode: Variant=death.get("mode");var previous: int=_state.actor_mode
+	if mode not in [3,4] or (previous==0 and mode!=3) or (previous==4 and mode!=4) or previous not in [0,3,4]:return reject("Freighter lifecycle skipped or regressed a phase")
+	if not death.get("active") is bool or (not _state.active and death.active) or not death.get("pose") is Transform3D or not death.get("statistics_pose") is Transform3D:return reject("Invalid freighter lifecycle state")
+	if not set_pose(death.statistics_pose,death.pose):return false
+	_state.actor_mode=mode;_state.active=death.active;_state.engine_draw_enabled=false
+	_state.world_movement_enabled=false;_state.interaction_blocked=death.interaction_blocked
+	return true
+
+func apply_debris_destruction(owner: RefCounted) -> bool:
+	error=""
+	if not owner is DebrisDeath or not _state.get("contract_combat",false) or not _state.get("contract_debris",false) or _vitals.snapshot().hull!=0:return reject("Debris destruction requires its exhausted prepared body")
+	var death: Dictionary=owner.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor","actor_id","actor_kind","resource_id"]:
+		if death.get(key)!=_state.get(key):return reject("Debris lifecycle belongs to another actor")
+	if death.get("phase")!="destroyed" or death.get("mode")!=4 or _state.actor_mode not in [0,4] or death.pose!=_state.body_pose or death.statistics_pose!=_state.pose:return reject("Debris lifecycle changed its stationary pose or phase")
+	if not death.get("active") is bool or (not _state.active and death.active):return reject("Debris cannot reactivate after destruction")
+	_state.actor_mode=death.mode;_state.active=death.active;_state.model_draw_enabled=false
 	return true
 
 func collision_context() -> Dictionary:
@@ -293,12 +683,19 @@ func collision_context() -> Dictionary:
 		return {}
 	# Capture once per target before visiting projectile slots. A later death in
 	# that inner pass does not retroactively change its already-selected geometry.
-	return {"base_content_id":_state.base_content_id,"actor_id":_state.actor_id,
+	var result:={"base_content_id":_state.base_content_id,"actor_id":_state.actor_id,
 		"eligible":_state.active and _state.collision_enabled and _vitals.snapshot().hull > 0,
 		"path":"bounds","center":_state.position,"half_extent":_state.half_extent}
+	if _state.has("point_boxes"):
+		result.path="point_geometry";result.boxes=_state.point_boxes.duplicate(true)
+	return result
 
 func normal_hit(amount: Variant, nonplayer_source: Variant=false) -> Dictionary:
 	error = ""
+	# A body prepared for patrol cannot take damage until the group also owns
+	# reputation, warning requests and faction retaliation.
+	if (_state.get("local_patrol",false) or _state.get("ambient_traffic",false)) and not _state.get("local_combat",false):return fail_hit("Local traffic damage and retaliation are not connected")
+	if (_state.get("contract_ship",false) or _state.get("contract_debris",false)) and not _state.get("contract_combat",false):return fail_hit("Contract damage and lifecycle are not connected")
 	if _state.is_empty():
 		reject("Configure an actor before applying a normal hit")
 		return {}
@@ -310,13 +707,20 @@ func normal_hit(amount: Variant, nonplayer_source: Variant=false) -> Dictionary:
 	elif result.destroyed_now and nonplayer_source: _state.nonplayer_kill=true
 	return result
 
-func record_contact(incoming_velocity: Variant) -> bool:
+func fail_hit(message: String) -> Dictionary:
+	reject(message)
+	return {}
+
+func record_contact(incoming_velocity: Variant,point_box_index: Variant=null) -> bool:
 	error = ""
 	if _state.is_empty() or not incoming_velocity is Vector3 or not incoming_velocity.is_finite():
 		return reject("NPC contact requires a configured body and finite incoming velocity")
 	var impact := Vector3.ZERO
 	for axis in 3: impact[axis]=Vitals.single(-incoming_velocity[axis])
 	if not impact.is_finite(): return reject("NPC contact exceeds source precision")
+	if point_box_index!=null:
+		if not _state.has("point_boxes") or not point_box_index is int or point_box_index<0 or point_box_index>=_state.point_boxes.size():return reject("Contact names an unavailable collision box")
+		_state.point_box_index=point_box_index
 	# Contact metadata follows the hit attempt even if damage was denied or a
 	# preceding slot exhausted hull. Eligibility belongs to the contact owner.
 	_state.contact=true
@@ -347,6 +751,11 @@ func apply_full_hold_guidance(data: Dictionary, decision: Dictionary) -> bool:
 func apply_combat_training_guidance(data: Dictionary, decision: Dictionary) -> bool:
 	error=""
 	if not TrainingControl.parameters(data) or _state.get("campaign_cursor")!=data.campaign_cursor or not _state.has("statistics_targeting_blocked"):return reject("Combat-training activity requires its configured context")
+	return _apply_guidance_activity(decision,true)
+
+func apply_local_patrol_guidance(decision: Dictionary) -> bool:
+	error=""
+	if not _state.get("local_patrol",false):return reject("Local patrol activity requires its configured source body")
 	return _apply_guidance_activity(decision,true)
 
 func _apply_guidance_activity(decision: Dictionary, training: bool=false) -> bool:

@@ -261,7 +261,7 @@ func verify_presentation(args: PackedStringArray):
 				speech.set_paused(true);check(speech._player.stream_paused,"Return speech ignored pause");speech.set_paused(false)
 			if args.size()==4:
 				for mobile in [false,true]:
-					canvas.size=Vector2i(420,800) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
+					canvas.size=Vector2i(800,450) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
 					for f in 3:await process_frame
 					check(Rect2(Vector2.ZERO,canvas.size).encloses(panel._panel.get_rect()) and (panel._body.get_content_height()<=panel._body.size.y or panel._body.scroll_active),"Return text escapes viewport: "+language)
 			station.acknowledge()
@@ -286,7 +286,7 @@ func verify_presentation(args: PackedStringArray):
 	for i in 5:
 		if args.size()==4 and i in [0,1]:
 			for mobile in [false,true]:
-				canvas.size=Vector2i(420,800) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
+				canvas.size=Vector2i(800,450) if mobile else Vector2i(960,720);panel.set_mobile_layout(mobile)
 				for f in 8:await process_frame
 				await RenderingServer.frame_post_draw
 				check(canvas.get_texture().get_image().save_png(args[3].path_join("station-return-%d-%s.png"%[i,"phone" if mobile else "desktop"]))==OK,"Could not capture returned station")

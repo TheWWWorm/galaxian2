@@ -5,12 +5,14 @@ const Definitions = preload("res://src/content/weapon_definitions.gd")
 const Library = preload("res://src/content/library.gd")
 const Vitals = preload("res://src/simulation/combat_vitals.gd")
 const TrainingWeapons = preload("res://src/content/combat_training_weapon_definitions.gd")
+const Fitting=preload("res://src/content/ordinary_fitting_definitions.gd")
 var error := ""
 var base_content_id := ""
 var binding_id := ""
 var _data := {}
 var _items := []
 var _training := {}
+var _fitting := {}
 
 func clear() -> void:
 	error = ""
@@ -19,6 +21,7 @@ func clear() -> void:
 	_data = {}
 	_items = []
 	_training = {}
+	_fitting = {}
 
 func configure(bindings: RefCounted, catalogues: RefCounted, content_id: String) -> bool:
 	clear()
@@ -34,6 +37,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, content_id: String)
 			_data.launch_modes.alternate_item_ids[i]=int(_data.launch_modes.alternate_item_ids[i])
 	_items = catalogues.tables.items.duplicate(true)
 	if TrainingWeapons.parameters(bindings.combat_training_weapons):_training=bindings.combat_training_weapons.player_primary.duplicate(true)
+	if Fitting.available(bindings):_fitting=bindings.mido_travel.ordinary_fitting.duplicate(true)
 	base_content_id = content_id
 	binding_id = bindings.binding_id
 	return true
@@ -93,6 +97,8 @@ func resolve(item_id: Variant, equipment_ids: Array) -> Dictionary:
 		launch_mode="alternate" if item_id in modes.get("alternate_item_ids",[]) else "ordinary"
 	var dispersed: bool=not _training.is_empty() and item_id==int(_training.item_id) and category==int(_training.category) and kind==int(_training.kind)
 	if dispersed:launch_mode="ordinary"
+	var fitted:=Fitting.primary(_fitting,item_id,int(kind)) if category==0 and not _fitting.is_empty() else {}
+	if not fitted.is_empty() and item_id not in modes.get("alternate_item_ids",[]):launch_mode="ordinary"
 	var result := {"base_content_id":base_content_id,"binding_id":binding_id,"item_id":item_id,"category":category,"kind":kind,
 		"damage":damage,"interval_ms":interval,"lifetime_ms":values.lifetime,"speed_units_per_millisecond":Vitals.single(float(values.speed)),
 		"modifier_item_id":selected,"damage_multiplier":damage_factor,"interval_multiplier":interval_factor,"launch_mode":launch_mode}
@@ -101,6 +107,10 @@ func resolve(item_id: Variant, equipment_ids: Array) -> Dictionary:
 	if dispersed:
 		result.projectile_capacity=int(_training.projectile_capacity)
 		result.dispersion=_training.dispersion.duplicate(true)
+	if not fitted.is_empty() and launch_mode=="ordinary":
+		result.projectile_capacity=fitted.projectile_capacity
+		result.fitting_primary=true
+		if fitted.has("dispersion"):result.dispersion=fitted.dispersion
 	var hit_policy: Dictionary = _data.get("ordinary_hit_policy",{})
 	if launch_mode=="ordinary" and not hit_policy.is_empty():
 		var additional: Variant = properties.get(int(hit_policy.additional_damage_property),int(hit_policy.missing_additional_damage))

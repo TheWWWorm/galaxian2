@@ -24,6 +24,9 @@ func build_arrival(library: RefCounted, visuals: RefCounted, bindings: RefCounte
 func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, quality := "high", equipment: RefCounted=null) -> bool:
 	return _build(library,visuals,bindings,catalogues,quality,false,2,cache,equipment)
 
+func build_lounge(library: RefCounted,visuals: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int,cursor: int,quality:="high") -> bool:
+	return _build(library,visuals,bindings,catalogues,quality,false,3,{"station_id":station_id,"campaign_cursor":cursor})
+
 func _build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, quality: String, with_escape: bool, cursor: int, location_cache: Variant, equipment: RefCounted=null) -> bool:
 	clear()
 	if visuals.base_content_id!=bindings.base_content_id:return reject("Planet textures belong to another content identity")
@@ -33,6 +36,7 @@ func _build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, cata
 		0:_layout=layout.for_opening(bindings,catalogues,library.manifest.get("content_id",""),quality)
 		1:_layout=layout.for_arrival(bindings,catalogues,location_cache,quality)
 		2:_layout=layout.for_departure(bindings,catalogues,location_cache,quality,equipment)
+		3:_layout=layout.for_lounge(bindings,catalogues,location_cache.station_id,location_cache.campaign_cursor,quality)
 		_:return reject("Unsupported planet scene")
 	if _layout.is_empty():return reject(layout.error)
 	if _layout.sky_index in [11,12]:return reject("Fogged planet drawing is not yet supported")
@@ -96,7 +100,7 @@ func apply_view(view: Dictionary, escape: Dictionary = {}) -> bool:
 			# earlier one-time doubling does not alter that constructor baseline.
 			var adjustment:=clampf(f32(view.pose.origin.z/-800000.0),f32(-0.2),f32(0.2))
 			scale_value=f32(scale_value+adjustment)
-		var pose:=Transform3D(entry.basis.scaled(Vector3.ONE*scale_value),entry.origin+view.pose.origin)
+		var pose:=Transform3D(entry.basis.scaled(Vector3.ONE*scale_value),Layout.view_position(entry,view.pose.origin))
 		if not pose.origin.is_finite() or not pose.basis.is_finite():
 			error="Planet drawing is outside supported coordinates";return false
 		staged.append({"station_id":entry.station_id,"pose":pose,"scale":scale_value,

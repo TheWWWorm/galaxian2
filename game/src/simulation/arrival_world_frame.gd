@@ -1,6 +1,7 @@
 extends RefCounted
 ## Owns the supported rescue cinematic: restored player, authored actor, field,
 ## scene clock, radio and fades. The next station remains an explicit boundary.
+const Reputation=preload("res://src/simulation/faction_reputation.gd")
 const Definitions=preload("res://src/content/arrival_session_definitions.gd")
 const HandoffDefinitions=preload("res://src/content/opening_handoff_definitions.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
@@ -62,6 +63,10 @@ func restore_packet(bindings: RefCounted,catalogues: RefCounted,packet: Dictiona
 	for i in rules.rank_thresholds.size():
 		if score>=int(rules.rank_thresholds[i]):rank=i
 	var expected:={"campaign_cursor":1,"rank":rank,"rank_score":score,"player_kills":kills,"pirate_kills":kills,"other_score":0}
+	if Reputation.available(bindings):
+		var reputation: Variant=progress.get("reputation")
+		if not Reputation.valid_state(reputation) or reputation.axes[0]!=30 or reputation.axes[1]<-2*kills or reputation.axes[1]>-kills:reject("Rescue requires its retained Opening reputation");return null
+		expected.reputation=reputation.duplicate(true)
 	var uncertainty:=kills*int(rules.pirate_reputation_change_maximum)
 	var axis:=int(rules.rescue_reputation_axis)
 	var disposition:={"actor_hostile":false,"reputation_axis":axis,"minimum":int(rules.initial_reputation[axis])-uncertainty,"maximum":int(rules.initial_reputation[axis])+uncertainty,"override":int(rules.initial_reputation_override)}

@@ -3,14 +3,16 @@ extends RefCounted
 ## Attached additive geometry shares the primary root; debris is independent.
 const Player = preload("res://src/simulation/player_destruction.gd")
 const Death = preload("res://src/simulation/npc_destruction.gd")
+const Freighter = preload("res://src/simulation/freighter_destruction.gd")
 const Billboard = preload("res://src/presentation/scenery_effect_pose.gd")
 const Vectors = preload("res://src/simulation/source_vectors.gd")
 const BODY_LAST_MS := 299
 
 static func for_death(death: RefCounted, camera: Transform3D) -> Dictionary:
-	if not (death is Death or death is Player) or death.presentation_identity()==null: return {"error":"NPC presentation requires its native death owner"}
+	if not (death is Death or death is Player or death is Freighter) or death.presentation_identity()==null: return {"error":"NPC presentation requires its native death owner"}
 	var state: Dictionary=death.snapshot()
 	if not camera.is_finite(): return {"error":"NPC explosion camera must be finite"}
+	if death is Freighter:return freighter_roots(state,camera)
 	var body: bool=state.body_visible if death is Player else state.phase in ["ready","tumble"] or (state.phase=="explosion" and state.countdown_ms<=BODY_LAST_MS)
 	# The authored second-trip cue can reactivate an exhausted actor while an
 	# older explosion remains active. Source draw submits that effect in both
@@ -26,5 +28,22 @@ static func for_death(death: RefCounted, camera: Transform3D) -> Dictionary:
 		for axis in 3: basis[axis]=Vectors.scaled(basis[axis],fragment.scale)
 		var pose := Transform3D(basis,state.effect.position)
 		if not pose.is_finite(): return {"error":"NPC fragment pose exceeded source precision"}
+		roots.append(pose)
+	return {"body_visible":body,"effect_visible":true,"roots":roots}
+
+static func freighter_roots(state: Dictionary,camera: Transform3D) -> Dictionary:
+	var body: bool=state.phase in ["animation","wreck"]
+	if not state.effect.active:return {"body_visible":body,"effect_visible":false,"roots":[]}
+	if not body or not state.effect.position is Vector3:return {"error":"Freighter effect is outside its destruction phase"}
+	var billboard:=Billboard.alpha_root(camera,state.effect.position,float(state.effect_scale))
+	if billboard.has("error"):return billboard
+	var roots: Array[Transform3D]=[billboard.pose,billboard.pose]
+	# The late scale changes the two effect models. Original fragments retain
+	# their individual constructor scales and do not grow with that flash.
+	for fragment in state.fragments:
+		var basis:=Vectors.local_xyz(fragment.rotation_radians)
+		for axis in 3:basis[axis]=Vectors.scaled(basis[axis],fragment.scale)
+		var pose:=Transform3D(basis,state.effect.position)
+		if not pose.is_finite():return {"error":"Freighter fragment pose exceeded source precision"}
 		roots.append(pose)
 	return {"body_visible":body,"effect_visible":true,"roots":roots}

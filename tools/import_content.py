@@ -14,7 +14,7 @@ from gof2_content import ContentError, install, verify_cache
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
-    ingest = commands.add_parser('import', help='Import an IPA, app ZIP or extracted .app')
+    ingest = commands.add_parser('import', help='Import an Mac DMG, IPA, app ZIP or extracted .app')
     ingest.add_argument('source', type=Path)
     ingest.add_argument('--cache', type=Path, required=True, help='Private cache directory outside engine source')
     check = commands.add_parser('verify', help='Rehash all files in an installed content directory')

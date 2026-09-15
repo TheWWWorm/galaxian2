@@ -12,7 +12,7 @@ from gof2_content.formats import ContentError
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('source', type=Path, help='Original IPA, Mac app or app ZIP')
+    parser.add_argument('source', type=Path, help='Original Mac DMG, IPA, Mac app or app ZIP')
     parser.add_argument('base', type=Path, help='Matching imported base content directory')
     parser.add_argument('--output', required=True, type=Path, help='Separate private declaration cache root')
     args = parser.parse_args()

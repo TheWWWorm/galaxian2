@@ -1,7 +1,8 @@
 extends Node3D
 ## Shared native scene for the first mining world and its modal briefing.
 ## Flight time, input, speech and gameplay belong to the session. This renderer
-## currently omits the animated wormhole; station light pulses remain open.
+## includes Alioth's animated portal; ordinary portal scenes remain open.
+const Portal=preload("res://src/presentation/alioth_portal_geometry.gd")
 const Frame=preload("res://src/simulation/first_flight_frame.gd")
 const Geometry=preload("res://src/presentation/opening_geometry.gd")
 const Background=preload("res://src/presentation/opening_sky.gd")
@@ -10,6 +11,7 @@ const Sun=preload("res://src/presentation/opening_sun_geometry.gd")
 const Lighting=preload("res://src/presentation/opening_lighting.gd")
 const Scenery=preload("res://src/presentation/scenery_geometry.gd")
 const Station=preload("res://src/presentation/station_exterior_geometry.gd")
+const Gates=preload("res://src/presentation/gate_geometry.gd")
 const FlightProjection=preload("res://src/presentation/flight_camera.gd")
 const Dialogue=preload("res://src/presentation/station_dialogue_panel.gd")
 const TargetFrame=preload("res://src/presentation/flight_target_frame.gd")
@@ -26,12 +28,14 @@ const RadioPanel=preload("res://src/presentation/radio_panel.gd")
 const NpcMarkers=preload("res://src/presentation/flight_npc_markers.gd")
 const WaypointMarker=preload("res://src/presentation/flight_waypoint_marker.gd")
 var error:=""
+var portal: Node3D
 var geometry: Node3D
 var sky: Node3D
 var planets: Node3D
 var sun: Node3D
 var scenery: Node3D
 var station: Node3D
+var gates: Node3D
 var camera: Camera3D
 var dialogue: Control
 var target_frame: Control
@@ -50,7 +54,9 @@ var _last_death: RefCounted
 var _last_absolute_ms:=0
 var damage_particles: Node3D
 var _last_particles: RefCounted
+var _last_gate_animation: RefCounted
 var radio: Control
+var _radio_resources: RefCounted
 var npc_markers: Control
 var waypoint_marker: Control
 
@@ -89,15 +95,23 @@ func build(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalogu
 	if state.has("station_exterior"):
 		station=Station.new();add_child(station)
 		if not station.build(library,visuals,bindings,flight.station_owner()):return fail(station.error)
+	if state.has("gate_environment"):
+		gates=Gates.new();add_child(gates)
+		if not gates.build(library,visuals,bindings,catalogues,state.gate_environment):return fail(gates.error)
+	if state.has("alioth_portal"):
+		portal=Portal.new();add_child(portal)
+		if not portal.build(library,visuals,bindings):return fail(portal.error)
 	var overlay:=CanvasLayer.new();overlay.layer=10;add_child(overlay)
 	if state.has("player_route"):
 		waypoint_marker=WaypointMarker.new();overlay.add_child(waypoint_marker);waypoint_marker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		if not waypoint_marker.prepare(library,bindings,visuals):return fail(waypoint_marker.error)
 	if state.has("radio"):
-		var resources:=RadioResources.new()
-		if not resources.prepare(library,bindings,visuals,7):return fail(resources.error)
+		_radio_resources=RadioResources.new()
+		if (state.campaign_cursor in [10,11,12] or state.has("contracts")):
+			if not _radio_resources.prepare_local_traffic(library,bindings,visuals,int(state.campaign_cursor)):return fail(_radio_resources.error)
+		elif not _radio_resources.prepare(library,bindings,visuals,state.campaign_cursor):return fail(_radio_resources.error)
 		radio=RadioPanel.new();overlay.add_child(radio);radio.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		if not radio.configure(bindings.base_content_id,bindings.binding_id,library.active_language,resources.speakers,7):return fail(radio.error)
+		if not radio.configure(bindings.base_content_id,bindings.binding_id,library.active_language,_radio_resources.speakers,state.campaign_cursor):return fail(radio.error)
 	if state.has("npc_scanner"):
 		npc_markers=NpcMarkers.new();overlay.add_child(npc_markers);npc_markers.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		if not npc_markers.prepare(library,bindings,visuals):return fail(npc_markers.error)
@@ -115,9 +129,9 @@ func build(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalogu
 		notice_panel=NoticePanel.new();overlay.add_child(notice_panel);notice_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		if not notice_panel.configure(library,bindings,visuals):return fail(notice_panel.error)
 	dialogue=Dialogue.new();overlay.add_child(dialogue);dialogue.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	if state.has("mining_objective"):
+	if state.has("mining_objective") and not state.has("contracts"):
 		if not dialogue.configure_mining_objective(library,bindings,visuals,int(state.player.campaign_cursor)):return fail(dialogue.error)
-	elif not dialogue.configure_mining_briefing(library,bindings,visuals,int(state.player.campaign_cursor)):return fail(dialogue.error)
+	elif not dialogue.configure_mining_briefing(library,bindings,visuals,int(state.player.campaign_cursor),state.has("contracts")):return fail(dialogue.error)
 	if death!=null and not bindings.game_over_presentation.is_empty():
 		game_over=GameOver.new();overlay.add_child(game_over);game_over.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		if not game_over.configure(library,bindings,visuals,death):return fail(game_over.error)
@@ -133,22 +147,35 @@ func present(flight: RefCounted, advance_sun:=false, absolute_milliseconds: Vari
 	var pirates: RefCounted=flight.encounter_owner()
 	var death: RefCounted=flight.destruction_owner()
 	var particles: RefCounted=flight.damage_particle_owner()
+	var gate_animation: RefCounted=flight.gate_animation_owner()
 	var prior: float=sun.frame.get("next_intensity" if advance_sun else "previous_intensity",0.0)
-	if not _apply(state,prior,drill,pirates,death,absolute_milliseconds,particles):
+	if not _apply(state,prior,drill,pirates,death,absolute_milliseconds,particles,gate_animation):
 		var reason:=error
-		if not _last.is_empty() and not _apply(_last,sun.frame.get("previous_intensity",0.0),_last_drill,_last_encounter,_last_death,_last_absolute_ms,_last_particles):reason+="; previous scene: "+error
+		if not _last.is_empty() and not _apply(_last,sun.frame.get("previous_intensity",0.0),_last_drill,_last_encounter,_last_death,_last_absolute_ms,_last_particles,_last_gate_animation):reason+="; previous scene: "+error
 		return reject(reason)
 	_last=state
 	_last_drill=drill
 	_last_encounter=pirates
 	_last_death=death;_last_absolute_ms=absolute_milliseconds
 	_last_particles=particles
+	_last_gate_animation=gate_animation
 	return true
 
-func _apply(state: Dictionary, prior_intensity: float, drill: RefCounted, pirates: RefCounted, death: RefCounted, absolute_milliseconds: int, particles: RefCounted) -> bool:
+func _apply(state: Dictionary, prior_intensity: float, drill: RefCounted, pirates: RefCounted, death: RefCounted, absolute_milliseconds: int, particles: RefCounted,gate_animation: RefCounted=null) -> bool:
 	if (encounter!=null)!=(pirates!=null):return reject("Pirate presentation support changed within this flight")
 	if (player_destruction!=null)!=(death!=null):return reject("Player destruction support changed within this flight")
 	if (damage_particles!=null)!=(particles!=null):return reject("Damage particle support changed within this flight")
+	if (gates!=null)!=state.has("gate_environment"):return reject("Gate presentation support changed within this flight")
+	if gates!=null and not gates.apply_state(state.gate_environment):return reject(gates.error)
+	var gate_frame:={}
+	if state.has("gate_animation"):
+		if gates==null or gate_animation==null or gate_animation.snapshot()!=state.gate_animation:return reject("Gate geometry lost its current native clock")
+		gate_frame=gates.prepare_animation(gate_animation)
+		if gate_frame.is_empty():return reject(gates.error)
+	var portal_frame:={}
+	if portal!=null:
+		portal_frame=portal.prepare_state(state.get("alioth_portal",{}))
+		if portal_frame.is_empty():return reject(portal.error)
 	var particle_frame:={}
 	if damage_particles!=null:
 		particle_frame=damage_particles.prepare_world(particles,state,state.camera_view.pose)
@@ -187,20 +214,29 @@ func _apply(state: Dictionary, prior_intensity: float, drill: RefCounted, pirate
 		if drill==null:mining_panel.clear()
 		elif not mining_panel.present(drill,int(state.cargo.free_space),true):return reject(mining_panel.error)
 	if notice_panel!=null and not notice_panel.present(state.get("flight_notices",{})):return reject(notice_panel.error)
-	if state.dialogue.visible or (death!=null and not state.player_destruction.hud_visible):
+	if state.dialogue.visible or not state.get("alioth_attack",{}).get("hud_visible",true) or (death!=null and not state.player_destruction.hud_visible):
 		for control in [target_frame,reticle,scan_animation,mining_panel,notice_panel,npc_markers,waypoint_marker]:
 			if control!=null:control.visible=false
 	if game_over!=null and not game_over.present(death,absolute_milliseconds):return reject(game_over.error)
+	if portal!=null:portal.commit_state(portal_frame)
+	if not gate_frame.is_empty():gates.commit_animation(gate_frame)
 	sun.commit_frame(sun_frame)
 	if encounter!=null:encounter.commit_world(pirate_frame)
 	if radio!=null:
 		var transmission: Dictionary=state.get("radio",{}).duplicate(true)
 		if state.dialogue.visible:transmission.visible=false
-		if not radio.present(transmission):return reject(radio.error)
+		var speaker:={}
+		if (state.campaign_cursor in [10,11,12] or state.has("contracts")) and transmission.get("visible",false):
+			speaker=_radio_resources.local_speaker(transmission)
+			if speaker.is_empty():return reject(_radio_resources.error)
+		if not radio.present(transmission,speaker):return reject(radio.error)
 	if damage_particles!=null:damage_particles.commit_world(particle_frame)
 	if death!=null:
 		player_destruction.commit_effect(death_frame)
 		geometry.player.visible=death_frame.body_visible
+	if state.has("convoy_capture"):
+		if not state.convoy_capture.ship_visible:geometry.player.visible=false
+		if state.convoy_capture.input_blocked and geometry.player.engine_glow!=null:geometry.player.engine_glow.visible=false
 	return true
 
 static func _player_geometry_state(state: Dictionary) -> Dictionary:
@@ -217,14 +253,16 @@ func set_mobile_layout(value: bool) -> void:
 	for control in [target_frame,reticle,scan_animation,mining_panel,notice_panel,game_over,radio,npc_markers,waypoint_marker]:
 		if control!=null:control.set_mobile_layout(value)
 func clear() -> void:
+	if is_instance_valid(portal):portal.free()
+	portal=null
 	for child in get_children():child.free()
 	error="";geometry=null;sky=null;planets=null;sun=null;scenery=null;camera=null;dialogue=null;_projection=null;_last={}
 	target_frame=null;reticle=null;scan_animation=null
 	mining_panel=null;_last_drill=null;notice_panel=null
-	station=null
+	station=null;gates=null
 	encounter=null;_last_encounter=null
 	player_destruction=null;game_over=null;_last_death=null;_last_absolute_ms=0
-	damage_particles=null;_last_particles=null
-	radio=null;npc_markers=null;waypoint_marker=null
+	damage_particles=null;_last_particles=null;_last_gate_animation=null
+	radio=null;_radio_resources=null;npc_markers=null;waypoint_marker=null
 func fail(message: String) -> bool:clear();error=message;return false
 func reject(message: String) -> bool:error=message;return false

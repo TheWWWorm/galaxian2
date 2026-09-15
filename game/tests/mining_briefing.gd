@@ -115,7 +115,7 @@ func verify(args: Array):
 				if i<4:check(speech.snapshot().history.back().source_id==177+i,"Wrong original voice played")
 			if args.size()==4 and language in ["gb","de","ja","pl"] and i in [0,1,4]:
 				for mobile in [false,true]:
-					canvas.size=Vector2i(420,800) if mobile else Vector2i(1280,720)
+					canvas.size=Vector2i(800,450) if mobile else Vector2i(1280,720)
 					panel.set_mobile_layout(mobile)
 					for f in 3:await process_frame
 					check(Rect2(Vector2.ZERO,canvas.size).encloses(panel._panel.get_rect()),"Briefing panel extends beyond its viewport: %s %d %s %s"%[language,i,str(canvas.size),str(panel._panel.get_rect())])

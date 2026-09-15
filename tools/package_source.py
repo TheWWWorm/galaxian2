@@ -21,7 +21,7 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         for name in names:
-            archive.write(ROOT / name, 'gof2-remake/' + name)
+            archive.write(ROOT / name, 'galaxian2/' + name)
     print(f'{output}: {len(names)} engine source files')
 
 

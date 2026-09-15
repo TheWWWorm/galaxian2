@@ -1,7 +1,8 @@
 extends Node3D
 ## Source opening body/light presentation, driven by detached simulation state.
-## Engine effects, mounted equipment and the location environment are not
-## implemented here. Detail mode accepts source-scheduled selections. Hidden actors need no invented initial orientation.
+## Mac Betty departure includes its original nozzle-glow mesh. Exhaust particles,
+## mounted equipment and the location environment have separate owners.
+## Detail mode accepts source-scheduled selections. Hidden actors need no invented initial orientation.
 const Vectors=preload("res://src/simulation/source_vectors.gd")
 const ShipGeometry = preload("res://src/presentation/ship_geometry.gd")
 const Resources = preload("res://src/presentation/model_resources.gd")
@@ -12,6 +13,7 @@ const ArrivalLocation = preload("res://src/simulation/arrival_location.gd")
 const ArrivalConstruction = preload("res://src/content/arrival_actor_construction_definitions.gd")
 const ImportedModel = preload("res://src/presentation/imported_model.gd")
 const SurfaceResponse = preload("res://src/presentation/surface_response.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 var error := ""
 var player: Node3D
 var actors := {}
@@ -24,6 +26,7 @@ var _escape_available:=false
 var _campaign_cursor:=0
 var _departure_return_available:=false
 var _departure_return_cursor:=3
+var _departure_return_mission:={}
 var _arrival_player_origin:=Vector3.ZERO
 
 func apply_surface_response(bindings: RefCounted, lighting: Dictionary, reflection: RefCounted, diffuse_bias: Variant, normal_bias: Variant, variant: String) -> bool:
@@ -88,8 +91,12 @@ func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCoun
 	var location:=ArrivalLocation.new()
 	var context:=location.resolve_departure(bindings,catalogues,cache,equipment)
 	if context.is_empty():return reject(location.error)
-	_departure_return_available=not bindings.mining_objective.is_empty()
+	var objective:=OrdinaryFlight.objective(bindings,int(context.campaign_cursor))
+	_departure_return_available=int(context.campaign_cursor) in [2,4,7,16] and not objective.is_empty()
 	_departure_return_cursor=int(context.campaign_cursor)+1
+	if _departure_return_available:
+		_departure_return_mission={"kind":int(objective.next_kind),"station_id":int(objective.station_id),"reward":0,"bonus":0}
+		if objective.get("alioth_attack",false):_departure_return_mission.source_parameter=0
 	if (state.get("campaign_cursor")!=context.campaign_cursor and not _is_departure_return(state)) or state.get("base_content_id")!=context.base_content_id or state.get("binding_id")!=context.binding_id or state.get("actors")!=[]:
 		return reject("Departure player geometry requires its supported mining world")
 	var selected:={"player":bindings.resolve_ship_layers(context.ship_id)}
@@ -98,6 +105,11 @@ func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCoun
 
 func _assemble(library: RefCounted, visuals: RefCounted, bindings: RefCounted, selected: Dictionary, state: Dictionary, quality: String, with_detail: bool, cursor: int) -> bool:
 	var paths := []
+	var player_glow: bool=with_detail and cursor in [2,4,7,10,11,12,13,14,16] and bindings.source_architecture=="x86_64"
+	if player_glow:
+		var glow: Dictionary=bindings.resolve_player_engine_glow(selected.player.ship_id,quality)
+		if glow.is_empty():return reject(bindings.error)
+		paths.append(glow.path)
 	for ship in selected.values():
 		if ship.ship_id in [13, 14, 15]: return reject("Special ship construction is not implemented in the opening renderer")
 		if not ship.light_bindings_available: return reject("Opening ship light bindings are unavailable")
@@ -117,7 +129,7 @@ func _assemble(library: RefCounted, visuals: RefCounted, bindings: RefCounted, s
 		var body: Node3D
 		if with_detail:
 			body=ShipGeometry.new()
-			if not body.build(ship.ship_id,library,visuals,bindings,quality,resources):
+			if not body.build(ship.ship_id,library,visuals,bindings,quality,resources,player_glow and id is String):
 				var message: String = body.error
 				body.free();resources.clear();clear()
 				return reject(message)
@@ -180,7 +192,7 @@ func apply_arrival(staging: Dictionary, actor: Dictionary, detail: Dictionary = 
 
 func _is_departure_return(state: Dictionary) -> bool:
 	var objective: Variant=state.get("mining_objective",{})
-	return _departure_return_available and state.get("campaign_cursor")==_departure_return_cursor and objective is Dictionary and objective.get("phase")=="return_required" and objective.get("combat_objective_acknowledged",objective.get("cargo_objective_acknowledged",false)) and state.get("mission")=={"kind":11,"station_id":78,"reward":0,"bonus":0}
+	return _departure_return_available and state.get("campaign_cursor")==_departure_return_cursor and objective is Dictionary and objective.get("phase")=="return_required" and objective.get("combat_objective_acknowledged",objective.get("cargo_objective_acknowledged",false)) and state.get("mission")==_departure_return_mission
 
 func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 	error = ""
@@ -189,7 +201,7 @@ func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 		return reject("Opening geometry received another content identity")
 	# Completing cargo instructions changes the mission while retaining this
 	# same world and ship. It does not construct a new station or flight scene.
-	if state.get("campaign_cursor",0)!=_campaign_cursor and not (_campaign_cursor in [2,4,7] and _is_departure_return(state)):return reject("Flight geometry received another campaign scene")
+	if state.get("campaign_cursor",0)!=_campaign_cursor and not _is_departure_return(state):return reject("Flight geometry received another campaign scene")
 	if not valid_pose(state.get("player_pose")): return reject("Opening player pose is unavailable or invalid")
 	var rows: Variant = state.get("actors")
 	if not rows is Array or rows.size() != actors.size(): return reject("Opening actor set changed")
@@ -220,7 +232,7 @@ func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 	var player_pose: Transform3D=state.player_pose
 	var player_visible:=true
 	if state.has("player_model_basis"):
-		if _campaign_cursor not in [2,4,7] or not state.player_model_basis is Basis or not valid_pose(Transform3D(state.player_model_basis,Vector3.ZERO)):return reject("Invalid mining-flight visual model orientation")
+		if _campaign_cursor not in [2,4,7,10,11,12,13,14,16,18] or not state.player_model_basis is Basis or not valid_pose(Transform3D(state.player_model_basis,Vector3.ZERO)):return reject("Invalid mining-flight visual model orientation")
 		player_pose=player_pose*Transform3D(state.player_model_basis,Vector3.ZERO)
 		if not valid_pose(player_pose):return reject("First-flight visual model orientation overflowed")
 	if not escape.is_empty():
@@ -259,7 +271,7 @@ func clear() -> void:
 	_binding_id = ""
 	_with_detail = false
 	_escape_available=false
-	_campaign_cursor=0;_departure_return_available=false;_departure_return_cursor=3
+	_campaign_cursor=0;_departure_return_available=false;_departure_return_cursor=3;_departure_return_mission={}
 	_arrival_player_origin=Vector3.ZERO
 
 func reject(message: String) -> bool:

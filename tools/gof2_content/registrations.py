@@ -92,6 +92,13 @@ from .combat_training_weapons import extract_combat_training_weapons
 from .combat_training_destruction import extract_combat_training_destruction
 from .combat_training_visuals import extract_combat_training_visuals
 from .combat_training_story import extract_combat_training_story
+from .mido_travel import extract_mido_travel
+from .early_contracts import extract_early_contracts
+from .engine_particles import extract_engine_particles
+from .ambient_population import extract_ambient_population
+from .ambient_combat import extract_ambient_combat
+from .freighter_destruction import extract_freighter_destruction
+from .ambient_lifecycle import extract_ambient_lifecycle
 from .full_hold_appearance import extract_full_hold_appearance
 from .full_hold_story import extract_full_hold_story
 from .full_hold_destruction import extract_full_hold_destruction
@@ -120,7 +127,7 @@ from .camera_follow import extract_camera_follow
 MAX_EXECUTABLE = 64 * 1024 * 1024
 MAX_SECTIONS = 256
 MAX_RECORDS = 20000
-READER = 'resource-registration-v124'
+READER = 'resource-registration-v170'
 
 
 class MachO:
@@ -480,6 +487,9 @@ def extract(source, edition, checkpoint=lambda *_: None):
     combat_training_control = extract_combat_training_control(mach, arrival_staging, combat_training, actors)
     combat_training_weapons = extract_combat_training_weapons(mach, arrival_staging, combat_training, combat_training_control, station_equipment, actors, weapons)
     combat_training_destruction = extract_combat_training_destruction(mach, arrival_staging, combat_training, combat_training_control, combat_training_weapons, actors)
+    mido_travel = extract_mido_travel(mach, arrival_staging, station_entry, combat_training)
+    ambient_population = extract_ambient_population(mach, arrival_staging, mido_travel)
+    ambient_combat = extract_ambient_combat(mach, arrival_staging, ambient_population)
     return {'reader': READER, 'architecture': mach.architecture,
             'source_executable_sha256': mach.source_sha256,
             'source_executable_bytes': mach.source_bytes, 'registrations': rows,
@@ -530,6 +540,13 @@ def extract(source, edition, checkpoint=lambda *_: None):
             'combat_training_destruction': combat_training_destruction,
             'combat_training_visuals': extract_combat_training_visuals(mach, arrival_staging, combat_training_weapons, staging),
             'combat_training_story': extract_combat_training_story(mach, arrival_staging, combat_training, combat_training_destruction, mining_briefing, mining_objective, dialogue, full_hold_story),
+            'mido_travel': mido_travel,
+            'early_contracts': extract_early_contracts(mach, arrival_staging, mido_travel),
+            'ambient_population': ambient_population,
+            'ambient_combat': ambient_combat,
+            'freighter_destruction': extract_freighter_destruction(mach, arrival_staging, ambient_combat),
+            'ambient_lifecycle': extract_ambient_lifecycle(mach, arrival_staging, ambient_combat),
+            'engine_particles': extract_engine_particles(mach, arrival_staging, particles),
             'full_hold_appearance': extract_full_hold_appearance(mach, arrival_staging, full_hold_story, full_hold_destruction),
             'full_hold_control': full_hold_control,
             'full_hold_destruction': full_hold_destruction,

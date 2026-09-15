@@ -43,7 +43,7 @@ func verify(args: PackedStringArray) -> void:
 		var texture: AtlasTexture=hud._textures[name]
 		check(texture.get_image().get_data()==source.get_region(Rect2i(texture.region)).get_data(),"Waypoint image altered original pixels")
 	for mobile in [false,true]:
-		canvas.size=Vector2i(420,800) if mobile else Vector2i(1280,720);hud.set_mobile_layout(mobile)
+		canvas.size=Vector2i(800,450) if mobile else Vector2i(1280,720);hud.set_mobile_layout(mobile)
 		var camera:=Transform3D(Basis.IDENTITY,point+Vector3(0,0,16000))
 		check(hud.present(initial,camera,canvas.size,true),hud.error)
 		check(hud.visible and hud.snapshot().in_view and hud.snapshot().pixels==canvas.size/2 and hud.snapshot().distance_text=="1.0km","Centered waypoint did not use the current camera")

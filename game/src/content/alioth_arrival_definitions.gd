@@ -1,0 +1,14 @@
+extends RefCounted
+## Source capture destination and acknowledged station conversation.
+const Equal=preload("res://src/content/opening_escape_definitions.gd")
+const VALUES = {"scope":"alioth_capture_arrival","departing_cursor":14,"campaign_cursor":15,"from_station_id":79,"from_system_id":15,"station_id":98,"system_id":19,"planet_type":12,"sky_index":6,"faction":0,"source_state":5,"mission_kind":11,"cache_policy":"retain_entry_cache","acknowledgement_required":true,"events":[{"speaker_id":17,"text_id":1800,"voice_event_id":224},{"speaker_id":1,"text_id":1801,"voice_event_id":225},{"speaker_id":0,"text_id":1802,"voice_event_id":227},{"speaker_id":1,"text_id":1803,"voice_event_id":228},{"speaker_id":0,"text_id":1804,"voice_event_id":229},{"speaker_id":1,"text_id":1805,"voice_event_id":230},{"speaker_id":0,"text_id":1806,"voice_event_id":231},{"speaker_id":1,"text_id":1807,"voice_event_id":232},{"speaker_id":12,"text_id":1808,"voice_event_id":233},{"speaker_id":0,"text_id":1809,"voice_event_id":234},{"speaker_id":1,"text_id":1810,"voice_event_id":226}],"next_cursor":16,"next_kind":4,"next_station_id":98,"reward":0,"bonus":0,"source_parameter":0,"presentation":{"hangar_row":0,"camera_position":[1076,900,-2273],"camera_angles":[-0.27000001072883606,-3.359999895095825,-0.029999999329447746],"ambient":[0.25,0.25,0.25],"portraits":{"1":{"status":"fixed","family":0,"parts":[8,8,1,8]},"12":{"status":"fixed","family":0,"parts":[5,4,2,7]},"17":{"status":"fixed","family":11,"parts":[1,0,0,3]}}}}
+const SPANS = {"alioth_transfer":[155616,102],"alioth_arrival_mission":[861428,38],"alioth_dialogue":[1547130,88],"alioth_dialogue_count":[1555318,4],"alioth_voices":[1560642,88],"alioth_acknowledged":[429803,47],"alioth_next_mission":[861471,38],"alioth_station_and_system":[855731,61],"alioth_location_selection":[857368,289],"alioth_hangar_selector":[422625,94],"alioth_camera_selection":[423220,93],"alioth_camera_position":[1585242,12],"alioth_camera_pitch":[1585370,4],"alioth_camera_yaw":[1585418,4],"alioth_camera_alternate_yaw":[1585466,4],"alioth_ambient_dispatch":[425978,50],"alioth_ambient_default":[426189,42],"alioth_ambient_value":[1556906,4],"alioth_entry_cache_refresh":[335425,207],"alioth_portrait_pointer_1":[2396770,8],"alioth_portrait_1":[2411354,20],"alioth_portrait_pointer_12":[2396858,8],"alioth_portrait_12":[2411706,20],"alioth_portrait_pointer_17":[2396898,8],"alioth_portrait_17":[2411866,20]}
+
+static func parameters(data: Variant) -> bool:
+	return Equal.equal_value(data,VALUES)
+
+static func available(bindings: RefCounted) -> bool:
+	return bindings!=null and parameters(bindings.mido_travel.get("alioth_arrival"))
+
+static func arrival_matches(bindings: RefCounted, arrival: Dictionary) -> bool:
+	return available(bindings) and Equal.equal_value(arrival,bindings.mido_travel.convoy_capture.arrival)

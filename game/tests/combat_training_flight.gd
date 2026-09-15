@@ -337,6 +337,10 @@ func verify_training_station_return(cat: RefCounted, world: RefCounted):
 	var restored: Dictionary=reload.snapshot()
 	check(restored.phase=="station_followup_required" and restored.boundary=="station_followup_required" and restored.station_reloaded and restored.campaign_cursor==9 and restored.player_cache==accepted.player_cache and restored.cargo==accepted.cargo and restored.equipment==accepted.equipment,"Station reload lost the retained player or inventory")
 	check(not reload.acknowledge() and reload.prepare_departure(bindings,cat).is_empty() and reload.snapshot()==restored,"Unsupported station follow-up advanced or launched")
+	after_training_reload(cat,reload)
+
+func after_training_reload(_cat: RefCounted, _station: RefCounted):
+	pass
 
 func verify_training_scanner(world: RefCounted):
 	var scanner: RefCounted=world._scanner.fork_for_frame()
@@ -355,6 +359,29 @@ func verify_training_scanner(world: RefCounted):
 	combat.actors[3].hull_catalogue_id=2
 	check(not scanner.advance(combat,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and scanner.snapshot()==held,"Training scanner accepted a pirate hull for Gunant")
 
+func prepare_application_locations(cat: RefCounted) -> bool:
+	# Keep the existing earned equipment fixture, but seed its earlier cache
+	# through a real rescue session and the application's first station entry.
+	# The completed opening input remains an explicitly declared three-kill fixture.
+	var player: RefCounted=load("res://src/simulation/opening_player_state.gd").new()
+	if not player.configure(bindings,cat):check(false,player.error);return false
+	var handoff: RefCounted=load("res://src/simulation/opening_handoff.gd").new()
+	var opening: Dictionary=load("res://tests/opening_handoff_fixture.gd").completed(bindings,player,3)
+	var packet: Dictionary=handoff.prepare(bindings,cat,opening)
+	var rescue: Node3D=load("res://src/presentation/arrival_session.gd").new()
+	host.viewport.add_child(rescue);host.session=rescue
+	if not rescue.configure(lib,bindings,visuals,packet,0,1789100000):check(false,rescue.error);return false
+	for i in 500:
+		if rescue.status!="running":break
+		if not rescue.step((i+1)*100000):check(false,rescue.error);return false
+	var before: Dictionary=rescue.snapshot()
+	if not host.enter_station(60000000,42):check(false,host.status.text);return false
+	var locations: Dictionary=host.locations_snapshot()
+	check(locations.locations[0].population.initial_random==before.scenery.random_state,"First station contacts lost the live rescue random stream")
+	check(locations.locations[0].population.context.campaign_cursor==1,"First station contacts were generated at another campaign cursor")
+	host.session.free();host.session=null
+	return true
+
 func verify_training_application(args: PackedStringArray):
 	if not TrainingSession.supported(bindings,7):return
 	# Restore the prerequisite captured by the actual equipment tutorial. All
@@ -367,10 +394,15 @@ func verify_training_application(args: PackedStringArray):
 	host=Host.new();root.add_child(host);host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	host.set_context(lib,bindings,visuals);host.set_process(false)
 	for i in 3:await process_frame
+	if bindings.early_contracts.has("station_generation") and not prepare_application_locations(cat):return
 	var station:=Station.new();host.viewport.add_child(station);host.session=station;station._world=owner
 	now_us=0
 	if not station._build_scene(lib,bindings,visuals,cat,now_us,42) or not host.station_panel.configure(lib,bindings,visuals) or not station.activate():check(false,station.error+host.station_panel.error);return
 	station._dialogue_started=true
+	if bindings.early_contracts.has("station_generation"):
+		# The equipment fixture skips intervening same-location mining sessions.
+		# They do not regenerate the first Var Hastra population.
+		check(host.locations_snapshot().locations.size()==1 and host.locations_snapshot().locations[0].station_id==78,"Training setup lost the first station population")
 	host.present_session()
 	var accepted: Dictionary=station.snapshot()
 	check(host._launch_button.visible and not host._pause_button.visible and host.request_departure(),"Ready training station did not offer its normal departure confirmation")
@@ -477,11 +509,16 @@ func verify_training_application(args: PackedStringArray):
 	visuals.textures=textures
 	check(host.retry_transition(),host.status.text)
 	var final: Dictionary=host.session.snapshot()
-	check(not is_instance_valid(reloading) and final.phase=="station_followup_required" and final.equipment==retained.equipment and final.player_cache==retained.player_cache and final.cargo==arrived.cargo,"Application reload lost the earned inventory or player state")
-	check(host.session.audio.snapshot().history.is_empty() and not host.request_departure() and not host.session.navigate("next",host.station_panel),"Unsupported follow-up played another visit's speech or advanced")
+	var following: bool=not preload("res://src/content/ordinary_flight_definitions.gd").station_conversation(bindings,9).is_empty()
+	check(not is_instance_valid(reloading) and final.phase==("conversation" if following else "station_followup_required") and final.equipment==retained.equipment and final.player_cache==retained.player_cache and final.cargo==arrived.cargo,"Application reload lost the earned inventory or player state")
+	check(host.session.audio.snapshot().history.is_empty() and not host.request_departure() and not host.session.navigate("next",host.station_panel),"Station reload played speech or accepted input before its delayed conversation")
 	host.present_session()
-	if args.size()==4:await capture(args[3],"training-app-followup-boundary")
+	if args.size()==4:await capture(args[3],"training-app-followup-entry")
+	await after_training_application_reload(args)
 	await verify_training_game_over(args,packet,owner.equipment_owner())
+
+func after_training_application_reload(_args: PackedStringArray):
+	pass
 
 func verify_training_game_over(args: PackedStringArray, packet: Dictionary, equipment: RefCounted):
 	# Separate death branch from the same earned departure; source projectile

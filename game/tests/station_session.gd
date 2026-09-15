@@ -69,10 +69,16 @@ func verify(args: Array):
 	var textures: Dictionary=visuals.textures;visuals.textures={}
 	check(not host.enter_station(60000000,42),"Broken station resources replaced the rescue")
 	check(host.session==rescue and rescue.snapshot()==before and is_instance_valid(rescue.camera),"Failed station entry destroyed committed rescue")
+	check(host.locations_snapshot().is_empty(),"Failed first station entry committed hidden contacts")
 	visuals.textures=textures
 	if not host.enter_station(60000000,42):check(false,host.status.text);host.free();return
 	check(host.session is Station and not is_instance_valid(rescue),"Station did not replace its accepted rescue")
 	var session: Node3D=host.session
+	if bindings.early_contracts.has("station_generation"):
+		var locations: Dictionary=host.locations_snapshot()
+		check(locations.locations.size()==1 and locations.current_station_id==78,"First station entry lost its selected cache")
+		check(locations.locations[0].stock.random==before.scenery.random_state and locations.locations[0].population.initial_random==before.scenery.random_state,"Tutorial stock changed the live rescue stream before generating contacts")
+		check(session.snapshot().locations==locations,"The station scene did not retain the prepared location")
 	check(not session.snapshot().conversation_started and session.audio.snapshot().history.is_empty(),"Station conversation started during scene loading")
 	check(not session.navigate("next",host.station_panel),"Station acknowledged before the source entry delay")
 	check(session.prepare_departure(bindings,cat).is_empty(),"Station prepared departure before conversation began")

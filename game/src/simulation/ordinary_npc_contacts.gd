@@ -1,7 +1,7 @@
 extends RefCounted
 ## One gun's ordered NPC contact pass. The world owner must supply its complete
-## target list, then commit both returned owners. Imported constructor bounds
-## apply unless the caller supplies an explicit bounds selection.
+## target list, then commit both returned owners. Explicit point providers are
+## authoritative; ordinary cubes may use the caller's verified bounds selection.
 ## This does not advance time or implement non-NPC contacts and visual effects.
 const Projectiles = preload("res://src/simulation/ordinary_projectiles.gd")
 const Combat = preload("res://src/simulation/opening_combat_group.gd")
@@ -39,19 +39,19 @@ func evaluate(projectiles: RefCounted, combat: RefCounted, ordered_actor_ids: Va
 		# Death from an early slot does not suppress marking later slot contacts.
 		var target: Dictionary = staged_combat.collision_context(id)
 		if not target.eligible: continue
-		if target.path!="bounds": return fail("NPC point geometry requires its own verified provider")
+		if target.path not in ["bounds","point_geometry"]:return fail("Unsupported NPC collision provider")
 		var half_extent: int = target.half_extent if target_bounds else bounds_selection.half_extent
 		for index in shots.slots.size():
 			var projectile: Variant = shots.slots[index]
 			if projectile==null: continue
 			# Retained real projectiles participate regardless of remaining lifetime.
 			# Marking a contact preserves geometry for later overlapping targets.
-			var query: Dictionary = geometry.bounds(projectile.position,projectile.velocity,target.center,half_extent)
+			var query: Dictionary=geometry.box_geometry(projectile.position,target.center,target.get("boxes")) if target.path=="point_geometry" else geometry.bounds(projectile.position,projectile.velocity,target.center,half_extent)
 			if query.is_empty(): return fail(geometry.error)
 			if not query.hit: continue
 			var hit: Dictionary = staged_combat.weapon_hit(id,shots.weapon)
 			if hit.is_empty(): return fail(staged_combat.error)
-			if not staged_combat.record_contact(id,projectile.velocity): return fail(staged_combat.error)
+			if not staged_combat.record_contact(id,projectile.velocity,query.get("box_index")): return fail(staged_combat.error)
 			if not staged_shots.mark_impact(projectile.id): return fail(staged_shots.error)
 			last_contact_actor_id=id
 			contacts.append({"actor_id":id,"slot":index,"projectile_id":projectile.id,"geometry":query,"damage":hit})

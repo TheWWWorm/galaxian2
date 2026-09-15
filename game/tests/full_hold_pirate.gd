@@ -1,4 +1,5 @@
 extends SceneTree
+const OpeningFixture=preload("res://tests/opening_handoff_fixture.gd")
 ## Component verification with explicit synthetic departure and activity fixtures.
 ## This does not exercise a live second-trip mission, AI or activation scheduler.
 const Library=preload("res://src/content/library.gd")
@@ -127,7 +128,7 @@ func packet_fixture(bindings: RefCounted, cat: RefCounted, kills: int) -> Dictio
 	return {"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":4,
 		"source_state":2,"world_type":3,"audio_selector":1,"confirmation_required":true,"confirmation_text_id":386,
 		"loadout":seed,"reset_cache":reset,"player_cache":player.cache_snapshot(),"player":current,
-		"progress":{"campaign_cursor":4,"rank":int(kills>0),"rank_score":4+3*kills,"player_kills":kills,"pirate_kills":kills,"other_score":0},
+		"progress":OpeningFixture.progress(bindings,4,kills),
 		"mission":{"kind":154,"station_id":78,"reward":0,"bonus":0,"source_parameter":25},"cargo_used":0,"source_ship_configuration":8}
 
 func verify_reader(pack: String, lib: RefCounted, header: Dictionary):

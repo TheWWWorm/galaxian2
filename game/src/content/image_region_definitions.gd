@@ -15,7 +15,7 @@ static func validate(data: Variant, executable_bytes: int, architecture: String)
 		if not row is Dictionary: return "Invalid image region record"
 		for key in ["id", "texture_id", "region"]:
 			if not Numbers.integer(row.get(key), 0, 65534): return "Invalid image region value"
-		if not Fonts.extent(row, "source_offset", "source_bytes", [68] if mac else [82, 90, 94], executable_bytes) or extents.has(int(row.source_offset)): return "Invalid image region provenance"
+		if not Fonts.extent(row, "source_offset", "source_bytes", [64, 68] if mac else [82, 90, 94], executable_bytes) or extents.has(int(row.source_offset)): return "Invalid image region provenance"
 		extents[int(row.source_offset)] = true
 	for row in data.ranges:
 		if not row is Dictionary or not Numbers.integer(row.get("count"), 1, 1024) or row.get("region") != 0: return "Invalid image region range"

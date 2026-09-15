@@ -1,0 +1,388 @@
+"""Import verified early contract terms, without original executable payloads."""
+import copy
+from .station_exterior import hashed_declarations
+from .lounge_contacts import extract_lounge_contacts
+from .delivery_results import extract_delivery_results
+from .contract_encounters import extract_contract_encounters
+from .contract_ship_combat import extract_contract_ship_combat
+from .contract_ship_lifecycle import extract_contract_ship_lifecycle
+from .contract_flight_results import extract_contract_flight_results
+from .contract_junk_lifecycle import extract_contract_junk_lifecycle
+from .contract_world import extract_contract_world
+from .lounge_lifecycle import extract_lounge_lifecycle
+from .station_generation import extract_station_generation
+from .base_station_stock import extract_base_station_stock
+from .base_contract_navigation import extract_base_contract_navigation
+from .lounge_presentation import extract_lounge_presentation
+from .ordinary_generation import extract_ordinary_generation
+
+
+def extract_early_contracts(mach, arrival, travel):
+    visit = travel.get('return_visit', {})
+    if travel.get('scope') != 'mido_local_travel' or visit.get('next_cursor') != 13 or visit.get('next_kind') != 150:
+        return {}
+    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    if not proof:
+        return {}
+    result = copy.deepcopy(VALUES)
+    acceptance = hashed_declarations(mach, arrival, ACCEPTANCE_LAYOUTS)
+    if acceptance:
+        result['acceptance'] = copy.deepcopy(ACCEPTANCE)
+        proof.update(acceptance)
+        contacts, contact_proof = extract_lounge_contacts(mach, arrival)
+        if contacts:
+            result['generation'] = contacts
+            proof.update(contact_proof)
+        delivery, delivery_proof = extract_delivery_results(mach, arrival)
+        if delivery:
+            result['delivery_results'] = delivery
+            proof.update(delivery_proof)
+            if travel.get('contract_navigation'):
+                encounter, encounter_proof = extract_contract_encounters(mach, arrival)
+                if encounter:
+                    result['encounter_construction'] = encounter
+                    proof.update(encounter_proof)
+                    combat, combat_proof = extract_contract_ship_combat(mach, arrival)
+                    if combat:
+                        result['ship_combat'] = combat
+                        proof.update(combat_proof)
+                        lifecycle, lifecycle_proof = extract_contract_ship_lifecycle(mach, arrival)
+                        if lifecycle:
+                            result['ship_lifecycle'] = lifecycle
+                            proof.update(lifecycle_proof)
+                            flight, flight_proof = extract_contract_flight_results(mach, arrival)
+                            if flight:
+                                result['flight_results'] = flight
+                                proof.update(flight_proof)
+                                junk, junk_proof = extract_contract_junk_lifecycle(mach, arrival)
+                                if junk:
+                                    result['junk_lifecycle'] = junk
+                                    proof.update(junk_proof)
+                                    world, world_proof = extract_contract_world(mach, arrival)
+                                    if world:
+                                        result['world_initialization'] = world
+                                        proof.update(world_proof)
+                                        lounges, lounge_proof = extract_lounge_lifecycle(mach, arrival)
+                                        if lounges and contacts:
+                                            result['station_lounges'] = lounges
+                                            proof.update(lounge_proof)
+                                            generation, generation_proof = extract_station_generation(mach, arrival)
+                                            if generation:
+                                                result['station_generation'] = generation
+                                                proof.update(generation_proof)
+                                                stock, stock_proof = extract_base_station_stock(mach, arrival)
+                                                if stock:
+                                                    result['base_station_stock'] = stock
+                                                    proof.update(stock_proof)
+                                                    if travel.get('alioth_arrival'):
+                                                        navigation, nav_proof = extract_base_contract_navigation(mach, arrival)
+                                                        if navigation:
+                                                            result['base_navigation'] = navigation
+                                                            proof.update(nav_proof)
+    if result.get('station_lounges'):
+        presentation, presentation_proof = extract_lounge_presentation(mach, arrival)
+        if presentation:
+            result['lounge_presentation'] = presentation
+            proof.update(presentation_proof)
+    if result.get('base_navigation') and travel.get('free_flight'):
+        ordinary, ordinary_proof = extract_ordinary_generation(mach, arrival)
+        if ordinary:
+            result['ordinary_generation'] = ordinary
+            proof.update(ordinary_proof)
+    result['provenance'] = proof
+    return result
+
+
+VALUES = {'scope': 'mido_early_contract_terms',
+ 'system_id': 15,
+ 'first_cursor': 13,
+ 'last_cursor': 15,
+ 'contact_role': 0,
+ 'kind_choices': [11, 0, 7, 4, 12],
+ 'difficulty_draw_bound': 2,
+ 'difficulty_add': 1,
+ 'initial_destination_count': 4,
+ 'delivery_kinds': [0, 11],
+ 'local_challenge_kind': 12,
+ 'title_text_base': 343,
+ 'briefing_text_base': 773,
+ 'courier': {'kind': 0,
+             'quantity_by_difficulty': [14, 24],
+             'description_text_base': 800,
+             'description_draw_bound': 7,
+             'cargo_item_id': 116,
+             'capacity_text_id': 326},
+ 'passenger': {'kind': 11, 'quantity_by_difficulty': [3, 5], 'capacity_text_id': 327},
+ 'reward': {'base': 1500,
+            'difficulty_divisor': 10.0,
+            'difficulty_multiplier': 5500.0,
+            'distance_divisor': 1200.0,
+            'junk_kind': 7,
+            'junk_multiplier': 0.699999988079071,
+            'passenger_multiplier': 0.6000000238418579,
+            'passenger_quantity_divisor': 5.0,
+            'rank_cubic_multiplier': 10,
+            'credit_step': 50,
+            'credit_rounding': 'truncate_except_exact_half_up'},
+ 'bonus': {'excluded_kinds': [12],
+           'divisor': 100.0,
+           'faction_axes': [0, 0, 1, 1],
+           'faction_signs': [1, -1, 1, -1],
+           'other_factions': 0,
+           'minimum': 0}}
+
+LAYOUTS = {'lounge_gate': [440570,
+                 53,
+                 '__text',
+                 '347b82c830a527a6e90d42e7fc7113f7d76e3b2b6c75087a16544c34928846a6'],
+ 'early_selector': [-233602,
+                    129,
+                    '__text',
+                    '1630216de0da836b4b9c2ee465f387ec56ce1c8debe14437030cc4307c18ec69'],
+ 'early_choices': [-231370,
+                   20,
+                   '__text',
+                   '9fc5fda4dd433552cfc47c0ac3d4c0f7501a2abafcacfc40e752b30b885c30e6'],
+ 'early_difficulty': [-233228,
+                      35,
+                      '__text',
+                      'd149f4da57363ea82dc8f04ff9ae41c908a99d664ce69f916e4bea3e6db5508c'],
+ 'parameter_dispatch': [-232883,
+                        45,
+                        '__text',
+                        '84dcdeecd62715783103b3586da5e9cd74d9cd3fc8b22589314680a030656d58'],
+ 'parameter_choices': [-231350,
+                       48,
+                       '__text',
+                       'b65f8b3d04f012a0ecd8775fef7f47b8383a21b711c10ff438834a3ad63805f1'],
+ 'courier_quantity': [-232642,
+                      55,
+                      '__text',
+                      '18443f6f48110ddc9105acc0c30d253132db253e335f24ebc5675f6bb5b45fc5'],
+ 'passenger_quantity': [-232587,
+                        35,
+                        '__text',
+                        '6ad54ca82bee142992428bb20c985ccdfe12f5cd803afde8ce5ed58a2a22e010'],
+ 'quantity_constants': [1557090,
+                        28,
+                        '__const',
+                        '46bedd2201c5a5e9636dfcf33cb4aebadeb1c2d4deb0050661f8a2db5d51828a'],
+ 'mido_destination': [-233944,
+                      93,
+                      '__text',
+                      'e9679c16d7e0b3e1612bac457174ccb75ea9d5af1effac8299080db96aa875eb'],
+ 'delivery_destination': [-233437,
+                          209,
+                          '__text',
+                          '9d8d98750358851607764b8a847a722952af766b18edbb0b2838a9aa54d09aac'],
+ 'mido_destination_retry': [-237078,
+                            81,
+                            '__text',
+                            'f447e51340625072f02f9194712af9c87846abb84fb87de876dd1cff61d05f76'],
+ 'same_system_distance': [-658475,
+                          31,
+                          '__text',
+                          'fe139aae51cf249d86960eada2370557f7454ceb4ebcb99ca938b925de984c52'],
+ 'reward_base': [-232466,
+                 157,
+                 '__text',
+                 '62494534cdf446a904743b6c590c84daab3735a9ae33980013893975286bb4fe'],
+ 'passenger_reward': [-232238,
+                      61,
+                      '__text',
+                      '88e8d5c565958af9c7dfe5dee5366bbe8322d89fd04ec7b4b7cffbd39675267a'],
+ 'rank_reward': [-232177,
+                 54,
+                 '__text',
+                 'a4aff5b77ea1b7c231e9a42d2efac09bbedcad0f365aa20eb8786e1028f33efb'],
+ 'bonus_reward': [-232123,
+                  127,
+                  '__text',
+                  '68d91c78461a87abb43e98212f84811d518f93d83b560634c821120b944ea5c8'],
+ 'credit_quantization': [-231996,
+                         91,
+                         '__text',
+                         '31e6c2715b886f13b7cb45f082f7234b544ce56d3882e8efb3a1df5b56580814'],
+ 'reward_constructor': [-231905,
+                        79,
+                        '__text',
+                        '16323d11e1e0ddd1d7c9e2e793c1b5dfbc5af240565a9f0fad4529d8b8085854'],
+ 'parameter_setters': [-231568,
+                       32,
+                       '__text',
+                       'bb809f45a40d34160a2f5e8b167e6e2ca8ffa1091ac13e4c8bfcc001b3b40b03'],
+ 'reward_one': [1544610,
+                4,
+                '__const',
+                'e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c'],
+ 'junk_multiplier': [1556918,
+                     4,
+                     '__const',
+                     '2f0d6f3d65a7e28c4223e4389106e46f1e9010a2bd724d35f9794cb8a86d7c68'],
+ 'passenger_multiplier': [1556934,
+                          4,
+                          '__const',
+                          '8e215ece122cf70ebe3556a0318fa6c395d1766375c3edc080967e4a09592401'],
+ 'reputation_bonus': [808278,
+                      104,
+                      '__text',
+                      'ae863a3296bdadccdc35e3aace29515e5d5eb3fc23fd839df4cf3210457b8ae3'],
+ 'reputation_divisor': [1556926,
+                        4,
+                        '__const',
+                        '2238f30df488055daf5e8f362cf904e370011a172d20df193c1b7ae8e5db8e01'],
+ 'mission_title': [400596,
+                   86,
+                   '__text',
+                   'e3af301704d05c1c9ff336452defd947e72beb60ca91b31331f229073421f9a6'],
+ 'mission_briefing': [-209115,
+                      30,
+                      '__text',
+                      '6bb52e84b0c94b4570ec0e59a09b116cf8f7f205b4362454f5c1e1ff526618ba'],
+ 'cargo_description': [-208606,
+                       30,
+                       '__text',
+                       '6a9fb4305ca171702a2170d8ab6d89a83f4db19f1f1841b9449fa61da35a7717'],
+ 'mission_constructor': [398969,
+                         178,
+                         '__text',
+                         'f1701c495b019e0495e6d1e4d6747fad6d4f56c7346c72ad8817ee15619a0d24'],
+ 'mission_quantity': [400520,
+                      42,
+                      '__text',
+                      '0ea86307a58953e975affba3b18fb468aff0aca5071944ba51ff0f3c4d5fbb14'],
+ 'mission_reward_getter': [400774,
+                           10,
+                           '__text',
+                           '42ac4f2cad1a6340f1864332f319bf8d17c67db900b3fc0c5141eb8b79ec48ce'],
+ 'mission_bonus_getter': [400814,
+                          20,
+                          '__text',
+                          '15d6e6b2d156aacd464ef95490c4188d8b1907993ae66d5f01850079971370c2'],
+ 'courier_capacity': [748958,
+                      90,
+                      '__text',
+                      'dfc73b7f0a02eef3ff1bd3e23f9894615b457c4b5a51743fb1fb51fcfc0c5d91'],
+ 'passenger_capacity': [749375,
+                        89,
+                        '__text',
+                        '6773b5e0ec16e307b7e19a7a22286ae67f97d976be719fba5f6c7223d9ccc91e'],
+ 'courier_cargo': [743771,
+                   111,
+                   '__text',
+                   '9fb270b01b9c0a4438f2cdec7faa2b32e2c3b539b5d5de34924bc1178c7fd660'],
+ 'passenger_load': [743882,
+                    57,
+                    '__text',
+                    '369bbc0fbc0859d90350683e4f1d8d08cbcf8c7a1382b99fb22ef0f70902a1ba'],
+ 'side_mission_owner': [859500,
+                        44,
+                        '__text',
+                        'ea9b51e0fd515b531362ae5de3908f09167cd1ed425fe9d0cec63ca08f78b869']}
+
+
+ACCEPTANCE = {'scope': 'mido_generated_contract_acceptance',
+ 'initial_credits': 0,
+ 'initial_passengers': 0,
+ 'fee_difficulty': 1.5,
+ 'fee_divisor': 10,
+ 'insufficient_credits_text_id': 192,
+ 'replacement_text_id': 851,
+ 'cabin_subtype': 20,
+ 'cabin_places_property': 34,
+ 'clear_cargo_kinds': [0, 3, 5],
+ 'generated_contact_source_id': -1,
+ 'generated_contact_stays_consumed': True}
+
+ACCEPTANCE_LAYOUTS = {'accept_fee_predicate': [873106,
+                          34,
+                          '__text',
+                          '772e4253a1151693501f93bb93c4d6abfc10747fa7bfc0634c3dcf6b746d6eb0'],
+ 'accept_fee_difficulty': [1545698,
+                           4,
+                           '__const',
+                           'c0e336a5f371ef22cd534e094269f2c1a9635cd080b71ffa671086832d3b60b7'],
+ 'accept_fee_calculation': [742832,
+                            109,
+                            '__text',
+                            '571aef1d768af2bd93d44b4309193ed9be930ff51a1ddb63232d2e3bc9e22e4c'],
+ 'accept_fee_shortfall': [742951,
+                          5,
+                          '__text',
+                          'dbfaf5948cd31ff18f20ca16097df54e4705eb67c855d75312bd9ef253c77dfc'],
+ 'accept_fee_debit': [743350,
+                      19,
+                      '__text',
+                      'd2a7997cb10a37a5124057abf47e681ffacecccbb6487f60ceb3b500fda0ba6f'],
+ 'contract_replacement': [743369,
+                          402,
+                          '__text',
+                          '52b9a9a870b511626d35b23bc9f7b6fe701f0e4be0abdc0577889ef964362f6a'],
+ 'contract_replacement_notice': [750530,
+                                 146,
+                                 '__text',
+                                 'eb2c91b239c5d5be1a80d8c5e3299e175b070413669fe8d93179c8c6fc81e38e'],
+ 'cargo_capacity_sum': [731124,
+                        20,
+                        '__text',
+                        '5c02d0bab5830f67f9ffb7c9d9ec8113e06c97a60e03a88240aa7fe52517b009'],
+ 'installed_capacity_recalculation': [727580,
+                                      1370,
+                                      '__text',
+                                      'bd42a6d6a60ee4108ff2ba5ad968ee680536c7ffa0a7907b064f4f0992a8007a'],
+ 'cabin_capacity_getter': [732332,
+                           10,
+                           '__text',
+                           '42ac4f2cad1a6340f1864332f319bf8d17c67db900b3fc0c5141eb8b79ec48ce'],
+ 'mission_cargo_flag_setter': [-84714,
+                               10,
+                               '__text',
+                               '60a06c095a8eb0743946884b414d83470431d2ceddea83bed4733846f63c949d'],
+ 'mission_cargo_flag_getter': [-81574,
+                               12,
+                               '__text',
+                               '5f222d70e8439f1b9efbaffe2b46aadd22ecb6c7fd267ffa24f26b583c440386'],
+ 'cargo_merge_by_item_id': [-83740,
+                            562,
+                            '__text',
+                            '83056f3cf156508ce457c774bc84b6fd0a274a0177b75f8805e4c196f9f46ba2'],
+ 'passenger_count_setter': [859476,
+                            10,
+                            '__text',
+                            'e329d1a5e7f9cdbf7d2d730b04a72a2f4f3866462a10a8d420cf95e73217112f'],
+ 'generated_contact_identity': [-234748,
+                                22,
+                                '__text',
+                                '86dc1e7436ae6994c0820032d3fefc14cb5a706d55d97112fafb0142c2e3e315'],
+ 'contact_identity_argument': [-720263,
+                               3,
+                               '__text',
+                               'c6cf83daa577f805d6c6b3d0a2f1dfa68ab3dcc16f60c208aa57b880f02e44b6'],
+ 'generated_contact_flag': [-720106,
+                            16,
+                            '__text',
+                            'baf140c27fb08b545dd28d194a03dab13384c5b0d5f14a4f9d31465e749724ff'],
+ 'generated_contact_predicate': [-719502,
+                                 14,
+                                 '__text',
+                                 '16219890fef5d150af759f614b19d5570225d337313b8219ce6a8f6618aa76c9'],
+ 'contact_consumed_setter': [-718610,
+                             14,
+                             '__text',
+                             'fa57ca8ee68a50f2bac4a6b772b01a364df1310f3a8f290903ba8e3942c1ccaf'],
+ 'accepted_contact_consumed': [747747,
+                               26,
+                               '__text',
+                               'f2b85f369bc5b4e0e4306ccaa9c5509f2934f50d14aa37ee91e0b38d2446369c'],
+ 'accepted_side_mission': [744191,
+                           55,
+                           '__text',
+                           '03904218a0b3ed89c44d04c202cda58989ca740832e2e4c4e3c66cf31d93cfcb'],
+ 'initial_contract_wallet': [880656,
+                             11,
+                             '__text',
+                             '040078c62f95156f4e0541d8f974fa9012f4fb871b199864ed47599ce0e48a1e'],
+ 'initial_passenger_count': [881587,
+                             8,
+                             '__text',
+                             'e4ecae91291b8c13f1d7c1b76cee172bbbf010a05a5bebc7ab2e1dab369e6135']}

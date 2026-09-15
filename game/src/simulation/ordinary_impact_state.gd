@@ -22,7 +22,7 @@ func configure(bindings: RefCounted, library: RefCounted, world: Dictionary) -> 
 		if world.get(key)!=bindings.get(key):return reject("Impact models belong to another world")
 	if world.get("elapsed_ms")!=0:return reject("Impact models must join before time advances")
 	var inputs:=Visuals.weapons(world)
-	if inputs.is_empty():return reject("Impact models need configured weapons")
+	if inputs.is_empty() and not Visuals.empty_ordinary_population(bindings,world):return reject("Impact models need a configured weapon population")
 	var metadata:={};var weapons:=[];var seen:={}
 	for entry in inputs:
 		var weapon: Dictionary=entry.projectiles.get("weapon",{})

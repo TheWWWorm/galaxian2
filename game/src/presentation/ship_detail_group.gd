@@ -16,16 +16,21 @@ var _selections := {}
 var _base := ""
 var _binding := ""
 
-func configure(bindings: RefCounted, ships: Dictionary) -> bool:
+func configure(bindings: RefCounted, ships: Dictionary,freighters: Array=[],assemblies: Dictionary={}) -> bool:
 	clear()
 	if bindings==null:return reject("Ship detail group requires source declarations")
 	if ships.is_empty(): return reject("Ship detail group requires registered ships")
 	var staged := {}
+	for key in freighters:
+		if not key is int or ships.get(key) not in [14,15]:return reject("Invalid freighter detail identity")
+	for key in assemblies:
+		if key not in freighters or not assemblies[key] is Dictionary:return reject("Unexpected freighter detail assembly")
 	for key in ships:
 		if not (key is int or key is String) or not ships[key] is int: return reject("Invalid ship detail group identity")
 		var selector := Detail.new()
-		if not selector.configure(bindings.ship_lod,ships[key]): return reject(selector.error)
-		if bindings.ship_lod.body_resource_ids[ships[key]][0]==65535: return reject("Ships without alternate meshes are not registered with the source LOD manager")
+		var ready: bool=selector.configure_assembly(bindings,assemblies[key]) if assemblies.has(key) else selector.configure_convoy(bindings.mido_travel.get("convoy_ship",{}),bindings.ship_lod) if key in freighters and ships[key]==14 else selector.configure_freighter(bindings.ambient_population,bindings.ship_lod) if key in freighters else selector.configure(bindings.ship_lod,ships[key])
+		if not ready:return reject(selector.error)
+		if key not in freighters and bindings.ship_lod.body_resource_ids[ships[key]][0]==65535: return reject("Ships without alternate meshes are not registered with the source LOD manager")
 		staged[key]=selector
 	return configure_selectors(bindings,staged)
 

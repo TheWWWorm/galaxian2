@@ -9,6 +9,7 @@ var _identity := {}
 var _speakers := {}
 var _snapshot := {}
 var _mobile := false
+var _top_inset := 0.0
 var _panel: Panel
 var _name: Label
 var _body: RichTextLabel
@@ -44,7 +45,7 @@ func configure(base_content_id: String, binding_id: String, language: String, sp
 	clear()
 	_identity = {}
 	_speakers = {}
-	if not Library.valid_hash(base_content_id) or not Library.valid_hash(binding_id) or language.is_empty() or campaign_cursor not in [0, 1, 7]:
+	if not Library.valid_hash(base_content_id) or not Library.valid_hash(binding_id) or language.is_empty() or campaign_cursor not in [0, 1, 7, 10, 11, 12, 13, 14, 16, 18]:
 		return _fail("Radio view needs a verified content, binding and language identity")
 	# Copy names and retain supplied texture resources. Never guess a portrait or
 	# derive a localization ID by adding a fixed cross-edition offset.
@@ -68,7 +69,7 @@ func clear() -> void:
 	_body.text = ""
 	_portrait.texture = null
 
-func present(snapshot: Dictionary) -> bool:
+func present(snapshot: Dictionary, resolved_speaker: Dictionary = {}) -> bool:
 	error = ""
 	if snapshot.is_empty():
 		clear()
@@ -87,10 +88,13 @@ func present(snapshot: Dictionary) -> bool:
 	if not snapshot.visible:
 		clear()
 		return true
-	# Avoid rewriting text/resetting scroll on every simulation frame.
-	if snapshot == _snapshot: return true
-	_snapshot = snapshot.duplicate(true)
 	var speaker: Dictionary = _speakers.get(int(snapshot.speaker_id), {})
+	if _identity.get("campaign_cursor") in [10,11,12]:
+		if not resolved_speaker.get("name") is String or not resolved_speaker.get("portrait") is Texture2D:return _fail("Local radio requires its selected portrait and resolved name")
+		speaker=resolved_speaker
+	# Avoid rewriting text/resetting scroll on every simulation frame.
+	if snapshot == _snapshot and _portrait.texture==speaker.get("portrait") and _name.text==speaker.get("name", ""): return true
+	_snapshot = snapshot.duplicate(true)
 	_name.text = speaker.get("name", "")
 	_portrait.texture = speaker.get("portrait")
 	_body.text = snapshot.text
@@ -116,13 +120,17 @@ func set_mobile_layout(enabled: bool) -> void:
 	_body.add_theme_color_override("default_color", Color(0.94, 0.97, 0.99))
 	_relayout()
 
+func set_top_inset(value: float) -> void:
+	if not is_finite(value) or value<0 or value==_top_inset:return
+	_top_inset=value;_relayout()
+
 func _relayout() -> void:
 	if not visible or size.x < 1 or size.y < 1: return
 	var scale := 1.0 if _mobile else 0.5
 	var inset := minf(24 * scale, size.x * 0.05)
 	var width := minf(760 * scale, size.x - inset * 2)
 	var padding := minf(24 * scale, width * 0.05)
-	var top := minf(48 * scale, size.y * 0.05)
+	var top := maxf(minf(48 * scale, size.y * 0.05),_top_inset)
 	var header := 38 * scale if not _name.text.is_empty() else 0.0
 	var available := maxf(1, size.y - top - inset - padding * 2 - header)
 	var portrait_height := minf(150 * scale, available)

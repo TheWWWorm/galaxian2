@@ -1,5 +1,5 @@
 extends RefCounted
-## Source-bound guidance to the first mining station. The caller supplies the
+## Shared guidance to a supported station or local planet. The caller supplies the
 ## preceding manual response sample and each frame's pitch response, owns
 ## frame/input ordering and checks arrival.
 ## The logical camera target stays separate from the visible banked ship.
@@ -11,6 +11,7 @@ const Vehicle=preload("res://src/simulation/vehicle_response.gd")
 const Guidance=preload("res://src/simulation/player_guidance.gd")
 const Vectors=preload("res://src/simulation/source_vectors.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
+const LocalTravel=preload("res://src/content/mido_travel_definitions.gd")
 var error:=""
 var _rules:={}
 var _identity:={}
@@ -23,6 +24,8 @@ var _history: Array=[]
 var _cursor:=0
 var _wrapped:=false
 var _manual_sample:=false
+var _planet_station_ids:=[]
+var _gate_target: Variant
 
 func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCounted, station: RefCounted) -> bool:
 	error=""
@@ -31,7 +34,9 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	for data in [entry,target]:
 		if data.get("base_content_id")!=bindings.base_content_id or data.get("binding_id")!=bindings.binding_id:return reject("Station autopilot belongs to another flight identity")
 	var rules: Dictionary=bindings.station_autopilot
-	if OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty() or entry.get("location",{}).get("station_id")!=int(rules.station_id) or entry.location.get("system_id")!=int(rules.system_id) or target.get("station_id")!=int(rules.station_id) or target.get("system_id")!=int(rules.system_id):return reject("Station autopilot requires the supported mining location")
+	if entry.get("campaign_cursor") in [10,11,12,13,14,16,18] and not OrdinaryFlight.for_departure(bindings,entry).is_empty():
+		rules=rules.duplicate(true);rules.station_id=int(entry.location.station_id);rules.system_id=int(entry.location.system_id)
+	if OrdinaryFlight.for_departure(bindings,entry).is_empty() or entry.get("location",{}).get("station_id")!=int(rules.station_id) or entry.location.get("system_id")!=int(rules.system_id) or target.get("station_id")!=int(rules.station_id) or target.get("system_id")!=int(rules.system_id):return reject("Station autopilot requires the supported mining location")
 	var destination:=Vector3(rules.target_position[0],rules.target_position[1],rules.target_position[2])
 	if not target.get("pose") is Transform3D or target.pose.origin!=destination:return reject("Station autopilot target differs from its authored position")
 	var vehicle:=Vehicle.new()
@@ -47,7 +52,18 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	_rules=rules.duplicate(true);_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	_gain=gain;_response=factor;_limit=limit;_speed=float(speed)
 	_history.resize(int(rules.bank_samples));_history.fill(0.0);_cursor=0;_wrapped=false;_manual_sample=false
-	_state={"active":false,"station_id":int(rules.station_id),"target_position":destination,"player_pose":entry.player_pose,
+	_planet_station_ids=[]
+	_gate_target=null
+	if load("res://src/content/gate_arrival_definitions.gd").available(bindings):
+		for gate in entry.get("gate_environment",{}).get("objects",[]):
+			if gate.index==1 and gate.interactive:_gate_target=gate.pose.origin
+	var contract_navigation: bool=LocalTravel.navigation_available(bindings.mido_travel,entry.campaign_cursor) and entry.scenery.world_initialization.has("contract_context")
+	var ordinary_navigation: bool=LocalTravel.free_local_navigation(bindings.mido_travel,entry.campaign_cursor) and entry.departure.has("free_context")
+	if contract_navigation or ordinary_navigation:
+		_planet_station_ids=LocalTravel.navigation_stations(bindings.mido_travel,entry.campaign_cursor,int(entry.location.station_id)).filter(func(id):return id!=int(entry.location.station_id))
+	if entry.campaign_cursor in [10,11,12] and not LocalTravel.journey(bindings.mido_travel,entry.campaign_cursor).is_empty() and entry.location.station_id==int(LocalTravel.journey(bindings.mido_travel,entry.campaign_cursor).from_station_id):
+		_planet_station_ids.append(int(LocalTravel.journey(bindings.mido_travel,entry.campaign_cursor).station_id))
+	_state={"active":false,"station_id":int(rules.station_id),"target_kind":"station","target_position":destination,"player_pose":entry.player_pose,
 		"model_basis":Basis.IDENTITY,"angular_units":Vector2.ZERO,"bank":0.0,"target_bank":0.0,"signed_turn":0.0,
 		"throttle":float(rules.start_throttle),"near_target":false,"elapsed_ms":0,"events":[]}
 	return true
@@ -67,8 +83,52 @@ func start(pose: Variant=null) -> bool:
 	if _state.is_empty() or _state.active or not _manual_sample:return reject("Station guidance requires the preceding manual sample")
 	if pose!=null and (not pose is Transform3D or not proper_pose(pose)):return reject("Invalid current station guidance pose")
 	_state=_state.duplicate(true);_state.active=true;_state.throttle=float(_rules.start_throttle)
+	_state.target_kind="station";_state.station_id=int(_rules.station_id)
+	_state.target_position=Vector3(_rules.target_position[0],_rules.target_position[1],_rules.target_position[2])
 	if pose!=null:_state.player_pose=pose
 	_state.events=[{"kind":"notification","source_id":int(_rules.start_notice)}]
+	return true
+
+func start_planet(station_id: int, position: Vector3, pose: Transform3D) -> bool:
+	error=""
+	if _state.is_empty() or not _manual_sample or not _planet_station_ids.has(station_id) or not position.is_finite() or not proper_pose(pose):return reject("Planet guidance requires a supported destination and preceding response")
+	# Map selection replaces the same player target pointer. It neither clears
+	# the shared bank history nor emits the station-selection notification.
+	_state=_state.duplicate(true)
+	_state.merge({"active":true,"target_kind":"planet","station_id":station_id,"target_position":position,
+		"player_pose":pose,"throttle":float(_rules.start_throttle),"events":[]},true)
+	return true
+
+func refresh_planet_position(position: Vector3) -> bool:
+	error=""
+	if _state.is_empty() or not _state.active or _state.target_kind!="planet" or not position.is_finite():return reject("No active planet guidance accepts this position")
+	_state=_state.duplicate(true);_state.target_position=position
+	return true
+
+func start_gate(pose: Transform3D) -> bool:
+	error=""
+	if _state.is_empty() or not _manual_sample or not _gate_target is Vector3 or not proper_pose(pose):return reject("Gate guidance requires the generated outgoing gate and preceding response")
+	_state=_state.duplicate(true)
+	_state.merge({"active":true,"target_kind":"gate","station_id":int(_rules.station_id),"target_position":_gate_target,
+		"player_pose":pose,"throttle":float(_rules.start_throttle),"events":[]},true)
+	return true
+
+func clear_target() -> bool:
+	# The source target setter clears active guidance without a manual-cancel
+	# notice. Keep bank and samples; only active history traversal is reset.
+	error=""
+	if _state.is_empty():return reject("Prepare guidance before clearing its target")
+	_state=_state.duplicate(true)
+	if _state.active:_cursor=0;_wrapped=false
+	_state.active=false;_state.events=[]
+	return true
+
+func observe_scripted_pose(pose: Transform3D) -> bool:
+	error=""
+	if _state.is_empty() or not proper_pose(pose):return reject("Scripted flight requires a valid current player pose")
+	# A cinematic may suspend guidance while the actual ship keeps coasting.
+	# Retain the selected destination and bank history for ordinary resumption.
+	_state=_state.duplicate(true);_state.player_pose=pose
 	return true
 
 func observe_mining_guidance(before: Transform3D, after: Transform3D) -> bool:
@@ -124,7 +184,7 @@ func _turn_sample(before: Basis, after: Basis) -> Dictionary:
 func cancel() -> bool:
 	error=""
 	if _state.is_empty() or not _state.active:return reject("No station autopilot is active")
-	_state=_state.duplicate(true);_state.active=false;_cursor=0;_wrapped=false
+	if not clear_target():return false
 	_state.events=[{"kind":"notification","source_id":int(_rules.cancel_notice)}]
 	# Retain the response and visible bank for the caller's ordinary player
 	# update. Cancelling does not teleport, level the ship or clear samples.
@@ -148,11 +208,15 @@ func fork_for_frame() -> RefCounted:
 	copy._rules=_rules;copy._identity=_identity;copy._state=_state.duplicate(true)
 	copy._gain=_gain;copy._response=_response;copy._limit=_limit;copy._speed=_speed
 	copy._history=_history.duplicate();copy._cursor=_cursor;copy._wrapped=_wrapped;copy._manual_sample=_manual_sample
+	copy._planet_station_ids=_planet_station_ids
+	copy._gate_target=_gate_target
 	return copy
 
 func clear() -> void:
 	error="";_rules={};_identity={};_state={};_gain=0;_response=0;_limit=0;_speed=0
 	_history=[];_cursor=0;_wrapped=false;_manual_sample=false
+	_planet_station_ids=[]
+	_gate_target=null
 static func proper_pose(pose: Transform3D) -> bool:return pose.is_finite() and pose.basis.determinant()>0 and pose.basis.is_equal_approx(pose.basis.orthonormalized())
 static func single(value: float) -> float:return Guidance.single(value)
 func reject(message: String) -> bool:error=message;return false

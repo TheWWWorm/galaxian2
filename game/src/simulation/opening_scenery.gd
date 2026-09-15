@@ -1,4 +1,5 @@
 extends RefCounted
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
 ## Owns scenery for supported Opening/rescue worlds. The caller provides Unix
 ## seconds separately from the monotonic frame clock; count RNG is never reused.
 const Detail = preload("res://src/presentation/scenery_detail_group.gd")
@@ -14,6 +15,7 @@ const WorldInitialization = preload("res://src/simulation/opening_world_initiali
 const ArrivalLocation = preload("res://src/simulation/arrival_location.gd")
 const Population = preload("res://src/simulation/scenery_population.gd")
 const Primaries = preload("res://src/simulation/primary_weapons.gd")
+const Combat=preload("res://src/simulation/opening_combat_group.gd")
 var error := ""
 var _motion: RefCounted
 var _detail: RefCounted
@@ -126,6 +128,98 @@ func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, equ
 	var selected:=population.for_departure(int(bindings.combat_training.station_id),entry_conditions,7)
 	if selected.is_empty():return reject(population.error)
 	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,7,selected.center,large_display,body_resources,effect_resources):return false
+	if not _finish_world_initialization(world):
+		var message:=error;clear();return reject(message)
+	_departure_population=selected
+	return true
+
+func configure_local_arrival(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted, player_cache: Dictionary, entry_conditions: Dictionary, unix_seconds: Variant, large_display:=true, body_resources: RefCounted=null, effect_resources: RefCounted=null) -> bool:
+	if bindings==null or not player_cache.get("campaign_cursor") is int:return reject("Local arrival requires its current player cache")
+	var trip:=Travel.journey(bindings.mido_travel,player_cache.campaign_cursor)
+	if trip.is_empty():return reject("Unsupported local scenery arrival")
+	return _configure_local(bindings,catalogues,equipment,player_cache,entry_conditions,unix_seconds,int(trip.station_id),large_display,body_resources,effect_resources,0.5,player_cache.campaign_cursor)
+
+func configure_local_departure(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted, player_cache: Dictionary, entry_conditions: Dictionary, unix_seconds: Variant, large_display:=true, body_resources: RefCounted=null, effect_resources: RefCounted=null, difficulty:=0.5, cursor: int=10) -> bool:
+	if bindings==null:return reject("Local scenery requires content definitions")
+	var trip:=Travel.journey(bindings.mido_travel,cursor)
+	if trip.is_empty():return reject("Unsupported local scenery departure")
+	return _configure_local(bindings,catalogues,equipment,player_cache,entry_conditions,unix_seconds,int(trip.from_station_id),large_display,body_resources,effect_resources,difficulty,cursor)
+
+func _configure_local(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted, player_cache: Dictionary, entry_conditions: Dictionary, unix_seconds: Variant, station_id: int, large_display: bool, body_resources: RefCounted, effect_resources: RefCounted, difficulty: float, cursor: int=10) -> bool:
+	clear()
+	var location:=ArrivalLocation.new()
+	var context:=location.resolve_local_travel(bindings,catalogues,equipment,player_cache)
+	if context.is_empty():return reject(location.error)
+	if int(context.station_id)!=station_id or context.campaign_cursor!=cursor:return reject("Local scenery requires its own departure or arrival location")
+	var world:=WorldInitialization.new()
+	var departure:=station_id==int(Travel.journey(bindings.mido_travel,cursor).from_station_id)
+	var ready:=world.configure_local_traffic(bindings,catalogues,equipment,unix_seconds,entry_conditions,difficulty,cursor) if departure else world.configure_local_arrival(bindings,catalogues,equipment,player_cache,entry_conditions)
+	if not ready:return reject(world.error)
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var selected:=population.for_departure(int(context.station_id),entry_conditions,cursor)
+	if selected.is_empty():return reject(population.error)
+	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,cursor,selected.center,large_display,body_resources,effect_resources):return false
+	if not _finish_world_initialization(world):
+		var message:=error;clear();return reject(message)
+	_departure_population=selected
+	return true
+
+func configure_contract(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,contracts: RefCounted,player_cache: Dictionary,player_position: Vector3,entry_conditions: Dictionary,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null) -> bool:
+	clear()
+	var location:=ArrivalLocation.new()
+	var context:=location.resolve_local_travel(bindings,catalogues,equipment,player_cache)
+	if context.is_empty():return reject(location.error)
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var selected:=population.for_departure(int(context.station_id),entry_conditions,int(context.campaign_cursor))
+	if selected.is_empty():return reject(population.error)
+	var world:=WorldInitialization.new()
+	if not world.configure_contract(bindings,catalogues,equipment,contracts,player_cache,entry_conditions,unix_seconds,player_position,selected.center):return reject(world.error)
+	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,int(context.campaign_cursor),selected.center,large_display,body_resources,effect_resources):return false
+	if not _finish_world_initialization(world):
+		var message:=error;clear();return reject(message)
+	_departure_population=selected
+	return true
+
+func configure_convoy(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,entry_conditions: Dictionary,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null) -> bool:
+	clear()
+	var world:=WorldInitialization.new()
+	if not world.configure_convoy(bindings,catalogues,equipment,context,entry_conditions):return reject(world.error)
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var selected:=population.for_departure(int(context.station_id),entry_conditions,int(context.campaign_cursor))
+	if selected.is_empty():return reject(population.error)
+	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,context.campaign_cursor,selected.center,large_display,body_resources,effect_resources):return false
+	if not _finish_world_initialization(world):
+		var message:=error;clear();return reject(message)
+	_departure_population=selected
+	return true
+
+func configure_alioth(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,player_position: Vector3,entry_conditions: Dictionary,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null) -> bool:
+	clear()
+	var world:=WorldInitialization.new()
+	if not world.configure_alioth_attack(bindings,catalogues,equipment.snapshot().loadout,context,player_position,entry_conditions):return reject(world.error)
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var selected:=population.for_departure(int(context.station_id),entry_conditions,int(context.campaign_cursor))
+	if selected.is_empty():return reject(population.error)
+	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,context.campaign_cursor,selected.center,large_display,body_resources,effect_resources):return false
+	if not _finish_world_initialization(world):
+		var message:=error;clear();return reject(message)
+	_departure_population=selected
+	return true
+
+func configure_free(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,entry_conditions: Dictionary,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null) -> bool:
+	clear()
+	if not load("res://src/content/free_flight_definitions.gd").available(bindings) or not is_instance_of(equipment,load("res://src/simulation/station_equipment.gd")):return reject("Ordinary scenery requires its verified equipped entry")
+	var world:=WorldInitialization.new()
+	if not world.configure_free_traffic(bindings,catalogues,equipment,context,unix_seconds,entry_conditions):return reject(world.error)
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var selected:=population.for_departure(int(context.station_id),entry_conditions,int(context.campaign_cursor))
+	if selected.is_empty():return reject(population.error)
+	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,context.campaign_cursor,selected.center,large_display,body_resources,effect_resources):return false
 	if not _finish_world_initialization(world):
 		var message:=error;clear();return reject(message)
 	_departure_population=selected
@@ -298,15 +392,22 @@ func apply_escape_environment(escape: Dictionary) -> bool:
 func presentation_clock(object_index: int) -> RefCounted:
 	return null if object_index<0 or object_index>=_destruction.size() else _destruction[object_index].presentation_clock()
 
-func evaluate_primary_contacts(primaries: RefCounted, combat: RefCounted, inventory: RefCounted, delta_ms: Variant) -> Dictionary:
+func evaluate_primary_contacts(primaries: RefCounted, combat: RefCounted, inventory: RefCounted, delta_ms: Variant, shared_random_state: Variant=null, display_available:=true) -> Dictionary:
 	error=""
-	if _bodies==null or not primaries is Primaries:
+	if _bodies==null or not primaries is Primaries or (combat!=null and not combat is Combat):
 		reject("Opening weapon contacts require initialized scenery bodies and primaries");return {}
-	var result: Dictionary=primaries.evaluate_opening_update(combat,_bodies,inventory,delta_ms)
+	var candidate: RefCounted=combat
+	if combat!=null and combat.has_local_reactions():
+		candidate=combat.fork_for_frame()
+		if not shared_random_state is Dictionary or not candidate.begin_contact_pass(shared_random_state,display_available):reject("Local contacts require the shared frame stream: "+candidate.error);return {}
+	var result: Dictionary=primaries.evaluate_opening_update(candidate,_bodies,inventory,delta_ms)
 	if result.is_empty(): reject(primaries.error);return {}
 	var next: RefCounted=fork_for_frame()
 	next._bodies=result.bodies
-	return {"scenery":next,"primaries":result.primaries,"combat":result.combat,"weapons":result.weapons}
+	var operation:={"scenery":next,"primaries":result.primaries,"combat":result.combat,"weapons":result.weapons}
+	if result.combat!=null and result.combat.has_local_reactions():
+		next._random_state=result.combat.contact_random_state();operation.random_state=next._random_state.duplicate(true)
+	return operation
 
 func presentation_identity() -> RefCounted:
 	return _presentation_identity

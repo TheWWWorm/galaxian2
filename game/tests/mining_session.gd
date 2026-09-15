@@ -298,7 +298,7 @@ func render(lib: RefCounted,pixels: String,directory: String,captures: Dictionar
 	var previous: Transform3D=scene.geometry.player.transform;var shown: Dictionary=scene.mining_panel._state.duplicate(true)
 	var bad: RefCounted=captures["drill-stopped"].fork_for_frame();bad._targeting._sample.animation_frame=9999
 	check(not scene.present(bad) and scene.geometry.player.transform==previous and scene.mining_panel._state==shown,"Rejected presentation replaced the visible drill or world")
-	canvas.size=Vector2i(420,800);scene.set_mobile_layout(true);check(scene.present(captures["drill-partial"]),scene.error)
+	canvas.size=Vector2i(800,450);scene.set_mobile_layout(true);check(scene.present(captures["drill-partial"]),scene.error)
 	for i in 3:await process_frame
 	check(canvas.get_texture().get_image().save_png(directory.path_join("drill-partial-phone.png"))==OK,"Could not save phone drilling view")
 	canvas.free()

@@ -2,12 +2,13 @@ extends RefCounted
 ## Native remake bindings. Feed unhandled events only while flight owns input.
 ## Controller ownership adapts the maintained GoF3D input component (Apache-2.0).
 const KEY_ACTIONS := {KEY_SPACE: "fire", KEY_R: "missiles", KEY_SHIFT: "boost", KEY_ESCAPE: "pause",
-	KEY_T: "time", KEY_P: "autopilot", KEY_E: "dock", KEY_EQUAL: "throttle_up", KEY_MINUS: "throttle_down"}
+	KEY_T: "time", KEY_P: "autopilot", KEY_E: "dock", KEY_M: "map", KEY_J: "jump", KEY_EQUAL: "throttle_up", KEY_MINUS: "throttle_down"}
 const BUTTON_ACTIONS := {JOY_BUTTON_A: "boost", JOY_BUTTON_B: "missiles", JOY_BUTTON_X: "dock",
 	JOY_BUTTON_Y: "autopilot", JOY_BUTTON_START: "pause", JOY_BUTTON_BACK: "time",
-	JOY_BUTTON_DPAD_UP: "throttle_up", JOY_BUTTON_DPAD_DOWN: "throttle_down"}
+	JOY_BUTTON_DPAD_UP: "throttle_up", JOY_BUTTON_DPAD_DOWN: "throttle_down",
+	JOY_BUTTON_LEFT_SHOULDER: "map", JOY_BUTTON_RIGHT_SHOULDER: "jump"}
 const AXIS_ACTIONS := {JOY_AXIS_TRIGGER_RIGHT: "fire", JOY_AXIS_TRIGGER_LEFT: "missiles"}
-const ACTIONS := ["fire", "missiles", "boost", "pause", "time", "autopilot", "dock", "throttle_up", "throttle_down"]
+const ACTIONS := ["fire", "missiles", "boost", "pause", "time", "autopilot", "dock", "map", "jump", "throttle_up", "throttle_down"]
 const DIRECTIONS := [KEY_W, KEY_S, KEY_A, KEY_D, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]
 var error := ""
 var device := -1

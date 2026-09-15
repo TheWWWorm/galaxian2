@@ -1,6 +1,6 @@
 extends RefCounted
 ## Target choice is independent of weapon collision membership and firing gates.
-## The caller supplies the verified ordinary, unattached training population.
+## The caller supplies a verified ordinary, unattached population.
 const Vectors=preload("res://src/simulation/source_vectors.gd")
 
 static func select(state: Dictionary, actor: Dictionary, targets: Array, random: RefCounted, tuning: Dictionary, rules: Dictionary) -> Dictionary:
@@ -32,14 +32,23 @@ static func select(state: Dictionary, actor: Dictionary, targets: Array, random:
 		selected=1;next.fire_desired=false
 	if selected>0:
 		selected=-1
-		# The ordinary nonplayer pass starts at one in membership order. These
-		# two opposed actor kinds need no reputation or attached-companion rules.
+		# Scan in retained membership order. Range is deliberately not retested.
 		for index in range(1,targets.size()):
-			if alive(targets[index]) and (int(targets[index].actor_kind)==8)!=(int(actor.actor_kind)==8):
+			if alive(targets[index]) and opposed(int(actor.actor_kind),int(targets[index].actor_kind),rules):
 				selected=index;next.fire_desired=true;break
 	next.target_index=selected
 	next.target_selected=selected>=0
 	return next
+
+static func opposed(actor: int,target: int,rules: Dictionary) -> bool:
+	if rules.has("free_traffic"):
+		var opposition: Dictionary=rules.free_traffic.opposition
+		for faction in opposition.exclusive_factions:
+			if (actor==int(faction))!=(target==int(faction)):return true
+		for pair in opposition.pairs:
+			if (actor==int(pair[0]) and target==int(pair[1])) or (target==int(pair[0]) and actor==int(pair[1])):return true
+		return false
+	return (actor==8)!=(target==8) or (rules.has("alioth_lifecycle") and (actor==9)!=(target==9))
 
 static func alive(target: Dictionary) -> bool:
 	return target.active and target.hull>0

@@ -5,12 +5,16 @@ extends RefCounted
 ## Ownership, damage triggers and rendering are separate from this component.
 const Definitions=preload("res://src/content/damage_particle_definitions.gd")
 const FullHold=preload("res://src/content/full_hold_particle_definitions.gd")
+const Engines=preload("res://src/content/engine_particle_definitions.gd")
+const Junk=preload("res://src/content/contract_junk_definitions.gd")
+const Convoy=preload("res://src/content/convoy_effect_definitions.gd")
 const Appearance=preload("res://src/presentation/damage_particle_appearance.gd")
 const Vectors=preload("res://src/simulation/source_vectors.gd")
 const Random=preload("res://src/simulation/seeded_random.gd")
 const Library=preload("res://src/content/library.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const RESET_POSITION=Vector3(4294967296.0,4294967296.0,4294967296.0)
+const MAX_BIRTHS_PER_FRAME:=16384
 var error:=""
 var binding_id:=""
 var base_content_id:=""
@@ -26,6 +30,7 @@ var _dirty:=true
 var _force_velocity:=true
 var _baseline:=Vector3.ZERO
 var _velocity:=Vector3.ZERO
+var _fade_rgb:=false
 
 func configure(bindings: RefCounted,content_id: String,preset_id: Variant,seed: Variant) -> bool:
 	clear()
@@ -39,6 +44,31 @@ func configure_full_hold(bindings: RefCounted,content_id: String,preset_id: Vari
 	_enabled=bindings.full_hold_particles.burst_initial_emitting if _preset.preset_id==bindings.full_hold_particles.burst_preset else bindings.full_hold_particles.player_initial_emitting
 	return true
 
+func configure_junk(bindings: RefCounted,seed: Variant) -> bool:
+	clear()
+	if not Junk.available(bindings):return reject("Junk explosion particles are unavailable")
+	var rules: Dictionary=bindings.early_contracts.junk_lifecycle
+	if not _configure_rows(bindings,bindings.base_content_id,int(rules.burst_preset.preset_id),seed,[rules.burst_preset]):return false
+	_enabled=bool(rules.burst_initial_emitting)
+	return true
+
+func configure_convoy_emp(bindings: RefCounted,preset_id: Variant,seed: Variant) -> bool:
+	clear()
+	if not Convoy.available(bindings):return reject("Original convoy EMP sprites are unavailable")
+	var rules: Dictionary=bindings.mido_travel.convoy_effects
+	if not _configure_rows(bindings,bindings.base_content_id,preset_id,seed,rules.presets):return false
+	_enabled=rules.initial_emitting;_visible=rules.initial_visible;_fade_rgb=rules.fade_in_rgb
+	return true
+
+func configure_nozzle(bindings: RefCounted,mounts: RefCounted,ship_id: Variant,nozzle_index: Variant,seed: Variant) -> bool:
+	clear()
+	var resolved:=Engines.resolve(bindings,mounts,ship_id)
+	if resolved.has("error"):return reject(resolved.error)
+	if not Numbers.integer(nozzle_index,0,resolved.presets.size()-1):return reject("The requested player nozzle is unavailable")
+	if not _configure_rows(bindings,resolved.base_content_id,resolved.presets[int(nozzle_index)].preset_id,seed,resolved.presets):return false
+	_enabled=bindings.engine_particles.initial_emitting
+	return true
+
 func _configure_rows(bindings: RefCounted,content_id: String,preset_id: Variant,seed: Variant,rows: Variant) -> bool:
 	if not Library.valid_hash(content_id) or bindings.base_content_id!=content_id or not Library.valid_hash(bindings.binding_id):return reject("Damage particles belong to unavailable or different content")
 	if not Definitions.emitter_parameters(bindings.damage_particles) or not rows is Array:return reject("This content has no supported damage particle emitter defaults")
@@ -46,6 +76,7 @@ func _configure_rows(bindings: RefCounted,content_id: String,preset_id: Variant,
 	for row in rows:
 		if row.preset_id==preset_id:_preset=row.duplicate(true)
 	if _preset.is_empty():return reject("The requested damage particle preset is unavailable")
+	if not Definitions.sprite_preset(_preset):return reject("Invalid particle appearance parameters")
 	_random.seed_from(seed)
 	for index in int(_preset.capacity):
 		_slots.append({"appearance":{"slot":index,"age_ms":-1,"size":0},"position":RESET_POSITION,"velocity":Vector3.ZERO})
@@ -56,7 +87,7 @@ func emit_once(position: Variant) -> Dictionary:
 	error=""
 	# The verified world burst requests member zero, one particle and the preset
 	# size. Other manual presets and size overrides need their own source proof.
-	if _preset.is_empty() or _preset.preset_id!=11 or _preset.flags!=0x02000101:return fail("Configure the supported manual sprite before requesting a burst")
+	if _preset.is_empty() or int(_preset.preset_id) not in [11,21] or _preset.flags!=0x02000101:return fail("Configure the supported manual sprite before requesting a burst")
 	if not position is Vector3 or not position.is_finite():return fail("A particle burst requires a finite source world position")
 	var next:=fork_for_frame()
 	var appearance: Dictionary=next._new_appearance()
@@ -71,6 +102,15 @@ func clear() -> void:
 	error="";binding_id="";base_content_id="";_preset={};_slots=[];_random.clear()
 	_cursor=0;_remainder_ms=0;_enabled=false;_visible=true;_update_existing=true
 	_dirty=true;_force_velocity=true;_baseline=Vector3.ZERO;_velocity=Vector3.ZERO
+	_fade_rgb=false
+
+func rebind_transform() -> bool:
+	error=""
+	if _preset.is_empty():return reject("Configure a sprite before rebinding its transform")
+	# Source retargeting retains the preceding root and live particles, and forces
+	# the next velocity update. It does not reset to the new transform's origin.
+	_dirty=false;_force_velocity=true
+	return true
 
 func set_emitting(value: Variant) -> bool:
 	error=""
@@ -99,11 +139,13 @@ func reset() -> bool:
 
 func snapshot() -> Dictionary:
 	if _preset.is_empty():return {}
-	return {"binding_id":binding_id,"base_content_id":base_content_id,"preset":_preset.duplicate(true),
+	var result:={"binding_id":binding_id,"base_content_id":base_content_id,"preset":_preset.duplicate(true),
 		"slots":_slots.duplicate(true),"random":_random.snapshot(),"cursor":_cursor,
 		"remainder_ms":_remainder_ms,"enabled":_enabled,"visible":_visible,
 		"update_existing":_update_existing,"dirty":_dirty,"force_velocity":_force_velocity,
 		"baseline":_baseline,"velocity":_velocity}
+	if _fade_rgb:result.fade_in_rgb=true
+	return result
 
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
@@ -112,6 +154,7 @@ func fork_for_frame() -> RefCounted:
 	copy._cursor=_cursor;copy._remainder_ms=_remainder_ms
 	copy._enabled=_enabled;copy._visible=_visible;copy._update_existing=_update_existing
 	copy._dirty=_dirty;copy._force_velocity=_force_velocity;copy._baseline=_baseline;copy._velocity=_velocity
+	copy._fade_rgb=_fade_rgb
 	return copy
 
 func advance(pose: Variant,delta_ms: Variant,manager_elapsed_ms: Variant) -> Dictionary:
@@ -146,20 +189,28 @@ func _advance(pose: Transform3D,delta_ms: float,manager_elapsed_ms: float) -> Di
 	# Source flag bit eight selects direct emission and rejects automatic births
 	# before the timer. Its inherited 500/s field must never create a trail.
 	if not _enabled or not _visible or (int(_preset.flags)&0x100)!=0:return {"births":0}
+	if Vectors.dot(_velocity,_velocity)<float(_preset.get("minimum_squared_speed",0)):return {"births":0}
 	var total:=single(_remainder_ms+delta_ms)
 	var movement:=divided(Vectors.scaled(_velocity,total),1000.0)
 	var inverse_distance:=inverse_length(movement)
 	var inverse_speed:=inverse_length(_velocity)
 	if not is_finite(inverse_distance) or inverse_distance<=0 or not is_finite(inverse_speed) or inverse_speed<=0:return fail("Damage particle distance exceeds finite source bounds")
 	var distance:=single(1.0/inverse_distance)
-	var count:=int(single(single(single(_preset.emission_per_second)*total)*single(0.001)))
-	_remainder_ms=single(total+single(single(float(count)*-1000.0)/single(_preset.emission_per_second)))
+	var distance_emission: bool=_preset.flags==0x11
+	var requested: float=single(distance/single(_preset.distance_spacing)) if distance_emission else single(single(single(_preset.emission_per_second)*total)*single(0.001))
+	if not is_finite(requested) or requested>MAX_BIRTHS_PER_FRAME:return fail("Particle births exceed the supported frame work limit")
+	var count:=int(requested)
+	if distance_emission:
+		if requested<=0:return {"births":0}
+		_remainder_ms=single(single(single(requested-single(count))*total)/requested)
+	else:
+		_remainder_ms=single(total+single(single(float(count)*-1000.0)/single(_preset.emission_per_second)))
 	if count<=0:return {"births":0}
 	# The timer consumes the entire requested count even when short movement
 	# collapses this update to one newborn at the current emitter position.
 	var short_movement:=distance<1.0
 	if short_movement:count=1
-	var spacing:=single(distance/float(count))
+	var spacing:=single(_preset.distance_spacing) if distance_emission else single(distance/float(count))
 	var start_position:=pose.origin-movement
 	var inherited:=Vectors.scaled(_velocity,single(_preset.relative_velocity_factor))
 	for birth in count:
@@ -171,6 +222,7 @@ func _advance(pose: Transform3D,delta_ms: float,manager_elapsed_ms: float) -> Di
 		velocity=Vectors.added(velocity,-inherited)
 		velocity=Vectors.added(velocity,Vectors.scaled(pose.basis.z,single(_preset.local_velocity_z)))
 		var position:=pose.origin if short_movement else Vectors.added(start_position,Vectors.scaled(Vectors.scaled(movement,single(float(progress)*spacing)),inverse_distance))
+		if distance_emission:position=Vectors.added(position,Vectors.scaled(pose.basis.x,single(_preset.local_offset_x)))
 		position=Vectors.added(position,Vectors.scaled(pose.basis.y,single(_preset.local_offset_y)))
 		position=Vectors.added(position,Vectors.scaled(pose.basis.z,single(_preset.local_offset_z)))
 		var z_jitter:=int(_preset.local_offset_z_jitter)

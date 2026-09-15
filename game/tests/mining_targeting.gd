@@ -156,8 +156,8 @@ func verify_flight(lib: RefCounted,args: Array):
 	check(next.evaluate(100,Vector2.ZERO,0.0,false,Vector2i(-1,600))==null and flight.snapshot()==prior,"Invalid viewport partially committed a flight")
 	var bad: RefCounted=next.fork_for_frame();bad._targeting._field_identity=RefCounted.new();var held: Dictionary=bad.snapshot()
 	check(bad.evaluate(100)==null and bad.snapshot()==held,"Late selection failure committed player, scenery or camera state")
-	var resized: RefCounted=next.evaluate(100,Vector2.ZERO,0.0,false,Vector2i(420,800))
-	check(resized!=null and resized.snapshot().player_aim.viewport_size==Vector2i(420,800) and resized.snapshot().mining_targeting.viewport_size==Vector2i(420,800),"Viewport resize left aim and selection in different coordinates")
+	var resized: RefCounted=next.evaluate(100,Vector2.ZERO,0.0,false,Vector2i(800,450))
+	check(resized!=null and resized.snapshot().player_aim.viewport_size==Vector2i(800,450) and resized.snapshot().mining_targeting.viewport_size==Vector2i(800,450),"Viewport resize left aim and selection in different coordinates")
 	# A test-only pilot position puts the actual source asteroid in view. This
 	# proves live acquisition and HUD rendering, not the unfinished approach.
 	flight=next.fork_for_frame();flight._pilot.angular_units=Vector2.ZERO
@@ -200,7 +200,7 @@ func render(lib: RefCounted, pixels: String, directory: String,captures: Diction
 		check(scene.reticle.visible and scene.target_frame.visible and flight.snapshot()==held,"Rendering hid the reticle or advanced acquisition")
 		if label=="55":
 			check(scene.scan_animation.frame_rect().size==Vector2(20,20),"Desktop acquisition is not compact")
-			canvas.size=Vector2i(420,800);scene.set_mobile_layout(true)
+			canvas.size=Vector2i(800,450);scene.set_mobile_layout(true)
 			var phone: RefCounted=flight
 			for i in 60:
 				phone=phone.evaluate(100,Vector2.ZERO,0.0,false,canvas.size)

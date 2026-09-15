@@ -94,6 +94,20 @@ func apply_scripted_pose(pose: Variant) -> bool:
 	_root=pose
 	return true
 
+func advance_forward_only(delta_ms: Variant,speed: Variant) -> Dictionary:
+	error=""
+	if _definition.is_empty() or not Vitals.integer(delta_ms) or (not speed is float and not speed is int) or not is_finite(float(speed)) or speed<0:return fail("Outbound motion requires a configured flight owner, duration and finite speed")
+	var distance:=Vitals.single(Vitals.single(float(delta_ms))*Vitals.single(float(speed)))
+	if not is_finite(distance) or distance>=2147483648.0:return fail("Outbound displacement exceeds the supported integer range")
+	var pose:=_root
+	# The departure mode moves the root model directly; bank history and child
+	# pose are retained. Its caller keeps the previous statistics/collision pose.
+	pose.origin=Vectors.added(pose.origin,Vectors.scaled(Vectors.normalized(pose.basis.z),float(int(distance))))
+	if not rigid_pose(pose):return fail("Outbound motion exceeds source coordinates")
+	_root=pose
+	var result:=snapshot();result.travel_units=float(int(distance))
+	return result
+
 func banked_pose() -> Transform3D:
 	if _definition.is_empty(): return Transform3D.IDENTITY
 	return _root*Transform3D(bank_basis(),Vector3.ZERO)

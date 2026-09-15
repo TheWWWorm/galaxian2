@@ -1,4 +1,6 @@
 extends RefCounted
+const Alioth=preload("res://src/content/alioth_population_definitions.gd")
+const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
 ## Content-bound Opening, rescue and supported departure player pools.
 ## The world owner supplies ordering; full player lifecycle remains separate.
 const Definitions = preload("res://src/content/player_initialization_definitions.gd")
@@ -15,8 +17,15 @@ const Repair = preload("res://src/simulation/equipment_repair.gd")
 const RepairDefinitions = preload("res://src/content/player_repair_definitions.gd")
 const FlightCache = preload("res://src/simulation/flight_player_cache.gd")
 const CacheDefinitions = preload("res://src/content/flight_player_cache_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const Entry = preload("res://src/content/player_entry_definitions.gd")
+const Stats=preload("res://src/simulation/equipment_stats.gd")
+const Fitting=preload("res://src/content/ordinary_fitting_definitions.gd")
 const StationEquipment = preload("res://src/simulation/station_equipment.gd")
+const Construction=preload("res://src/simulation/opening_npc_construction.gd")
+const Convoy=preload("res://src/content/convoy_world_definitions.gd")
+const ContractLife=preload("res://src/content/contract_ship_lifecycle_definitions.gd")
+const Junk=preload("res://src/content/contract_junk_definitions.gd")
 var error := ""
 var _state := {}
 var _hit_policy := {}
@@ -39,11 +48,58 @@ func configure_departure(bindings: RefCounted, catalogues: RefCounted, cursor: i
 func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted) -> bool:
 	return _configure(bindings,catalogues,7,{},equipment)
 
-func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previous_cache: Variant, equipment: RefCounted=null) -> bool:
+func configure_local_travel(bindings: RefCounted, catalogues: RefCounted, equipment: RefCounted, previous_cache: Variant=null, cursor: int=10) -> bool:
+	if cursor not in [10,11,12] and not Travel.navigation_available(bindings.mido_travel,cursor):clear();return reject("Unsupported local player cursor")
+	return _configure(bindings,catalogues,cursor,previous_cache,equipment)
+
+func configure_contract(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,construction: RefCounted,previous_cache: Variant=null) -> bool:
+	clear()
+	if not construction is Construction:return reject("Contract player requires its accepted generated encounter")
+	var data:=ContractLife.population(bindings,construction.snapshot())
+	if data.is_empty():data=Junk.population(bindings,construction.snapshot())
+	if data.is_empty() or not equipment is StationEquipment or equipment.snapshot().loadout.station_id!=int(data.station_id):return reject("Contract player belongs to another equipped station")
+	if not _configure(bindings,catalogues,int(data.campaign_cursor),previous_cache,equipment,data):return false
+	_state.contract_encounter=construction.snapshot().contract_encounter.duplicate(true)
+	return true
+
+func configure_convoy(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,construction: RefCounted,previous_cache: Variant=null) -> bool:
+	clear()
+	if not construction is Construction:return reject("Convoy player requires its generated encounter")
+	var data:=Convoy.lifecycle(bindings,construction.snapshot())
+	if data.is_empty() or not equipment is StationEquipment or equipment.snapshot().loadout.station_id!=int(data.station_id):return reject("Convoy player belongs to another equipped station")
+	if not _configure(bindings,catalogues,int(data.campaign_cursor),previous_cache,equipment,data):return false
+	_state.convoy_context=construction.snapshot().convoy_context.duplicate(true)
+	return true
+
+func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,construction: RefCounted,previous_cache: Variant=null) -> bool:
+	clear()
+	if not construction is Construction:return reject("Alioth player requires its generated encounter")
+	var data:=Alioth.lifecycle(bindings,construction.snapshot())
+	if data.is_empty() or not equipment is StationEquipment or equipment.snapshot().loadout.station_id!=int(data.station_id):return reject("Alioth player belongs to another equipped station")
+	if not _configure(bindings,catalogues,int(data.campaign_cursor),previous_cache,equipment,data):return false
+	_state.alioth_context=construction.snapshot().alioth_context.duplicate(true)
+	return true
+
+func configure_free(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,construction: RefCounted,previous_cache: Variant=null) -> bool:
+	clear()
+	if not FreeFlight.available(bindings) or not construction is Construction:return reject("Ordinary player requires its source-bound population")
+	var packet: Dictionary=construction.snapshot()
+	var data:=FreeFlight.Life.population(bindings,packet)
+	if data.is_empty() or not equipment is StationEquipment:return reject("Ordinary player differs from its retained equipment or population")
+	var owned: Dictionary=equipment.snapshot();var loadout: Dictionary=owned.get("loadout",{})
+	if owned.get("cargo_cache_stale",true) or loadout.get("station_id")!=int(data.station_id) or loadout.get("ship_id")!=packet.player_ship_id:return reject("Ordinary player differs from its retained equipment or population")
+	if not _configure(bindings,catalogues,int(data.campaign_cursor),previous_cache,equipment,data):return false
+	_state.free_context=packet.free_context.duplicate(true)
+	return true
+
+
+func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previous_cache: Variant, equipment: RefCounted=null,contract: Dictionary={}) -> bool:
 	clear()
 	if bindings==null or catalogues==null: return reject("Player initialization requires content definitions")
 	var entry:=Entry.new()
-	if not entry.configure(bindings,cursor):return reject(entry.error)
+	var station_id:=int(equipment.snapshot().get("loadout",{}).get("station_id",-1)) if equipment is StationEquipment else -1
+	var ship_id:=int(equipment.snapshot().get("loadout",{}).get("ship_id",-1)) if equipment is StationEquipment else -1
+	if not entry.configure(bindings,cursor,station_id,previous_cache!=null and not (previous_cache is Dictionary and previous_cache.is_empty()),ship_id):return reject(entry.error)
 	var arrival:=entry.is_arrival
 	var departure:=entry.is_departure
 	if entry.uses_equipment and not equipment is StationEquipment:return reject("Combat-training player requires the actual equipped tutorial ship")
@@ -52,7 +108,8 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 		return reject("This profile has no supported fresh player initialization")
 	var seed: Dictionary
 	if entry.uses_equipment:
-		if not equipment.requirements().satisfied:return reject("Install the required weapon and armor before combat training")
+		if cursor in [10,11,12,13,14,16,18] and (not equipment.snapshot().get("training_inventory_released",false) or not equipment.snapshot().get("prototype_drill_replaced",false)):return reject("Complete the station drill exchange before local flight")
+		if not (cursor==18 and Fitting.available(bindings)) and not equipment.requirements().satisfied:return reject("Install the required weapon and armor before combat training")
 		seed=equipment.snapshot().loadout
 		if seed.get("base_content_id")!=bindings.base_content_id or seed.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id:return reject("Equipped player belongs to another source identity")
 		for key in ["ship_id","station_id","system_id"]:
@@ -111,6 +168,11 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 		# This verified fresh path is outside the gamma environment. Entry resets
 		# the restored gamma level after refreshing the ordinary ship cache.
 		current.gamma=Vitals.single(cache_parameters.gamma_full)
+	if entry.restores_local:
+		if not FlightCache.matches(previous_cache,seed,cursor):return reject("Local arrival cache belongs to another equipped location")
+		current=FlightCache.restore_values(cache_parameters,base_hull,capacities,previous_cache.values)
+		if current.is_empty():return reject("Unsupported local arrival player values")
+		current.gamma=Vitals.single(cache_parameters.gamma_full)
 	if base_hull>=0:
 		max_hull=maxi(base_hull,current.hull)
 		repair=Repair.new()
@@ -126,9 +188,11 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 		if not HitDefinitions.parameters(policy) or not NPCWeapons.parameters(npc) or not OrdinaryHits.parameters(ordinary) or ordinary.is_empty():
 			return reject("Player contact requires verified NPC weapons and hit declarations")
 		var contacts:=entry.contact_weapons(npc)
+		if not contract.is_empty():contacts={"candidates":contract.npc_weapons,"enabled":true,"context":{"campaign_cursor":cursor,"nonplayer_source":true}}
 		if contacts.is_empty():return reject(entry.error)
 		var candidates: Array=contacts.candidates
 		for candidate in candidates:
+			if candidate.get("unarmed",false):continue
 			if int(candidate.item_id)>=catalogues.tables.items.size(): return reject("Player contact weapon is absent from this catalogue")
 			var properties: Variant=catalogues.tables.items[int(candidate.item_id)].get("properties")
 			if not properties is Dictionary: return reject("NPC contact weapon lacks source properties")
@@ -148,7 +212,7 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 	_repair=repair
 	_flight_cache=next_cache
 	if repair!=null: _state.max_hull=max_hull
-	if arrival or departure:_state.gamma=current.gamma;_state.campaign_cursor=cursor
+	if arrival or departure or entry.restores_local:_state.gamma=current.gamma;_state.campaign_cursor=cursor
 	if not policy.is_empty():
 		_state.contact=false;_state.impact_vector=Vector3.ZERO
 	return true
@@ -170,29 +234,10 @@ func advance_repair(delta_ms: Variant) -> Dictionary:
 	return result
 
 static func resolve_ship_hull(base: Variant, upgrade_tags: Array, parameters: Dictionary) -> int:
-	if not RepairDefinitions.parameters(parameters) or not Vitals.integer(base) or upgrade_tags.size()>4096: return -1
-	var result: int=base
-	for tag in upgrade_tags:
-		if not Vitals.integer(tag): return -1
-		if tag==int(parameters.upgrade_tag):
-			if result>Vitals.MAX_INTEGER-int(parameters.upgrade_bonus): return -1
-			result+=int(parameters.upgrade_bonus)
-	return result
+	return Stats.resolve_ship_hull(base,upgrade_tags,parameters)
 
 static func resolve_repair_device(items: Array, equipment_ids: Array, parameters: Dictionary) -> Dictionary:
-	if not RepairDefinitions.parameters(parameters) or equipment_ids.size()>4096: return {}
-	var result := {"mode":int(parameters.missing_device_mode),"item_id":-1}
-	for item_id in equipment_ids:
-		if not Vitals.integer(item_id) or item_id>=items.size() or not items[item_id] is Dictionary: return {}
-		var arrays: Variant=items[item_id].get("arrays")
-		if not arrays is Array or arrays.size()!=3 or not (arrays[2] is Array or arrays[2] is PackedInt32Array) or arrays[2].size()<=int(parameters.item_type_value_index): return {}
-		var kind: Variant=arrays[2][int(parameters.item_type_value_index)]
-		if not Vitals.integer(kind): return {}
-		if kind!=int(parameters.equipment_type): continue
-		var source_id: Variant=arrays[2][int(parameters.item_id_value_index)]
-		if not Vitals.integer(source_id): return {}
-		result={"mode":0 if source_id==int(parameters.slow_item_id) else 1,"item_id":item_id}
-	return result
+	return Stats.resolve_repair_device(items,equipment_ids,parameters)
 
 func supports_weapon_hit(weapon: Variant) -> bool:
 	error=""
@@ -245,25 +290,7 @@ func record_contact(velocity: Variant) -> bool:
 	return true
 
 static func resolve_capacities(items: Array, equipment_ids: Array, parameters: Dictionary) -> Dictionary:
-	if not Definitions.parameters(parameters) or equipment_ids.size()>4096: return {}
-	var result := {"shield":int(parameters.missing_capacity),"armor":int(parameters.missing_capacity),
-		"shield_item_id":-1,"armor_item_id":-1}
-	for item_id in equipment_ids:
-		if not item_id is int or item_id<0 or item_id>=items.size() or not items[item_id] is Dictionary: return {}
-		var item: Dictionary=items[item_id]
-		var arrays: Variant=item.get("arrays")
-		if not arrays is Array or arrays.size()!=3 or not (arrays[2] is Array or arrays[2] is PackedInt32Array) or arrays[2].size()<=int(parameters.item_type_value_index): return {}
-		var type_id: Variant=arrays[2][int(parameters.item_type_value_index)]
-		if not Numbers.integer(type_id,0,2147483647): return {}
-		for pool in ["shield","armor"]:
-			if int(type_id)!=int(parameters[pool+"_equipment_type"]): continue
-			var properties: Variant=item.get("properties")
-			if not properties is Dictionary: return {}
-			var value: Variant=properties.get(int(parameters[pool+"_property"]))
-			if not value is int or value<0 or value>Vitals.MAX_INTEGER or (pool=="shield" and value>Vitals.MAX_SHIELD): return {}
-			result[pool]=value
-			result[pool+"_item_id"]=item_id
-	return result
+	return Stats.resolve_capacities(items,equipment_ids,parameters)
 
 func snapshot() -> Dictionary:
 	var result := _state.duplicate(true)

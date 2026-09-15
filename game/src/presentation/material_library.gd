@@ -4,6 +4,10 @@ const SHADERS := {
 	0: preload("res://src/presentation/material_opaque.gdshader"),
 	1: preload("res://src/presentation/material_alpha.gdshader"),
 	2: preload("res://src/presentation/material_additive.gdshader"),
+	3: preload("res://src/presentation/material_additive_twosided.gdshader"),
+	6: preload("res://src/presentation/material_lit.gdshader"),
+	# Original opaque cutouts: alpha test with depth writes, no blending.
+	10: preload("res://src/presentation/material_cutout.gdshader"),
 	18: preload("res://src/presentation/material_alpha.gdshader"),
 	28: preload("res://src/presentation/imported_material.gdshader")}
 

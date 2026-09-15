@@ -1,10 +1,13 @@
 """Validate the engine source allowlist and its local resource dependencies."""
+import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
 
 ALLOWED = {'.md', '.py', '.gd', '.uid', '.tscn', '.godot', '.json', '.gitignore', '.gdshader', '.gdshaderinc', '.txt'}
 
+
+PROMOTIONAL_IMAGES = {'screenshots/02-portal-and-freighters.png': '283378cb4fbe230d0b7b60d578247aff085f6b6e6cffcaf3aff46479926c714b', 'screenshots/01-alioth-orbit.png': '88e7d2f609bd40364e746b7a985fffbe5d0a50878f24d985c1aeb4cce601c960', 'screenshots/03-native-flight.png': '1f98b7bc6a21967e4ad6cf9d857af126df8c4587e4f8af461a79a7f5e4c13e79'}
 
 def manifest_files(root):
     root = Path(root).resolve()
@@ -24,7 +27,10 @@ def manifest_files(root):
                 break
             if part.is_symlink():
                 raise ValueError(f'Symlink in source entry: {name}')
-        if (path.suffix if name != '.gitignore' else name) not in ALLOWED:
+        if name in PROMOTIONAL_IMAGES:
+            if hashlib.sha256(path.read_bytes()).hexdigest() != PROMOTIONAL_IMAGES[name]:
+                raise ValueError('Changed promotional screenshot: ' + name)
+        elif (path.suffix if name != '.gitignore' else name) not in ALLOWED:
             raise ValueError(f'Non-source file in allowlist: {name}')
         if any(part in ('.git', '.godot', '__pycache__', 'local') for part in rel.parts):
             raise ValueError(f'Private or generated directory in allowlist: {name}')

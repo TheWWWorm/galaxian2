@@ -19,7 +19,7 @@ func build(owner: RefCounted,library: RefCounted,visuals: RefCounted,bindings: R
 	var state: Dictionary=owner.snapshot()
 	if library==null or visuals==null or bindings==null or library.manifest.get("content_id")!=state.base_content_id or visuals.base_content_id!=state.base_content_id or bindings.base_content_id!=state.base_content_id or bindings.binding_id!=state.binding_id:return reject("Damage sprite resources belong to another content identity")
 	var materials:={}
-	for kind in ["trail","smoke","fire","burst"]:
+	for kind in ["trail","smoke","fire","burst","junk_burst","emp17","emp18"]:
 		var preset: Dictionary
 		for key in state.owners:
 			if not state.owners[key].has(kind):continue
@@ -63,7 +63,7 @@ func prepare_world(owner: RefCounted,world: Dictionary,camera_pose: Variant) -> 
 		for index in emitter.slots.size():
 			var slot: Dictionary=emitter.slots[index]
 			if slot.appearance.slot!=index or not slot.position is Vector3 or not slot.position.is_finite():return failed("Invalid damage sprite slot")
-			var appearance:=Appearance.sample(item.preset,slot.appearance)
+			var appearance:=Appearance.sample(item.preset,slot.appearance,emitter.get("fade_in_rgb",false))
 			if appearance.has("error"):return failed(appearance.error)
 			if not appearance.active or not emitter.visible:continue
 			var quad:=sprite(view*slot.position,appearance)

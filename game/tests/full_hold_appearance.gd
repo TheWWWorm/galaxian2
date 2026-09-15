@@ -144,6 +144,7 @@ func verify_restart(bindings: RefCounted, cat: RefCounted, world: RefCounted, re
 	for i in 12:
 		if not step(pair,150,near):return
 	check(pair.combat.normal_hit(0,50,other).destroyed_now,"Synthetic early lethal hit failed")
+	var reputation: Dictionary=pair.combat.snapshot().get("reputation",{})
 	if not step(pair,100,near):return
 	var reached:=false
 	for i in 500:
@@ -170,6 +171,9 @@ func verify_restart(bindings: RefCounted, cat: RefCounted, world: RefCounted, re
 	check(started.death_accounting.get("scripted_restart")==true and started.death_accounting.nonplayer_kill==other,"Repeated source callback lost retained attribution")
 	var totals: Dictionary=pair.control.snapshot().death_accounting
 	check(totals.events.size()==2 and totals.counter_deltas.hostile_remaining==-2 and totals.counter_deltas.hostile_deaths==2 and totals.counter_deltas.player_kills==(0 if other else 2) and totals.counter_deltas.world_other_kills==(2 if other else 0),"Reactivated source counters were clamped, duplicated or misattributed")
+	if not reputation.is_empty():
+		check(pair.combat.snapshot().reputation==reputation and reputation.events.size()==1,"Scripted death restart repeated its lethal reputation event")
+		check(pair.combat.reputation_after({"axes":[30,-3],"override":-1})=={"axes":[30,-3 if other else -4],"override":-1},"Scripted death counters replaced the actual reputation history")
 	var banked: Transform3D=pending.pose*Transform3D(life.bank_basis,Vector3.ZERO)
 	check(life.pose==pending.pose and life.statistics_pose==banked,"Restarted death used stale or twice-banked root")
 	check(pair.combat.snapshot().actors[0].model_draw_enabled and not pair.combat.snapshot().actors[0].engine_draw_enabled and pair.last.firing.is_empty(),"Restarted death hid its hull, fired or retained the engine mesh")

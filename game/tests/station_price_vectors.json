@@ -1,0 +1,1198 @@
+[
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": false,
+    "price": 984,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": true,
+    "price": 2415,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": false,
+    "price": 0,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": true,
+    "price": 0,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": false,
+    "price": 836,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": true,
+    "price": 2052,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": false,
+    "price": 1230,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": true,
+    "price": 3018,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        50
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": false,
+    "price": 1627,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        50
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": true,
+    "price": 2415,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        50
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": false,
+    "price": 0,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        50
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": true,
+    "price": 0,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        50
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": false,
+    "price": 1382,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        50
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": true,
+    "price": 2052,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        50
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": false,
+    "price": 2033,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        0,
+        50
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": true,
+    "price": 3018,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        120,
+        160
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": false,
+    "price": 2286,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        120,
+        160
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": true,
+    "price": 2415,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        120,
+        160
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": false,
+    "price": 0,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        120,
+        160
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": true,
+    "price": 0,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        120,
+        160
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": false,
+    "price": 1943,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        120,
+        160
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": true,
+    "price": 2052,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        120,
+        160
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": false,
+    "price": 2857,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        60,
+        80
+      ],
+      [
+        120,
+        160
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": true,
+    "price": 3018,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": false,
+    "price": 2286,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": true,
+    "price": 2415,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": false,
+    "price": 0,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": true,
+    "price": 0,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": false,
+    "price": 1943,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": true,
+    "price": 2052,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": false,
+    "price": 2857,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": true,
+    "price": 3018,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": false,
+    "price": 2286,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": true,
+    "price": 2415,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": false,
+    "price": 0,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": true,
+    "price": 0,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": false,
+    "price": 1943,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": true,
+    "price": 2052,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": false,
+    "price": 2857,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        10,
+        10
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": true,
+    "price": 3018,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        -50,
+        -25
+      ],
+      [
+        47,
+        95
+      ],
+      [
+        11,
+        22
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": false,
+    "price": 1627,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        -50,
+        -25
+      ],
+      [
+        47,
+        95
+      ],
+      [
+        11,
+        22
+      ]
+    ],
+    "seed": 95,
+    "modifier": 0,
+    "special": true,
+    "price": 2415,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        -50,
+        -25
+      ],
+      [
+        47,
+        95
+      ],
+      [
+        11,
+        22
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": false,
+    "price": 0,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        -50,
+        -25
+      ],
+      [
+        47,
+        95
+      ],
+      [
+        11,
+        22
+      ]
+    ],
+    "seed": 95,
+    "modifier": -100,
+    "special": true,
+    "price": 0,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        -50,
+        -25
+      ],
+      [
+        47,
+        95
+      ],
+      [
+        11,
+        22
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": false,
+    "price": 1382,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        -50,
+        -25
+      ],
+      [
+        47,
+        95
+      ],
+      [
+        11,
+        22
+      ]
+    ],
+    "seed": 95,
+    "modifier": -15,
+    "special": true,
+    "price": 2052,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        -50,
+        -25
+      ],
+      [
+        47,
+        95
+      ],
+      [
+        11,
+        22
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": false,
+    "price": 2033,
+    "random_state": 204261460209493
+  },
+  {
+    "low": 1000,
+    "high": 2300,
+    "positions": [
+      [
+        -50,
+        -25
+      ],
+      [
+        47,
+        95
+      ],
+      [
+        11,
+        22
+      ]
+    ],
+    "seed": 95,
+    "modifier": 25,
+    "special": true,
+    "price": 3018,
+    "random_state": 25214903858
+  },
+  {
+    "low": 1,
+    "high": 1,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        123,
+        99
+      ],
+      [
+        42,
+        17
+      ]
+    ],
+    "seed": 70,
+    "modifier": 0,
+    "special": false,
+    "price": 0,
+    "random_state": 204084955882074
+  },
+  {
+    "low": 1,
+    "high": 9,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        123,
+        99
+      ],
+      [
+        42,
+        17
+      ]
+    ],
+    "seed": 70,
+    "modifier": 0,
+    "special": false,
+    "price": 2,
+    "random_state": 204084955882074
+  },
+  {
+    "low": 10,
+    "high": 100,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        123,
+        99
+      ],
+      [
+        42,
+        17
+      ]
+    ],
+    "seed": 70,
+    "modifier": 0,
+    "special": false,
+    "price": 34,
+    "random_state": 204084955882074
+  },
+  {
+    "low": 800000,
+    "high": 3500000,
+    "positions": [
+      [
+        0,
+        0
+      ],
+      [
+        123,
+        99
+      ],
+      [
+        42,
+        17
+      ]
+    ],
+    "seed": 70,
+    "modifier": 0,
+    "special": false,
+    "price": 1583994,
+    "random_state": 204084955882074
+  }
+]

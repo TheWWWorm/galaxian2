@@ -2,6 +2,8 @@ extends RefCounted
 ## Source-bound timed radio declarations. Modal instructions have another owner.
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Training = preload("res://src/content/combat_training_story_definitions.gd")
+const Convoy = preload("res://src/content/convoy_capture_definitions.gd")
+const Alioth = preload("res://src/content/alioth_attack_definitions.gd")
 const Equal = preload("res://src/content/opening_escape_definitions.gd")
 
 static func select(bindings: RefCounted, campaign_cursor: int = 0) -> Dictionary:
@@ -9,9 +11,15 @@ static func select(bindings: RefCounted, campaign_cursor: int = 0) -> Dictionary
 		0: return bindings.opening_dialogue
 		1: return bindings.arrival_dialogue
 		7: return Training.radio(bindings)
+		14: return Convoy.radio(bindings)
+		16: return Alioth.radio(bindings)
 	return {}
 
 static func valid_parameters(data: Dictionary, campaign_cursor: int = 0) -> bool:
+	if campaign_cursor==16:
+		return Numbers.integer(data.get("campaign_cursor"),16,16) and Equal.equal_value(data.get("events"),Alioth.VALUES.radio_events) and Equal.equal_value(data.get("timing"),Alioth.VALUES.radio_timing)
+	if campaign_cursor==14:
+		return Numbers.integer(data.get("campaign_cursor"),14,14) and Equal.equal_value(data.get("events"),Convoy.VALUES.radio_events) and Equal.equal_value(data.get("timing"),Convoy.VALUES.radio_timing)
 	if campaign_cursor==7:
 		return Numbers.integer(data.get("campaign_cursor"),7,7) and Equal.equal_value(data.get("events"),Training.VALUES.radio_events) and Equal.equal_value(data.get("timing"),Training.VALUES.radio_timing)
 	if campaign_cursor not in [0, 1] or not Numbers.integer(data.get("campaign_cursor"), campaign_cursor, campaign_cursor): return false

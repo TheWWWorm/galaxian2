@@ -79,7 +79,13 @@ func check_controls() -> void:
 	check(c.snapshot().command == Vector2.ZERO and not c.accept(key(KEY_D, true)), "Disabled controls accepted input")
 	c.set_enabled(true)
 	check(c.snapshot().command == Vector2.ZERO and c.take_pressed().is_empty(), "Re-enabled controls retained held input")
-	for mapping in [[JOY_BUTTON_START, "pause"], [JOY_BUTTON_BACK, "time"], [JOY_BUTTON_Y, "autopilot"], [JOY_BUTTON_X, "dock"], [JOY_BUTTON_A, "boost"], [JOY_BUTTON_B, "missiles"], [JOY_BUTTON_DPAD_UP, "throttle_up"], [JOY_BUTTON_DPAD_DOWN, "throttle_down"]]:
+	for mapping in [[KEY_M, "map"], [KEY_J, "jump"]]:
+		check(c.accept(key(mapping[0], true)) and c.take_pressed() == [mapping[1]], "Keyboard travel action failed: " + mapping[1])
+		c.accept(key(mapping[0], true, true))
+		check(c.take_pressed().is_empty(), "Held travel key repeated its action")
+		c.accept(key(mapping[0], false))
+		check(not c.snapshot().held[mapping[1]], "Travel key release retained its action")
+	for mapping in [[JOY_BUTTON_START, "pause"], [JOY_BUTTON_BACK, "time"], [JOY_BUTTON_Y, "autopilot"], [JOY_BUTTON_X, "dock"], [JOY_BUTTON_A, "boost"], [JOY_BUTTON_B, "missiles"], [JOY_BUTTON_DPAD_UP, "throttle_up"], [JOY_BUTTON_DPAD_DOWN, "throttle_down"], [JOY_BUTTON_LEFT_SHOULDER, "map"], [JOY_BUTTON_RIGHT_SHOULDER, "jump"]]:
 		var event := InputEventJoypadButton.new()
 		event.device = 3
 		event.button_index = mapping[0]

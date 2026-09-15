@@ -1,0 +1,70 @@
+"""Verified contract flight-result declarations without original code."""
+import copy
+from .station_exterior import hashed_declarations
+
+
+def extract_contract_flight_results(mach, arrival):
+    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
+
+
+VALUES = {'scope': 'mido_contract_flight_results',
+ 'campaign_cursor': 13,
+ 'ship_kinds': [4, 12],
+ 'success_poll_milliseconds': 5001,
+ 'success_requires_idle_radio': True,
+ 'reset_missed_poll': True,
+ 'failure_uses_success_gate': False,
+ 'success_result_mode': 1,
+ 'failure_result_mode': 2,
+ 'success_count_on_open': True,
+ 'reputation_excluded_kinds': [12, 183],
+ 'penalty_kind': 12,
+ 'penalty_uses_base_reward': True,
+ 'empty_mission_kind': -1,
+ 'retain_flight_after_acknowledgement': True}
+
+LAYOUTS = {'flight_result_success_poll': [385744,
+                                2546,
+                                '__text',
+                                '11128fbaa7e6a94c36eb1733f1d7cd50f688075b0686263e8ad3b9abd03b3e1c'],
+ 'flight_result_failure_poll': [388290,
+                                794,
+                                '__text',
+                                '1023cba35f1b7fae98d4835b5c7245c1622065b8f08d3be23db7caf74d3bc25b'],
+ 'flight_result_failure_controller': [118652,
+                                      24,
+                                      '__text',
+                                      'a9db09661b54b8310553e2821f0c68ade4b72ce7b8d404970b0d67a42a8d36de'],
+ 'flight_result_result_flags': [-693644,
+                                164,
+                                '__text',
+                                'd6698b8ae0f18884e6d5f00b6e22a2dbbe41dc833a6c21ddfac4688d91867d7c'],
+ 'flight_result_result_content': [-692464,
+                                  5780,
+                                  '__text',
+                                  'bd6e03c111ee21141244f12c982b50d7dc2102b74775e9e1c8130f739d212994'],
+ 'flight_result_acknowledgement': [348260,
+                                   11612,
+                                   '__text',
+                                   'd3c354af79571b0faae6defa44bf3947290b765305093f21e71a499cab5db238'],
+ 'flight_result_side_slot': [859522,
+                             22,
+                             '__text',
+                             'd8fa3cff5ddfc53caceae00abb1b4ee4a4847f321b414b30a311d41d325954b5'],
+ 'flight_result_active_slot': [858112,
+                               14,
+                               '__text',
+                               '7012ad551e89b743318a4d5c19b0e4540c6432aeb48cbb3961ce9a8de210d5f1'],
+ 'flight_result_objective_slots': [118602,
+                                   22,
+                                   '__text',
+                                   '9d4424f5fc0a686995a6a12db480b9f7a1ccc8386105239c1b70e7d2c631e564'],
+ 'flight_result_poll_clock': [365135,
+                              8,
+                              '__text',
+                              '237fc49187c5a983250d4ac48d169a4a67b7d26f4d5342142d89459df5d62b23'],
+ 'flight_result_poll_order': [377531,
+                              71,
+                              '__text',
+                              'fb96beef7bc96bb2aa5641561ff1bd33088410527c77e2bd5b6821f6ec3db07f']}

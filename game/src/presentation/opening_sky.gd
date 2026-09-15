@@ -40,6 +40,16 @@ func build_arrival(library: RefCounted, visuals: RefCounted, bindings: RefCounte
 	selection.campaign_cursor=context.campaign_cursor
 	return true
 
+func build_lounge(library: RefCounted,visuals: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int,cursor: int,quality:="high") -> bool:
+	clear()
+	var location:=Arrival.new()
+	var context:=location.resolve_lounge(bindings,catalogues,station_id,cursor)
+	if context.is_empty():return reject(location.error)
+	if library.manifest.get("content_id","")!=bindings.base_content_id:return reject("Lounge sky belongs to another content identity")
+	if not _build_location(library,visuals,bindings,catalogues,context.sky_parameters,context,quality,false):return false
+	selection.campaign_cursor=cursor;selection.world_type=context.world_type
+	return true
+
 func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, quality := "high", equipment: RefCounted=null) -> bool:
 	clear()
 	var location:=Arrival.new()

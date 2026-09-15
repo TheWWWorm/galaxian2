@@ -8,7 +8,12 @@ const Loadout = preload("res://src/simulation/opening_loadout.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Resources = preload("res://src/content/planet_resource_definitions.gd")
 const Arrival = preload("res://src/simulation/arrival_location.gd")
+const Travel = preload("res://src/content/mido_travel_definitions.gd")
+const LocalArrival = preload("res://src/content/local_arrival_environment_definitions.gd")
 var error := ""
+
+static func view_position(entry: Dictionary, camera_position: Vector3) -> Vector3:
+	return entry.origin+camera_position
 
 func for_opening(bindings: RefCounted, catalogues: RefCounted, base_content_id: String, quality := "high") -> Dictionary:
 	error=""
@@ -33,12 +38,22 @@ func for_departure(bindings: RefCounted, catalogues: RefCounted, cache: Variant,
 	if source.is_empty():return reject(location.error)
 	return _for_location(bindings,catalogues,source,bindings.opening_sky.planet_resources,bindings.base_content_id,quality,true)
 
+func for_lounge(bindings: RefCounted,catalogues: RefCounted,station_id: int,cursor: int,quality:="high") -> Dictionary:
+	error=""
+	var location:=Arrival.new()
+	var source:=location.resolve_lounge(bindings,catalogues,station_id,cursor)
+	if source.is_empty():return reject(location.error)
+	return _for_location(bindings,catalogues,source,bindings.opening_sky.planet_resources,bindings.base_content_id,quality,true)
+
 func _for_location(bindings: RefCounted, catalogues: RefCounted, opening: Dictionary, data: Dictionary, base_content_id: String, quality: String, ordinary: bool) -> Dictionary:
 	var system: Dictionary=catalogues.tables.systems[opening.system_id]
 	var station: Dictionary=catalogues.tables.stations[opening.station_id]
 	# Other planet types and special system/campaign constructors need their own
 	# verified selector. A familiar mesh is not evidence those contexts work.
-	if station.planet_type!=0 or opening.system_id==27 or not Numbers.integer(system.get("sky_index"),0,14):
+	var travel_context:=ordinary and Travel.location_supported(bindings.mido_travel,int(opening.station_id),int(opening.system_id),int(station.planet_type))
+	var local_arrival:=ordinary and LocalArrival.location_supported(bindings,catalogues,int(opening.station_id),int(opening.get("campaign_cursor",-1)))
+	travel_context=travel_context or local_arrival
+	if (station.planet_type!=0 and not travel_context) or opening.system_id==27 or not Numbers.integer(system.get("sky_index"),0,14):
 		return reject("This planet layout requires an ordinary supported location")
 	var ordered:=[]
 	# The original station loader scans catalogue records, filtering membership.
@@ -47,7 +62,7 @@ func _for_location(bindings: RefCounted, catalogues: RefCounted, opening: Dictio
 		if system.station_ids.has(row.id):
 			if not Numbers.integer(row.get("planet_type"),0,int(data.far_textures.size())-1):return reject("Station planet type is outside the resource table")
 			ordered.append(int(row.id))
-	var layout:=arrange(int(opening.station_id),int(station.planet_type),ordered,not ordinary)
+	var layout:=arrange(int(opening.station_id),int(station.planet_type),ordered,not ordinary,bindings.mido_travel.local_arrival_environment if local_arrival else {})
 	if layout.is_empty():return {}
 	var mesh_path: String=bindings.resolve(int(data.mesh_id),"mesh")
 	if mesh_path.is_empty():return reject(bindings.error)
@@ -66,12 +81,13 @@ func _for_location(bindings: RefCounted, catalogues: RefCounted, opening: Dictio
 	if ordinary:layout.campaign_cursor=int(opening.campaign_cursor)
 	return layout
 
-func arrange(station_id: Variant, planet_type: Variant, ordered_station_ids: Variant, opening_scale := true) -> Dictionary:
+func arrange(station_id: Variant, planet_type: Variant, ordered_station_ids: Variant, opening_scale := true,arrival_rules: Dictionary={}) -> Dictionary:
 	error=""
 	var sun:=Sun.new()
 	var first:=sun.for_station(station_id,planet_type)
 	if first.is_empty():return reject(sun.error)
-	if planet_type!=0:return reject("Opening planet placement requires ordinary planet type zero")
+	if not arrival_rules.is_empty() and not LocalArrival.parameters(arrival_rules):return reject("Planet placement requires verified ordinary size declarations")
+	if planet_type not in ([0,4,10,11,12,18] if arrival_rules.is_empty() else LocalArrival.SUPPORTED_TYPES) or (opening_scale and planet_type!=0):return reject("Planet placement requires a supported ordinary planet type")
 	if not ordered_station_ids is Array or ordered_station_ids.is_empty() or ordered_station_ids.size()>24:
 		return reject("Planet placement requires ordered station records")
 	var previous: int=-2147483649
@@ -95,8 +111,15 @@ func arrange(station_id: Variant, planet_type: Variant, ordered_station_ids: Var
 		if current:
 			# Cursor zero halves the original integer size with truncation before
 			# conversion to the source's fixed-point scale.
-			var size_units:=generator.next_int(20000)+20000
+			var sizes: Dictionary=arrival_rules.get("planet_sizes",{})
+			var size_units:=generator.next_int(int(sizes.get("initial_bound",20000)))+int(sizes.get("initial_add",20000))
 			if opening_scale:size_units=int(float(size_units)*0.5)
+			# Kernstal and Alioth both belong to the original larger-size group.
+			# Consume the ordinary draw before its type-specific replacement.
+			if not sizes.is_empty():
+				for group in sizes.replacement_groups:
+					if group.types.any(func(type):return int(type)==planet_type):size_units=generator.next_int(int(group.bound))+int(group.add)
+			elif planet_type in [11,12]:size_units=generator.next_int(15000)+35000
 			size_value=float(size_units)/65536.0
 		else:
 			var available:=false

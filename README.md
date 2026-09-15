@@ -1,93 +1,130 @@
-# Galaxy on Fire 2 Remake
+# Galaxian2
 
-A native Godot recreation of Galaxy on Fire 2 that uses content imported locally
-from your own copy of the game. Original game files are not included.
+**A native, open-source Galaxy on Fire 2 remake.** Fly the opening story, take
+contracts, trade and explore the first supported star systems.
 
-This project is in early development. With current Mac Full HD content, you can
-play the opening encounter, rescue, two mining trips, starter equipment tutorial,
-and combat training through its return to Var Hastra. The following station
-mission and later campaign are still being built.
-Persistent saves, the complete economy and the remaining base-game and expansion
-missions are not ready. See [what is supported](docs/SUPPORT.md).
+**You need your own Galaxy on Fire 2 Full HD Mac `.dmg` to play, on every platform.**
+The game imports it locally on first launch. Game assets and the original
+executable are not included in the download. No original executable is run.
 
-## What you need
+![Alioth orbit](screenshots/01-alioth-orbit.png)
 
-- A supported Mac Full HD app, an app ZIP, or iOS HD IPA. Either edition can be
-  imported on its own. Development currently focuses on Mac Full HD; iOS gameplay
-  support does not match the current Mac sequence.
-- Godot 4.4 or newer and Python 3.10 or newer to run from source. The current
-  desktop checks use Godot 4.7 and Python 3.12 on Linux.
-- Space outside this repository for imported content and prepared textures.
-  Base content needs approximately 2.7 GB for Mac or 1.3 GB for iOS; textures and
-  temporary import files need additional space.
+## Download and play
 
-There are no packaged releases yet. Windows, macOS, Android and Web delivery
-remain development targets; this source checkout does not establish device support.
+Get the **[latest prerelease](https://github.com/TheWWWorm/galaxian2/releases)**.
+This is an early playable preview, not the complete game.
 
-## Import your game
+| Download | Platform | Launch |
+| --- | --- | --- |
+| Windows x64 | Windows 10/11, Intel or AMD 64-bit | Extract the ZIP, then open `Galaxian2.exe` |
+| Linux x64 | Modern Linux with glibc, Intel or AMD 64-bit | Extract the archive, then run `./Galaxian2` |
+| macOS Apple Silicon | M-series Macs | Extract the ZIP and open `Galaxian2.app` |
 
-Run these commands from the repository directory. Replace the example paths with
-your own. Keep the original game, imported content and prepared files outside this
-source folder.
+Desktop packages include the engine and offline import helpers. Keep each package
+intact. Windows and macOS builds are unsigned. Linux is the tested platform;
+Windows and macOS exports have not yet been tested on their native systems.
+Android and Web builds are not included in this preview.
 
-```bash
-python3 tools/import_content.py import "/path/to/Game.app" --cache "/path/to/gof2-content"
+1. Start Galaxian2 and choose **Mac .dmg**.
+2. Select your **Galaxy on Fire 2 Full HD Mac disk image**. Allow several minutes
+   and at least **8 GB of free space** for extraction and preparation.
+3. Choose **Start new game**. Follow the opening instructions.
+
+Later launches reuse your local import. Cancelling an import preserves an existing
+installation and its saves. The supported reference edition is Mac Full HD 1.0.6;
+other layouts may report that they are unsupported.
+
+## What's playable
+
+- The opening encounter and rescue, mining and equipment tutorials, combat
+  training, early station journeys and four introductory jobs.
+- The convoy, capture at Alioth, battle and escape, through the original
+  conversation that unlocks free travel.
+- Local travel in Augmenta and the Gome C–Dis jumpgate journey to Magnetar and back.
+- Station docking, item buying and selling, supported equipment fitting, and
+  courier/passenger contracts to implemented destinations.
+- Station saves, autosaves, loading and retrying from a saved station after death.
+- Main menu, sound settings, language selection, controller input and optional
+  larger touch controls. Play is landscape only.
+
+![Portal and freighters](screenshots/02-portal-and-freighters.png)
+
+## Controls and station services
+
+Follow the tutorial prompts for flying, targeting, firing and mining.
+
+| Action | Keyboard |
+| --- | --- |
+| Main menu / pause | **Esc** |
+| Navigation map in flight | **M** |
+| Hangar at a station | **H** |
+| Space Lounge at a station | **L** |
+| Save / load at a supported station | **F5 / F9** |
+| Confirm / back | **Enter / Esc** |
+
+After free travel unlocks, use **M** to plot a course. Travel to Gome C or Dis to
+reach its system's jumpgate, select the other system and a destination, and
+confirm the course. **Enter** accepts the gate question; **Esc** opens its map.
+
+At a station, **Hangar** buys and sells one item per action. **Cargo → Mount**
+installs supported equipment; **Ship → Demount** removes it. Check cargo capacity
+before departing. Some replacements need confirmation.
+
+**Space Lounge** shows job requirements and destinations. Couriers need cargo
+space; passengers need installed cabin berths. Accept a supported job, travel to
+its marker and dock. **Close** the delivery result to receive payment. Finish
+fitting before accepting a job.
+
+## Saves
+
+Finish a station conversation and close its services before saving. Autosaves
+also occur at supported service exits, acknowledged results and departures.
+**Resume** returns to your running game, or loads the saved station after a
+restart or death. A previous-save backup protects against an interrupted write.
+
+Saving during flight or a conversation is unavailable. Saves belong to their
+imported content and gameplay-data version. Original game saves and migration
+between incompatible versions are not supported yet. Back up your user-data
+folder before updating an early preview.
+
+## Still in development
+
+The remaining campaign, Valkyrie, Supernova, broader galaxy travel, ship purchases,
+several weapon/device types, cross-system contracts and some menu presentation
+are unfinished. Unavailable missions and offers stay locked. The menu currently
+uses the Normal difficulty profile; Supernova Challenge is disabled.
+
+Screenshots show the native engine using locally imported Mac content. They are
+promotional images, not game resources distributed with the engine.
+
+![Native flight](screenshots/03-native-flight.png)
+
+## Help and feedback
+
+Report problems in **[GitHub Issues](https://github.com/TheWWWorm/galaxian2/issues)**.
+Include your operating system, release version, steps to reproduce and any error
+message. Do not upload your DMG, original executable, imported content or saves
+to public issues.
+
+## Run from source
+
+Use Godot **4.7**, Python **3.10+**, and 7-Zip (`7zz` or `7z`). Install the importer
+dependencies in a Python environment, set `GOF2_IMPORT_PYTHON` to that environment's
+Python executable, then run:
+
+```sh
+python -m pip install -r tools/requirements-visuals.txt -r tools/requirements-bindings.txt
+godot --path game
 ```
 
-You can use an app ZIP or IPA in place of the `.app`. Direct DMG import is not yet
-available: extract the app first. The original executable is never run.
-The command prints the installed content directory; use that complete path below.
+If 7-Zip is not on PATH, set `GOF2_7ZIP` to its executable. Source checks and build
+commands are available through `python tools/run_checks.py --help` and
+`python tools/package_releases.py --help` (packaging requires Python 3.12+). Original content stays outside the
+source tree and release packages.
 
-Prepare the import tools in a Python environment:
+## License
 
-```bash
-python3 -m venv /path/to/gof2-import-env
-/path/to/gof2-import-env/bin/python -m pip install -r tools/requirements-visuals.txt -r tools/requirements-bindings.txt
-/path/to/gof2-import-env/bin/python tools/prepare_visuals.py "/path/to/gof2-content/CONTENT_ID" --output "/path/to/gof2-visuals"
-/path/to/gof2-import-env/bin/python tools/prepare_bindings.py "/path/to/Game.app" "/path/to/gof2-content/CONTENT_ID" --output "/path/to/gof2-bindings"
-```
-
-On Windows, use the environment's `Scripts/python.exe`. Each preparation command
-prints a separate output directory. Use content, textures and bindings from the
-same edition and import. These Python dependencies are only needed during import;
-the running game uses Godot.
-
-## Start playing
-
-```bash
-godot --path game -- --content "/path/to/gof2-content/CONTENT_ID" --bindings "/path/to/gof2-bindings/BINDING_ID" --visuals "/path/to/gof2-visuals/PACK_ID" --opening-preview
-```
-
-Alternatively, open `game/project.godot` in Godot. Use **Open imported content**,
-**Open resource bindings** and **Open prepared textures** to select their manifest
-files, then choose **Opening → Run opening scene**.
-
-**Esc** or controller **Start** pauses the scene. Leaving the window pauses it
-independently. **Touch controls** enables on-screen flight actions; they are hidden
-by default on desktop. Follow the original tutorial instructions as they appear.
-An unfinished mission stays unavailable instead of awarding progress.
-
-The launcher also includes asset, world and radio inspectors. These previews let
-you explore imported models, original catalogue names and dialogue independently
-of the playable sequence. A preview is not a completed campaign mission.
-
-## Updating and troubleshooting
-
-After changes that add content support, prepare bindings again with the current
-tools. Existing imports keep their identities; a failed or cancelled import leaves
-previously installed content intact. Use **Ctrl+C** to cancel a command-line import.
-
-If preparation reports an unsupported layout or missing resource, keep the error
-message and the edition/version details when reporting it. Do not attach original
-archives, executables, imported content or saves to a public issue. Details about
-individual systems and current limitations are in the [support overview](docs/SUPPORT.md).
-
-## Building and contributing
-
-See [development and verification](docs/DEVELOPMENT.md) for focused tests, scenario
-fixtures and source packaging, and [architecture](ARCHITECTURE.md) for the engine
-structure. The source package contains an explicit allowlist of engine files.
-
-The engine is licensed under [Apache 2.0](LICENSE.md). Original game content keeps
-its original ownership and is imported separately. Reused components and their
-licenses are listed in [third-party notices](THIRD_PARTY_NOTICES.md).
+The engine is licensed under [Apache 2.0](LICENSE.md).
+[Third-party notices](THIRD_PARTY_NOTICES.md) cover reused components.
+Galaxy on Fire 2 and its original content belong to their respective rights
+holders. This is an independent, unofficial project.

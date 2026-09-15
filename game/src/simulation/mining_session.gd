@@ -32,7 +32,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	error=""
 	if bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.mining_session):return reject("Mining session requires supported departure declarations")
 	var entry: Dictionary=construction.snapshot()
-	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id or OrdinaryFlight.select(bindings,entry.get("campaign_cursor")).is_empty():return reject("Mining session belongs to another departure")
+	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id or OrdinaryFlight.for_departure(bindings,entry).is_empty():return reject("Mining session belongs to another departure")
 	if not reference_center.is_finite() or reference_center!=reference_center.floor() or absf(reference_center.x)>16384 or absf(reference_center.y)>16384:return reject("Mining session requires fixed integer drill coordinates")
 	_rules=bindings.mining_session.duplicate(true);_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	_bindings=bindings;_catalogues=catalogues;_field_identity=construction.scenery_owner().presentation_identity()

@@ -11,6 +11,7 @@ const MiningStory=preload("res://src/content/ordinary_flight_definitions.gd")
 const StationReturn=preload("res://src/content/ordinary_flight_definitions.gd")
 const StationEquipment=preload("res://src/content/station_equipment_definitions.gd")
 const TrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
 var error := ""
 var unsupported := {}
 var _library: RefCounted
@@ -27,14 +28,14 @@ func configure(library: RefCounted, bindings: RefCounted, campaign_cursor: int =
 	error="";unsupported.clear();_banks.clear();_clips.clear();_sound_cache.clear();_channel_cache.clear();_decoded_bytes=0;_definitions={};_library=null
 	_language_index=0;_voice_ids.clear()
 	if library==null or bindings==null or bindings.base_content_id!=library.manifest.get("content_id"):return reject("Audio requires matching base content and bindings")
-	if campaign_cursor not in [0,1,7]:return reject("Unsupported radio scene")
+	if campaign_cursor not in [0,1,7,14,16]:return reject("Unsupported radio scene")
 	var message:=Definitions.validate(bindings.audio,library.manifest.files)
 	if not message.is_empty():return reject(message)
 	if bindings.audio.is_empty():return reject("This binding pack has no audio declarations")
 	_definitions=Definitions.normalized(bindings.audio);_library=library
 	_language_index=int(_definitions.default_language)
 	var dialogue: Dictionary=Dialogue.select(bindings,campaign_cursor)
-	if campaign_cursor!=0 and not Dialogue.valid_parameters(dialogue,campaign_cursor):return reject("Rescue radio is unavailable")
+	if campaign_cursor!=0 and not Dialogue.valid_parameters(dialogue,campaign_cursor):return reject("Scene radio is unavailable")
 	var voice: Dictionary=dialogue.get("voice",{})
 	if not voice.is_empty():
 		if not RadioVoice.parameters(voice,dialogue.events.size()):return reject("Invalid radio voice capability")
@@ -74,6 +75,14 @@ func configure_station(library: RefCounted, bindings: RefCounted) -> bool:
 	for id in bindings.station_presentation.dialogue.voice_event_ids:_voice_ids[int(id)]=true
 	return true
 
+func configure_local_traffic(library: RefCounted, bindings: RefCounted) -> bool:
+	if not configure(library,bindings):return false
+	if not Travel.parameters(bindings.mido_travel):return reject("Local traffic voice declarations are unavailable")
+	_voice_ids.clear()
+	var radio: Dictionary=bindings.mido_travel.traffic_combat.radio
+	for id in radio.warning_voice_ids+radio.response_voice_ids:_voice_ids[int(id)]=true
+	return true
+
 func configure_mining_briefing(library: RefCounted, bindings: RefCounted, campaign_cursor:=2) -> bool:
 	if not configure(library,bindings):return false
 	var rules:=TrainingStory.briefing(bindings) if campaign_cursor==7 else MiningStory.briefing(bindings,campaign_cursor)
@@ -100,7 +109,7 @@ func configure_training_completion(library: RefCounted, bindings: RefCounted) ->
 
 func configure_station_return(library: RefCounted, bindings: RefCounted, campaign_cursor:=3) -> bool:
 	if not configure(library,bindings):return false
-	var rules:=StationReturn.station_return(bindings,campaign_cursor)
+	var rules:=StationReturn.station_conversation(bindings,campaign_cursor)
 	if rules.is_empty():return reject("Station return voice declarations are unavailable")
 	_voice_ids.clear()
 	for event in rules.events:

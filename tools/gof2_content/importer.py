@@ -99,7 +99,7 @@ def install(source: Path, cache: Path, checkpoint=lambda *_: None):
         raise ContentError('Another import holds this cache lock. After a forced shutdown, remove .import-lock only when no importer is running.') from error
     stage = None
     try:
-        with Bundle(source) as bundle:
+        with Bundle(source, checkpoint) as bundle:
             resources = bundle.resources()
             ships, strings = LAYOUTS[bundle.profile['edition']]
             if resources['data/bin/ships.bin'] != ships * 36:

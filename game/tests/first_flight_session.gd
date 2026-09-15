@@ -33,18 +33,21 @@ func verify(args: PackedStringArray):
 	if not lib.open(args[0]) or not bindings.open(args[1],lib.manifest) or not lib.select_language("gb") or not cat.open(lib) or not visuals.open(args[2],lib.manifest):check(false,lib.error+bindings.error+cat.error+visuals.error);return
 	if bindings.station_return.is_empty():check(not Trip.supported(bindings),"Legacy pack offered an incomplete mining trip");return
 	var player:=Player.new();var handoff:=Handoff.new();check(player.configure(bindings,cat),player.error)
-	var arrival:=Arrival.new()
-	if not arrival.configure(bindings,cat,lib,handoff.prepare(bindings,cat,Fixture.completed(bindings,player,3)),[1,1,1],1789100000):check(false,arrival.error);return
-	for i in 500:
-		arrival=arrival.evaluate(100)
-		if arrival==null:check(false,"Rescue fixture failed");return
-		if not arrival.snapshot().boundary.is_empty():break
 	root.size=Vector2i(1280,720)
 	host=Host.new();root.add_child(host);host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	host.set_context(lib,bindings,visuals);host.set_process(false)
 	for i in 3:await process_frame
-	var station:=Station.new();host.viewport.add_child(station);host.session=station
-	if not station.configure(lib,bindings,visuals,arrival.prepare_station(),0,42) or not host.station_panel.configure(lib,bindings,visuals) or not station.activate():check(false,station.error+host.station_panel.error);return
+	# Enter through the real rescue session so the first station's hidden stock
+	# and contacts are retained throughout both mining trips and the equipment
+	# prerequisite. Only the preceding three opening kills are a fixture.
+	var arrival: Node3D=load("res://src/presentation/arrival_session.gd").new()
+	host.viewport.add_child(arrival);host.session=arrival
+	if not arrival.configure(lib,bindings,visuals,handoff.prepare(bindings,cat,Fixture.completed(bindings,player,3)),0,1789100000):check(false,arrival.error);return
+	for i in 500:
+		if arrival.status!="running":break
+		if not arrival.step((i+1)*100000):check(false,arrival.error);return
+	if not host.enter_station(60000000,42):check(false,host.status.text);return
+	var station: Node=host.session;station.rebase_time(0)
 	check(not host.request_departure(),"Unacknowledged station offered launch")
 	for i in 10:station.step((i+1)*100000)
 	for i in 19:key(KEY_ENTER)
@@ -204,18 +207,22 @@ func capture(directory: String,name: String):
 	await RenderingServer.frame_post_draw
 	check(root.get_texture().get_image().save_png(directory.path_join(name+".png"))==OK,"Could not capture "+name)
 func capture_phone(directory: String, name: String="app-mining-phone"):
-	var canvas:=SubViewport.new();canvas.size=Vector2i(420,800);canvas.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(canvas)
+	var retained_pauses: Dictionary=host.session._pauses.duplicate()
+	var canvas:=SubViewport.new();canvas.size=Vector2i(800,450);canvas.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(canvas)
 	host.reparent(canvas);host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);host.set_mobile_layout(true);host.set_touch_controls(true)
 	for i in 8:await process_frame
 	host.present_session()
 	if host.session.has_method("present_current"):check(host.session.present_current(),host.session.error)
 	await RenderingServer.frame_post_draw
 	check(Rect2(Vector2.ZERO,canvas.size).encloses(host._flight_actions.get_global_rect()),"Phone flight action buttons escape the viewport")
+	if host.session is Trip and host.session.scene.radio!=null and host.session.scene.radio.visible:
+		check(not host._flight_actions.get_rect().intersects(host.session.scene.radio._panel.get_rect()),"Phone flight actions overlap the radio transmission")
 	check(canvas.get_texture().get_image().save_png(directory.path_join(name+".png"))==OK,"Could not capture phone controls")
 	host.reparent(root);host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);host.set_mobile_layout(false);host.set_touch_controls(false)
 	canvas.free();host.session.rebase_time(now_us)
 	root.grab_focus()
 	for i in 3:await process_frame
+	check(host._focused and host.session._pauses==retained_pauses,"Phone capture changed focus or pause state: %s, focused=%s, pauses=%s, retained=%s"%[name,host._focused,host.session._pauses,retained_pauses])
 	if host.session.has_method("present_current"):check(host.session.present_current(),host.session.error)
 func check(value: bool,message: String):
 	checks+=1

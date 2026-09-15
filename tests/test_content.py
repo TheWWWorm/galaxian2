@@ -150,7 +150,7 @@ class ContentTests(unittest.TestCase):
             install(path, self.cache)
 
     def test_dmg_missing_ambiguous_and_oversized_diagnostics(self):
-        with self.assertRaisesRegex(ContentError, 'Direct DMG'):
+        with self.assertRaisesRegex(ContentError, 'readable Mac .dmg'):
             with Bundle(self.root / 'game.dmg'):
                 pass
         files = fixture()

@@ -1,0 +1,36 @@
+extends RefCounted
+## Ordinary installed slots, additive capacities and primary model assignments.
+const Equal=preload("res://src/content/opening_escape_definitions.gd")
+const VALUES = {"scope":"ordinary_station_fitting","unit_quantity":1,"stack_category":1,"demount_capacity_guard":false,"passenger_subtype":20,"passenger_property":34,"cargo_subtype":12,"cargo_property":22,"replacement_text_id":276,"protected_text_id":312,"tutorial_departure_cursors":[6,7],"primary":{"ordinary_kinds":[0,1,2],"capacity":20,"dispersed_kind":2,"dispersed_capacity":25,"dispersion":{"steps":2,"draw_scale":0.01,"center_scale":0.005},"projectile_model_ids":[6754,6755,6756,6760,6761,6762,6763,6764,6765,-1,-1,-1,6788,6789,6790,6791,6792,6793,6794,6795,6796,6797,6798,6799,6800,6801,6802,6803,14236,14237,14238,14247,14247,14247,14247,14247,14249,14249,14249,14249,14249,14684,14684,14684,14680,14680,14682,6792,6797,6789,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,14050,14052,14054,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6900,6901,6902,14293,6905,6906,6799,14297,-1,-1,-1,-1,-1,-1,-1,-1,-1,14239,14235,-1,-1,14247,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,6788,6788,6788,14247,14247,14247,-1,-1,-1,-1,14247,-1,-1,6796,-1,-1,-1,-1,19091,6803,19094,27338],"impact_model_ids":[14600,14600,14600,14601,14601,14602,14602,14603,14603,14600,14603,14602,14601,14601,14601,14601,14604,14604,14604,14605,14605,14605,14606,14606,14606,14606,14606,14606,14606,14605,14602,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,14603,14605,14601,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,14600,14600,14600,14603,-1,-1,-1,-1,-1,-1,-1,-1,-1,14600,-1,-1,-1,14600,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,14600,-1,-1,14600,-1,-1,-1,14601,14601,14606,14602,-1]}}
+const SPANS = {"fitting_mount":[-137582,780],"fitting_demount":[-138150,568],"fitting_first_free":[731910,100],"fitting_explicit_slot":[732394,100],"fitting_first_item":[732494,90],"fitting_story_first_item":[731376,88],"fitting_cargo_merge":[-83740,562],"fitting_cargo_add":[731144,144],"fitting_protected_passengers":[-135018,147],"fitting_duplicate_prompt":[-134836,441],"fitting_confirm_replace":[-146162,79],"fitting_departure_gates":[437002,744],"fitting_ship_stats":[727580,1370],"fitting_cargo_capacity":[729960,12],"fitting_passenger_capacity":[732332,10],"fitting_primary_factory":[64358,2880],"fitting_primary_models":[1576458,932],"fitting_impact_models":[1572842,932]}
+
+# Native composition.
+static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
+
+static func available(bindings: RefCounted) -> bool:
+	return bindings!=null and parameters(bindings.mido_travel.get("ordinary_fitting"))
+
+static func primary(data: Dictionary,item_id: int,kind: int) -> Dictionary:
+	if not parameters(data) or item_id<0 or item_id>=data.primary.projectile_model_ids.size() or kind not in [0,1,2]:return {}
+	var model:=int(data.primary.projectile_model_ids[item_id]);var impact:=int(data.primary.impact_model_ids[item_id])
+	if model<0 or impact<0:return {}
+	var result:={"projectile_model_id":model,"impact_model_id":impact,
+		"projectile_capacity":int(data.primary.dispersed_capacity if kind==int(data.primary.dispersed_kind) else data.primary.capacity)}
+	if kind==int(data.primary.dispersed_kind):result.dispersion=data.primary.dispersion.duplicate(true)
+	return result
+
+static func dispersed(weapon: Dictionary) -> bool:
+	return weapon.get("fitting_primary",false) and weapon.get("category")==0 and weapon.get("kind")==int(VALUES.primary.dispersed_kind) and weapon.get("projectile_capacity")==int(VALUES.primary.dispersed_capacity) and Equal.equal_value(weapon.get("dispersion"),VALUES.primary.dispersion)
+
+static func ordinary(weapon: Dictionary) -> bool:
+	if weapon.get("fitting_primary")!=true or weapon.get("category")!=0 or weapon.get("nonplayer_source",false):return false
+	var row:=primary(VALUES,int(weapon.get("item_id",-1)),int(weapon.get("kind",-1)))
+	return not row.is_empty() and weapon.get("projectile_capacity")==row.projectile_capacity and (weapon.kind!=2 or dispersed(weapon))
+
+static func model(bindings: RefCounted,weapon: Dictionary,impact: bool) -> Dictionary:
+	if not available(bindings) or weapon.get("category")!=0 or weapon.get("nonplayer_source",false):return {}
+	var row:=primary(bindings.mido_travel.ordinary_fitting,int(weapon.get("item_id",-1)),int(weapon.get("kind",-1)))
+	if row.is_empty() or weapon.get("projectile_capacity")!=row.projectile_capacity:return {}
+	var id: int=row.impact_model_id if impact else row.projectile_model_id
+	var path: String=bindings.resolve(id,"mesh")
+	return {} if path.is_empty() else {"id":id,"resource":path,"captured_up":true}

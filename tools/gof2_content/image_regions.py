@@ -8,6 +8,12 @@ MAC_RECORD = '''bf18000000e8 {allocate:4} 4889c3bf04000000e8 {payload:4}
 66c700 {texture:2} 66c74002 {region:2} 66c703 {id:2}
 c7430403000000c74308ffffffff488943104c89ef4889dee8 {insert:4}'''
 
+# Mac also builds a contiguous local array of the same declarative records.
+# Keep its original aliases; this reads constants without emitting the initializer.
+MAC_STACK_RECORD = '''bf18000000e8 {allocate:4} 4889c3bf04000000e8 {payload:4}
+66c700 {texture:2} 66c74002 {region:2} 66c703 {id:2}
+c7430403000000c74308ffffffff4889431048899d {stack:4}'''
+
 
 def arm_record(mach, start, decoder):
     d = Declaration(mach,start,decoder,bound=160)
@@ -58,10 +64,14 @@ def extract_image_regions(mach):
     if mach.architecture not in ['x86_64','armv7']:return []
     text=mach.text;code=mach.data[text['offset']:text['offset']+text['length']];rows=[]
     if mach.architecture=='x86_64':
-        for m in template(MAC_RECORD).finditer(code):
-            if m.end('allocate')+struct.unpack('<i',m['allocate'])[0] != m.end('payload')+struct.unpack('<i',m['payload'])[0]:continue
-            rows.append({'id':int.from_bytes(m['id'],'little'),'texture_id':int.from_bytes(m['texture'],'little'),'region':int.from_bytes(m['region'],'little'),
-                         'source_offset':mach.slice_offset+text['offset']+m.start(),'source_bytes':len(m[0])})
+        for pattern in [MAC_RECORD, MAC_STACK_RECORD]:
+            for m in template(pattern).finditer(code):
+                if m.end('allocate')+struct.unpack('<i',m['allocate'])[0] != m.end('payload')+struct.unpack('<i',m['payload'])[0]:continue
+                if pattern == MAC_STACK_RECORD:
+                    slot = struct.unpack('<i', m['stack'])[0]
+                    if not -1024*1024 <= slot < 0 or slot % 8:continue
+                rows.append({'id':int.from_bytes(m['id'],'little'),'texture_id':int.from_bytes(m['texture'],'little'),'region':int.from_bytes(m['region'],'little'),
+                             'source_offset':mach.slice_offset+text['offset']+m.start(),'source_bytes':len(m[0])})
     else:
         import capstone
         decoder=capstone.Cs(capstone.CS_ARCH_ARM,capstone.CS_MODE_THUMB);decoder.detail=True

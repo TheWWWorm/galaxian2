@@ -14,6 +14,8 @@ const TargetInventory = preload("res://src/simulation/opening_target_inventory.g
 const SceneryBodies = preload("res://src/simulation/scenery_bodies.gd")
 const Audio = preload("res://src/simulation/weapon_audio.gd")
 const TrainingWeapons = preload("res://src/content/combat_training_weapon_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
+const ContractLife=preload("res://src/content/contract_ship_lifecycle_definitions.gd")
 const Random = preload("res://src/simulation/seeded_random.gd")
 var error := ""
 var _loadout := {}
@@ -32,8 +34,12 @@ func configure(bindings: RefCounted, catalogues: RefCounted, mounts: RefCounted,
 		return reject("Primary weapons require an explicit content loadout")
 	if loadout.get("binding_id") != bindings.binding_id or mounts.snapshot().get("base_content_id") != content_id:
 		return reject("Primary equipment, mounts and bindings have different identities")
-	if loadout.has("campaign_cursor") and (loadout.campaign_cursor!=7 or not loadout.campaign_cursor is int or not TrainingWeapons.parameters(bindings.combat_training_weapons)):
+	if loadout.has("campaign_cursor") and (loadout.campaign_cursor not in [7,10,11,12,13,14,16,18] or not loadout.campaign_cursor is int or not TrainingWeapons.parameters(bindings.combat_training_weapons)):
 		return reject("Unsupported primary encounter context")
+	if loadout.get("campaign_cursor") in [10,11,12,13,14] and Travel.player_entry(bindings.mido_travel,int(loadout.get("station_id",-1)),int(loadout.campaign_cursor)).is_empty():return reject("Local primary entry requires its supported location")
+	if loadout.get("campaign_cursor")==16 and (load("res://src/content/alioth_population_definitions.gd").flight(bindings,int(loadout.get("station_id",-1))).is_empty()):return reject("Alioth primary entry requires its supported location")
+	if loadout.get("campaign_cursor")==18 and (load("res://src/content/free_flight_definitions.gd").flight(bindings,int(loadout.get("station_id",-1))).is_empty()):return reject("Ordinary primary entry requires its supported location")
+	if loadout.get("campaign_cursor")==13 and not ContractLife.available(bindings):return reject("Contract primary contacts require supported lifecycle declarations")
 	var resolver := Weapons.new()
 	if not resolver.configure(bindings,catalogues,content_id): return reject(resolver.error)
 	var ship_id: Variant = loadout.get("ship_id")
@@ -123,6 +129,15 @@ func fork_state() -> RefCounted:
 			"contact_pass_evaluated":gun.contact_pass_evaluated,
 			"last_contact_target":null if gun.last_contact_target==null else gun.last_contact_target.duplicate()})
 	return staged
+
+func reset_fire_intervals() -> bool:
+	error=""
+	if _loadout.is_empty():return reject("Configure primary ownership before resetting firing intervals")
+	var next:=fork_state()
+	for gun in next._guns:
+		if not gun.projectiles.reset_fire_interval():return reject(gun.projectiles.error)
+	_guns=next._guns
+	return true
 
 func evaluate_npc_update(combat: RefCounted, ordered_actor_ids: Variant, delta_ms: Variant, bounds_selection: Variant = null) -> Dictionary:
 	error = ""

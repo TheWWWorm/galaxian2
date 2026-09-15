@@ -14,6 +14,14 @@ const Player = preload("res://src/simulation/opening_player_state.gd")
 const Audio = preload("res://src/simulation/weapon_audio.gd")
 const NPCContacts = preload("res://src/simulation/ordinary_npc_contacts.gd")
 const Training = preload("res://src/content/combat_training_weapon_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
+const AmbientLife=preload("res://src/content/ambient_lifecycle_definitions.gd")
+const Construction=preload("res://src/simulation/opening_npc_construction.gd")
+const ContractCombat=preload("res://src/content/contract_ship_combat_definitions.gd")
+const Junk=preload("res://src/content/contract_junk_definitions.gd")
+const Convoy=preload("res://src/content/convoy_world_definitions.gd")
+const Alioth=preload("res://src/content/alioth_population_definitions.gd")
+const AliothSequence=preload("res://src/simulation/alioth_attack.gd")
 var error := ""
 var _identity := {}
 var _definition := {}
@@ -22,6 +30,7 @@ var _audio := {}
 var _definitions := []
 var _actor_audio := []
 var _training := {}
+var _alioth_revision:=-1
 
 func clear() -> void:
 	error = ""
@@ -30,6 +39,7 @@ func clear() -> void:
 	_guns = []
 	_audio = {}
 	_definitions=[];_actor_audio=[];_training={}
+	_alioth_revision=-1
 
 func configure(bindings: RefCounted, catalogues: RefCounted) -> bool:
 	clear()
@@ -67,16 +77,95 @@ func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, wor
 	# identities, entry rank and difficulty without consuming effect draws.
 	var combat:=Combat.new()
 	if not combat.configure_combat_training(bindings,catalogues,world,rank,difficulty):return reject(combat.error)
-	if not _configure_rows(bindings,catalogues,bindings.combat_training_weapons.npc_weapons):return false
+	if not _configure_rows(bindings,catalogues,bindings.combat_training_weapons.npc_weapons,7):return false
 	_identity.campaign_cursor=int(bindings.combat_training_weapons.campaign_cursor)
 	_training=bindings.combat_training_weapons.duplicate(true)
 	for id in _training.target_memberships.size():_training.target_memberships[id]=_training.target_memberships[id].map(func(value):return int(value))
 	return true
 
-func _configure_rows(bindings: RefCounted, catalogues: RefCounted, rows: Array) -> bool:
+func configure_local_traffic(bindings: RefCounted, catalogues: RefCounted, world: RefCounted, rank: Variant, difficulty: Variant) -> bool:
+	clear()
+	if not _matching_content(bindings,catalogues) or world==null:return reject("Local weapons require their generated world")
+	var data:=Travel.weapons(bindings,world.snapshot(),rank,difficulty)
+	if data.is_empty():return reject("Local weapons require their source population")
+	if not _configure_rows(bindings,catalogues,data.npc_weapons,int(data.campaign_cursor)):return false
+	_identity.campaign_cursor=int(data.campaign_cursor);_training=data
+	return true
+
+func configure_ambient(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,rank: Variant,difficulty: Variant) -> bool:
+	clear()
+	if not _matching_content(bindings,catalogues) or not construction is Construction or not AmbientLife.recycling_parameters(bindings.ambient_lifecycle):return reject("Ambient weapons require their supported generated population")
+	var data:=AmbientLife.guidance(bindings,construction.snapshot(),rank,difficulty)
+	if data.is_empty():return reject("Unsupported ambient weapon population")
+	var cursor:=int(data.campaign_cursor)
+	var rows:=[]
+	for actor in construction.snapshot().actors:
+		var row: Dictionary={} if actor.population_group=="freighter" else Travel.ordinary_weapon(bindings.mido_travel,cursor)
+		if data.has("free_traffic") and actor.population_group!="freighter":row=ContractCombat.shared_weapon(bindings.early_contracts.ship_combat.weapons,cursor,rank,float(difficulty),actor.actor_kind)
+		for key in ["actor_id","actor_kind","hull_catalogue_id"]:row[key]=actor[key]
+		if actor.population_group=="freighter":row.unarmed=true;data.target_memberships[actor.actor_id]=[]
+		rows.append(row)
+	if not _configure_rows(bindings,catalogues,rows,cursor):return false
+	_identity.campaign_cursor=cursor;_training=data
+	return true
+
+func configure_contract(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted) -> bool:
+	clear()
+	if not _matching_content(bindings,catalogues) or not construction is Construction:return reject("Contract weapons require their generated accepted population")
+	var data:=ContractCombat.population(bindings,construction.snapshot())
+	if data.is_empty():
+		data=Junk.population(bindings,construction.snapshot())
+		if not data.is_empty():
+			data.target_memberships=[]
+			for id in int(data.actor_count):
+				data.npc_weapons.append({"actor_id":id,"actor_kind":-1,"hull_catalogue_id":-1,"unarmed":true})
+				data.target_memberships.append([])
+	if data.is_empty():return reject("This population has no supported contract ship weapons")
+	if not _configure_rows(bindings,catalogues,data.npc_weapons,int(data.campaign_cursor)):return false
+	_identity.campaign_cursor=int(data.campaign_cursor);_training=data
+	_training.contract_encounter=construction.snapshot().contract_encounter.duplicate(true)
+	return true
+
+func configure_convoy(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted) -> bool:
+	clear()
+	if not _matching_content(bindings,catalogues) or not construction is Construction:return reject("Convoy weapons require their generated population")
+	var data:=Convoy.population(bindings,construction.snapshot())
+	if data.is_empty():return reject("This population has no supported convoy weapons")
+	if not _configure_rows(bindings,catalogues,data.npc_weapons,int(data.campaign_cursor)):return false
+	_identity.campaign_cursor=int(data.campaign_cursor);_training=data
+	return true
+
+func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted) -> bool:
+	clear()
+	if not _matching_content(bindings,catalogues) or not construction is Construction:return reject("Alioth weapons require their generated original population")
+	var data:=Alioth.combat(bindings,construction.snapshot())
+	if data.is_empty():return reject("This population has no supported Alioth weapons")
+	if not _configure_rows(bindings,catalogues,data.npc_weapons,int(data.campaign_cursor)):return false
+	_identity.campaign_cursor=int(data.campaign_cursor);_training=data
+	_alioth_revision=0
+	return true
+
+func apply_alioth_sequence(owner: RefCounted) -> bool:
+	error=""
+	if _alioth_revision<0 or not owner is AliothSequence:return reject("Alioth target changes require their retained weapon owner")
+	var sequence: Dictionary=owner.snapshot()
+	for key in _identity:
+		if sequence.get(key)!=_identity[key]:return reject("Alioth weapons belong to another sequence")
+	if sequence.get("revision")!=_alioth_revision+1:return reject("Alioth weapons received a repeated or skipped sequence frame")
+	var memberships: Array=_training.target_memberships.duplicate(true)
+	for row in sequence.frame.actor_overrides:
+		if sequence.phase!=AliothSequence.Stage.ESCAPE_VIEW or row.actor_id not in [3,4,5,6] or not row.clear_targets or memberships[row.actor_id].is_empty():return reject("Unsupported Alioth weapon target removal")
+		memberships[row.actor_id]=[]
+	# Original assignment updates every gun's target pointer too. Live projectile
+	# slots and their clocks remain; their following collision pass has no targets.
+	_training.target_memberships=memberships;_alioth_revision=sequence.revision
+	return true
+
+func _configure_rows(bindings: RefCounted, catalogues: RefCounted, rows: Array, cursor: int=-1) -> bool:
 	var guns:=[];var sounds:=[]
 	for data in rows:
-		var weapon:=_resolve_weapon(bindings,catalogues,data)
+		if cursor in [11,12,13,14,16,18] and data.get("unarmed",false):guns.append(null);sounds.append({});continue
+		var weapon:=_resolve_weapon(bindings,catalogues,data,cursor)
 		if weapon.is_empty():return false
 		var gun:=Projectiles.new()
 		if not gun.configure(weapon):return reject(gun.error)
@@ -91,7 +180,7 @@ func _configure_rows(bindings: RefCounted, catalogues: RefCounted, rows: Array) 
 	_guns=guns;_actor_audio=sounds;_definitions=rows.duplicate(true)
 	return true
 
-func _resolve_weapon(bindings: RefCounted, catalogues: RefCounted, data: Dictionary) -> Dictionary:
+func _resolve_weapon(bindings: RefCounted, catalogues: RefCounted, data: Dictionary, cursor: int) -> Dictionary:
 	var items: Variant = catalogues.tables.get("items")
 	if not items is Array or data.item_id>=items.size(): return fail("NPC weapon names an absent catalogue item")
 	var arrays: Variant = items[int(data.item_id)].get("arrays")
@@ -106,7 +195,8 @@ func _resolve_weapon(bindings: RefCounted, catalogues: RefCounted, data: Diction
 		var properties: Dictionary=items[int(data.item_id)].get("properties",{})
 		var extra: Variant=properties.get(int(policy.get("additional_damage_property",-1)),int(policy.get("missing_additional_damage",0)))
 		if extra!=int(policy.get("missing_additional_damage",0)) or policy.is_empty():return fail("NPC weapon requires unsupported additional damage")
-		weapon.campaign_cursor=int(bindings.combat_training_weapons.campaign_cursor)
+		if cursor not in [7,10,11,12,13,14,16,18]:return fail("NPC contacts require an explicit supported encounter")
+		weapon.campaign_cursor=cursor
 		weapon.nonplayer_source=bool(data.nonplayer_source)
 		weapon.ordinary_hit_policy={"additional_damage":int(extra),"additional_damage_required":false,"nonplayer_damage":weapon.damage}
 		weapon.collision_bounds={"mode":bindings.weapon_parameters.collision_bounds.mode}
@@ -118,8 +208,10 @@ func snapshot() -> Dictionary:
 	result.definition=_definition.duplicate(true)
 	result.audio=_audio.duplicate()
 	result.actors=[]
+	if _alioth_revision>=0:
+		result.alioth_revision=_alioth_revision;result.target_memberships=_training.target_memberships.duplicate(true)
 	for id in _guns.size():
-		result.actors.append({"actor_id":id,"projectiles":_guns[id].snapshot()})
+		result.actors.append({"actor_id":id,"projectiles":{} if _guns[id]==null else _guns[id].snapshot()})
 		if not _training.is_empty():
 			result.actors[-1].definition=_definitions[id].duplicate(true)
 			result.actors[-1].audio=_actor_audio[id].duplicate()
@@ -142,21 +234,24 @@ func fire_combat_training(combat: RefCounted, requests: Array) -> Dictionary:
 
 func _fire(combat: RefCounted, requested_actor_ids: Array, poses: Dictionary) -> Dictionary:
 	error=""
-	if _guns.is_empty() or not combat is Combat: return fail("NPC firing requires configured weapons and matching combat actors")
+	if _identity.is_empty() or not combat is Combat: return fail("NPC firing requires configured weapons and matching combat actors")
 	var scene: Dictionary = combat.snapshot()
 	for key in _identity:
 		if scene.get(key)!=_identity[key]: return fail("NPC firing actors belong to another source profile")
 	if not scene.get("actors") is Array or scene.actors.size()!=_guns.size():return fail("NPC firing population differs from its weapon pools")
 	for id in _guns.size():
 		if scene.actors[id].get("actor_id")!=id or scene.actors[id].get("actor_kind")!=_definitions[id].actor_kind:return fail("NPC firing membership differs from its weapon declaration")
+	if _training.has("contract_encounter") and scene.get("contract_encounter")!=_training.contract_encounter:return fail("NPC firing belongs to another accepted contract")
 	var seen := {}
 	for id in requested_actor_ids:
 		if not id is int or id<0 or id>=_guns.size() or seen.has(id): return fail("Invalid or duplicate NPC firing request")
+		if _guns[id]==null:return fail("This traffic actor has no ordinary gun")
 		seen[id]=true
 	var staged := []
 	var results := []
 	# Source NPC array order determines events, independently of request order.
 	for id in _guns.size():
+		if _guns[id]==null:staged.append(null);continue
 		var gun: RefCounted = _guns[id].fork_state()
 		staged.append(gun)
 		if not seen.has(id): continue
@@ -182,10 +277,11 @@ func _fire(combat: RefCounted, requested_actor_ids: Array, poses: Dictionary) ->
 
 func advance(delta_ms: Variant) -> Dictionary:
 	error=""
-	if _guns.is_empty() or not Vitals.integer(delta_ms): return fail("NPC projectiles require nonnegative integer milliseconds")
+	if _identity.is_empty() or not Vitals.integer(delta_ms): return fail("NPC projectiles require nonnegative integer milliseconds")
 	var staged := []
 	var results := []
 	for id in _guns.size():
+		if _guns[id]==null:staged.append(null);continue
 		var gun: RefCounted = _guns[id].fork_state()
 		var result: Dictionary = gun.advance(delta_ms)
 		if result.is_empty(): return fail(gun.error)
@@ -200,7 +296,8 @@ func fork_for_frame() -> RefCounted:
 	copy._definition=_definition.duplicate(true)
 	copy._audio=_audio.duplicate()
 	copy._definitions=_definitions.duplicate(true);copy._actor_audio=_actor_audio.duplicate(true);copy._training=_training.duplicate(true)
-	for gun in _guns: copy._guns.append(gun.fork_state())
+	copy._alioth_revision=_alioth_revision
+	for gun in _guns: copy._guns.append(null if gun==null else gun.fork_state())
 	return copy
 
 func evaluate_player_update(player: RefCounted, pose: Variant, shooter_states: Variant, special_flight: Variant, delta_ms: Variant) -> Dictionary:
@@ -235,22 +332,31 @@ func evaluate_combat_training_update(player: RefCounted, pose: Variant, combat: 
 	for id in _guns.size():
 		for key in ["actor_id","actor_kind","hull_catalogue_id"]:
 			if scene.actors[id].get(key)!=_definitions[id][key]:return fail("Mixed contact population changed")
+	if _training.has("contract_encounter") and (scene.get("contract_encounter")!=_training.contract_encounter or player_state.get("contract_encounter")!=_training.contract_encounter):return fail("Mixed contacts belong to another accepted contract")
 	var shooters: Array=combat.shooter_states()
 	var next:=fork_for_frame();var staged_player: RefCounted=player.fork_for_frame();var staged_combat: RefCounted=combat.fork_for_frame()
 	var player_contacts:=PlayerContacts.new();var npc_contacts:=NPCContacts.new();var events:=[]
 	for id in _guns.size():
-		var contact:=player_contacts.evaluate(next._guns[id],staged_player,pose,shooters[id].present,shooters[id].hostile,special_flight)
-		if contact.is_empty():return fail(player_contacts.error)
-		var targets: Array=_training.target_memberships[id].slice(1).map(func(value):return int(value))
-		var npc:=npc_contacts.evaluate(contact.projectiles,staged_combat,targets)
-		if npc.is_empty():return fail(npc_contacts.error)
-		# Retained impact geometry visits every target before this gun moves or
-		# clears a slot. A player contact can therefore also hit an overlapping NPC.
-		var motion: Dictionary=npc.projectiles.advance(delta_ms)
-		if motion.is_empty():return fail(npc.projectiles.error)
-		next._guns[id]=npc.projectiles;staged_player=contact.player;staged_combat=npc.combat
-		var last: Variant={"group":"npc","index":npc.last_contact_actor_id} if npc.last_contact_actor_id!=null else contact.last_contact_actor
-		events.append({"actor_id":id,"contacts":contact.contacts,"npc_contacts":npc.contacts,"last_contact_actor":last,"motion":motion})
+		if _guns[id]==null:continue
+		var gun: RefCounted=next._guns[id]
+		var player_hits:=[];var npc_hits:=[];var last: Variant=null
+		for target in _training.target_memberships[id]:
+			if int(target)==-1:
+				var contact:=player_contacts.evaluate(gun,staged_player,pose,shooters[id].present,shooters[id].hostile,special_flight)
+				if contact.is_empty():return fail(player_contacts.error)
+				gun=contact.projectiles;staged_player=contact.player;player_hits.append_array(contact.contacts)
+				if not contact.contacts.is_empty():last=contact.last_contact_actor
+			else:
+				var npc:=npc_contacts.evaluate(gun,staged_combat,[int(target)])
+				if npc.is_empty():return fail(npc_contacts.error)
+				gun=npc.projectiles;staged_combat=npc.combat;npc_hits.append_array(npc.contacts)
+				if npc.last_contact_actor_id!=null:last={"group":"npc","index":npc.last_contact_actor_id}
+		# A marked projectile retains its geometry until every target has been
+		# visited in authored order, including the Challenge's player-last lists.
+		var motion: Dictionary=gun.advance(delta_ms)
+		if motion.is_empty():return fail(gun.error)
+		next._guns[id]=gun
+		events.append({"actor_id":id,"contacts":player_hits,"npc_contacts":npc_hits,"last_contact_actor":last,"motion":motion})
 	return {"weapons":next,"player":staged_player,"combat":staged_combat,"actors":events}
 
 func reject(message: String) -> bool:

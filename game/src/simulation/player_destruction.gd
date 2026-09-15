@@ -6,6 +6,7 @@ const Definitions=preload("res://src/content/player_destruction_definitions.gd")
 const Bindings=preload("res://src/content/resource_bindings.gd")
 const Resources=preload("res://src/content/npc_destruction_resources.gd")
 const Construction=preload("res://src/simulation/first_flight_construction.gd")
+const Ordinary=preload("res://src/content/ordinary_flight_definitions.gd")
 const Player=preload("res://src/simulation/opening_player_state.gd")
 const Flight=preload("res://src/simulation/npc_flight.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
@@ -14,12 +15,13 @@ const Vitals=preload("res://src/simulation/combat_vitals.gd")
 const Random=preload("res://src/simulation/seeded_random.gd")
 const Explosion=preload("res://src/simulation/type_zero_explosion.gd")
 const Training=preload("res://src/content/combat_training_story_definitions.gd")
+const Fitting=preload("res://src/content/ordinary_fitting_definitions.gd")
 var error:=""
 var _rules:={}
 var _state:={}
 var _presentation_identity: RefCounted
 
-func configure(bindings: RefCounted, resources: RefCounted, construction: RefCounted) -> bool:
+func configure(bindings: RefCounted, resources: RefCounted, construction: RefCounted,catalogues: RefCounted=null) -> bool:
 	error=""
 	if not bindings is Bindings or not resources is Resources or not construction is Construction or not Definitions.parameters(bindings.player_destruction):return reject("Player destruction requires its verified Mac departure and effect resources")
 	var rules: Dictionary=bindings.player_destruction
@@ -27,21 +29,31 @@ func configure(bindings: RefCounted, resources: RefCounted, construction: RefCou
 	for key in ["base_content_id","binding_id"]:
 		if entry.get(key)!=bindings.get(key) or effect.get(key)!=bindings.get(key):return reject("Player destruction belongs to another content identity")
 	var training: bool=entry.get("campaign_cursor")==7
+	var local_flight: bool=entry.get("campaign_cursor") in [10,11,12,13,14,16,18]
 	if training:
 		if Training.flight(bindings).is_empty() or construction.equipment_owner()==null:return reject("Training destruction requires its equipped ordinary departure")
 		rules=rules.duplicate(true)
 		rules.departure_cursor=7;rules.story_cursors=[7,int(bindings.combat_training_story.cursor_after_acknowledgement)]
+	elif local_flight:
+		if Ordinary.for_departure(bindings,entry).is_empty() or construction.equipment_owner()==null:return reject("Local destruction requires its equipped Mido flight")
+		rules=rules.duplicate(true);rules.departure_cursor=int(entry.campaign_cursor);rules.story_cursors=[entry.campaign_cursor,17 if entry.campaign_cursor==16 else entry.campaign_cursor]
 	if entry.get("campaign_cursor")!=int(rules.departure_cursor) or entry.get("departure",{}).get("loadout",{}).get("ship_id")!=int(rules.ship_id):return reject("Unsupported player destruction context")
 	var clock:=Explosion.create(effect,[],14292)
 	if clock.is_empty():return reject("Player destruction lacks its authored explosion clocks")
 	for index in 2:
 		if clock.models[index].get("model_id")!=int(rules.model_ids[index]) or clock.models[index].get("resource")!=Resources.PATHS[index]:return reject("Player destruction changed its explosion model bindings")
 	var initial: Dictionary=entry.get("player",{})
-	var expected_equipment: Array=construction.equipment_owner().snapshot().loadout.equipment_ids if training else [90,81]
+	var expected_equipment: Array=construction.equipment_owner().snapshot().loadout.equipment_ids if training or local_flight else [90,81]
 	if initial.get("ship_id")!=int(rules.ship_id) or initial.get("equipment_ids")!=expected_equipment:return reject("Player destruction requires its retained starter loadout")
 	# The native tutorial inventory can only contain these source offers and
 	# retained drill/scanner. None supplies the escape-pod subtype27.
 	if training and not expected_equipment.all(func(id):return id in [0,22,55,81,90]):return reject("Training destruction has an unsupported escape-device context")
+	if local_flight:
+		if entry.campaign_cursor==18 and Fitting.available(bindings) and catalogues!=null:
+			if catalogues.content_id!=bindings.base_content_id:return reject("Destruction equipment belongs to another catalogue")
+			for id in expected_equipment:
+				if not Numbers.integer(id,0,catalogues.tables.items.size()-1) or catalogues.tables.items[id].arrays[2][5]==27:return reject("Escape-device destruction is not yet supported")
+		elif expected_equipment!=[22,86,81,55]:return reject("Local destruction has an unsupported escape-device context")
 	_rules=rules.duplicate(true)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"actor_id":"player",
 		"departure_cursor":int(rules.departure_cursor),"campaign_cursor":int(rules.departure_cursor),

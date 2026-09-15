@@ -104,7 +104,7 @@ func verify_perspective(data: Dictionary) -> void:
 	# source float32 camera cancellation at these magnitudes adds a small margin.
 	var geometry := TargetProjection.new()
 	var camera := Transform3D(Basis.from_euler(Vector3(0.3,-0.7,0.25)),Vector3(31000,-21000,9000))
-	for size in [Vector2i(801,601),Vector2i(1280,720),Vector2i(601,901)]:
+	for size in [Vector2i(801,601),Vector2i(1280,720),Vector2i(901,601)]:
 		check(geometry.configure(data,size,Vector2(152,114)),geometry.error)
 		for x in [-0.8,-0.35,0.0,0.45,0.8]:
 			for y in [-0.8,-0.3,0.0,0.4,0.8]:

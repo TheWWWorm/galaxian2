@@ -3,6 +3,7 @@ extends Node3D
 ## retained by the death owner; presentation never advances simulation time.
 const Player = preload("res://src/simulation/player_destruction.gd")
 const Death = preload("res://src/simulation/npc_destruction.gd")
+const Freighter = preload("res://src/simulation/freighter_destruction.gd")
 const Resources = preload("res://src/content/npc_destruction_resources.gd")
 const Models = preload("res://src/presentation/model_resources.gd")
 const Sampler = preload("res://src/presentation/scenery_animation.gd")
@@ -20,7 +21,7 @@ var _edition := ""
 
 func build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, death: RefCounted, quality := "high", shared_models: RefCounted = null) -> bool:
 	clear()
-	if not (death is Death or death is Player) or death.presentation_identity()==null: return reject("Build Explosion effects from a configured native death owner")
+	if not (death is Death or death is Player or death is Freighter) or death.presentation_identity()==null: return reject("Build Explosion effects from a configured native death owner")
 	var state: Dictionary=death.snapshot()
 	if library==null or visuals==null or bindings==null or library.manifest.get("content_id")!=state.base_content_id or visuals.base_content_id!=state.base_content_id or bindings.base_content_id!=state.base_content_id or bindings.binding_id!=state.binding_id:
 		return reject("Explosion effect resources belong to another content identity")
@@ -64,9 +65,12 @@ func build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, death
 	visible=false
 	return true
 
+func follows(death: RefCounted) -> bool:
+	return death!=null and death.presentation_identity()==_identity and not _descriptor.is_empty()
+
 func prepare_effect(death: RefCounted, camera: Transform3D, parent_rgba: PackedByteArray, global_tint: Vector4, darken: Variant) -> Dictionary:
 	error=""
-	if _descriptor.is_empty() or not (death is Death or death is Player) or death.presentation_identity()!=_identity: return failed_frame("Explosion geometry follows one configured death owner")
+	if _descriptor.is_empty() or not (death is Death or death is Player or death is Freighter) or death.presentation_identity()!=_identity: return failed_frame("Explosion geometry follows one configured death owner")
 	var state: Dictionary=death.snapshot()
 	for key in ["base_content_id","binding_id","actor_id","fragments"]:
 		if state.get(key)!=_descriptor[key]: return failed_frame("Explosion effect identity or retained fragments changed")
