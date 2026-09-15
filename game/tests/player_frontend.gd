@@ -120,6 +120,31 @@ func verify_prepare() -> void:
 	var old:=FileAccess.get_file_as_bytes(path)
 	app.visuals=Frontend.Visuals.new();app.request_action("load");app.confirm_pending();app.visuals=visuals
 	check(app.phase=="menu" and app.game.session==session and FileAccess.get_file_as_bytes(path)==old,"Failed menu load lost the live opening or changed its save")
+	await verify_map_input()
+
+func verify_map_input() -> void:
+	if failures:return
+	app.request_action("load");app.confirm_pending()
+	if app.phase!="game":check(false,app.error);return
+	check(app.game.session.snapshot().campaign_cursor==18,"Map input requires the earned ordinary station")
+	app.game.set_process(false);app.game._notification(MainLoop.NOTIFICATION_APPLICATION_FOCUS_IN)
+	var now:=Time.get_ticks_usec()
+	if not app.game.request_departure() or not app.game.enter_first_flight(now,4096,1789100000):check(false,app.game.status.text);return
+	app.game.session.rebase_time(now)
+	for tick in 71:
+		now+=100000
+		if not app.game.session.step(now):check(false,app.game.session.error);return
+	app.game.present_session()
+	if not app.game.open_map(now):check(false,app.game.status.text);return
+	var escape:=InputEventKey.new();escape.physical_keycode=KEY_ESCAPE;escape.pressed=true
+	Input.parse_input_event(escape);Input.flush_buffered_events()
+	check(app.phase=="game" and not app.game.session.map_open(),"Map Escape opened the main menu or failed to close navigation")
+	var release:=InputEventKey.new();release.physical_keycode=KEY_ESCAPE
+	Input.parse_input_event(release);Input.flush_buffered_events()
+	check(app.game.open_map(),"Navigation did not reopen after keyboard closure")
+	var start:=InputEventJoypadButton.new();start.button_index=JOY_BUTTON_START;start.pressed=true
+	Input.parse_input_event(start);Input.flush_buffered_events()
+	check(app.phase=="menu" and app.game.session.map_open() and app.game.session.is_paused(),"Controller Start did not preserve and pause the open map")
 
 func preferences_unchanged() -> bool:
 	var prefs:=Preferences.new();return prefs.read_file(directory.path_join("player.json")) and is_equal_approx(prefs.values.fx,0.35)
