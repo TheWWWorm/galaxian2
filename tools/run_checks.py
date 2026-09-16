@@ -14,7 +14,7 @@ import time
 from source_checks import source_closure
 
 ROOT = Path(__file__).resolve().parents[1]
-ERRORS = re.compile(r'SCRIPT ERROR:|^ERROR:|^FAIL(?:\s|:)|ObjectDB instances leaked|resources still in use at exit', re.MULTILINE)
+ERRORS = re.compile(r'SCRIPT ERROR:|^ERROR:|^FAIL(?:\s|:)|ObjectDB instances (?:were )?leaked|resources still in use at exit', re.MULTILINE)
 
 
 def output_path(value):

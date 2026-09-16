@@ -58,6 +58,7 @@ Follow the tutorial prompts for flying, targeting, firing and mining.
 | Steer | **Mouse**, **WASD** or **arrow keys** |
 | Fire / mine | **Left click** or **Space** |
 | Main menu / pause | **Esc** |
+| Toggle fullscreen | **F11** |
 | Navigation map in flight | **M** |
 | Hangar at a station | **H** |
 | Space Lounge at a station | **L** |

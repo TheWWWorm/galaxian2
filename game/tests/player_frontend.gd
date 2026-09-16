@@ -28,6 +28,7 @@ func run() -> void:
 	app=Frontend.new();root.add_child(app);app.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	if OS.get_environment("GOF2_MENU_TEST_PHASE")=="resume":await verify_restart()
 	elif OS.get_environment("GOF2_MENU_TEST_PHASE")=="cancel":await verify_cancel()
+	elif OS.get_environment("GOF2_MENU_TEST_PHASE")=="close_import":await verify_close_import()
 	else:await verify_prepare()
 	app.free();Streams.set_levels(1,1,1);await process_frame
 	print("Player entry: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
@@ -181,6 +182,16 @@ func verify_restart() -> void:
 	var session: Node=app.game.session
 	app.menu._buttons.resume.pressed.emit();check(app.game.session==session,"In-process Resume loaded a replacement instead of resuming")
 	var exit_count:=[0];app.exit_requested.connect(func():exit_count[0]+=1)
+	app.request_close()
+	check(app.phase=="confirm" and app.game.session==session and session.is_paused() and exit_count[0]==0,"Window close bypassed the saved-progress confirmation")
+	app._back.pressed.emit();app.request_action("resume")
+	check(app.phase=="game" and app.game.session==session and not app.game._mouse_captured,"Cancelling station close lost the game or captured the pointer")
+	var fullscreen:=InputEventKey.new();fullscreen.physical_keycode=KEY_F11;fullscreen.pressed=true
+	Input.parse_input_event(fullscreen);Input.flush_buffered_events()
+	check(app.preferences.values.window_mode=="fullscreen" and app.phase=="game","Fullscreen shortcut did not preserve the active game")
+	var release_fullscreen:=InputEventKey.new();release_fullscreen.physical_keycode=KEY_F11
+	Input.parse_input_event(release_fullscreen);Input.flush_buffered_events()
+	app.change_preference("window_mode","windowed")
 	app.show_menu();app.request_action("exit");check(app.phase=="confirm" and exit_count[0]==0,"Exit discarded the game before confirmation")
 	app.confirm_pending();check(exit_count[0]==1 and FileAccess.get_file_as_bytes(path)==file.encode(document),"Exit changed the career or failed to reach the application")
 
@@ -209,6 +220,21 @@ func verify_cancel() -> void:
 	var scroll: ScrollContainer=app._body.get_parent()
 	check(scroll.get_global_rect().encloses(app._settings_controls.touch_controls.get_global_rect()),"Controller focus did not reveal the last landscape option")
 	await capture("entry-options-landscape-focused")
+
+func verify_close_import() -> void:
+	if not app.boot(PackedStringArray(),directory):check(false,app.error);return
+	var dmg:=OS.get_environment("GOF2_MENU_TEST_DMG")
+	if dmg.is_empty():check(false,"Supply the Mac DMG for import close");return
+	var stored:=FileAccess.get_file_as_bytes(directory.path_join("player.json"))
+	var exited:=[0];app.exit_requested.connect(func():exited[0]+=1)
+	app.show_setup();app._picker.file_selected.emit(dmg)
+	check(app._importer.busy(),"Import close requires a running importer")
+	app.request_close()
+	check(exited[0]==0 and app._quit_after_import,"Window close did not wait for import cancellation")
+	var deadline:=Time.get_ticks_msec()+30000
+	while app._importer.busy() and Time.get_ticks_msec()<deadline:await process_frame
+	check(not app._importer.busy() and exited[0]==1,"Import close failed to finish cancellation and exit")
+	check(FileAccess.get_file_as_bytes(directory.path_join("player.json"))==stored,"Closing import lost the previously accepted game")
 
 func capture(label: String) -> void:
 	if captures.is_empty() or DisplayServer.get_name()=="headless":return

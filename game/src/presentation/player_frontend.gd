@@ -37,6 +37,7 @@ var _notice: Label
 var _picker: FileDialog
 var _selection:={}
 var _pending_action:=""
+var _quit_after_import:=false
 var _settings_controls:={}
 
 func _ready() -> void:
@@ -139,8 +140,16 @@ func request_action(action: String) -> void:
 		"language":show_languages()
 		"info":show_info()
 		"exit":
-			if has_session():_confirm(action,"Exit the game? Progress since the last station save will be lost.")
-			else:exit_requested.emit()
+			request_close()
+
+func request_close() -> void:
+	if _importer.busy():
+		_quit_after_import=true;_importer.cancel()
+		if is_instance_valid(_import_status):_import_status.text="Cancelling import before closing…"
+		return
+	if has_session():
+		show_menu();_confirm("exit","Exit the game? Progress since the last station save will be lost.")
+	else:exit_requested.emit()
 
 func _confirm(action: String,message: String) -> void:
 	_pending_action=action;_show_details("confirm",library.strings[28 if action=="new_game" else 29 if action=="load" else 33])
@@ -200,6 +209,7 @@ func begin_import(path: String) -> bool:
 	return true
 
 func _import_finished(success: bool,receipt: String,message: String) -> void:
+	if _quit_after_import:exit_requested.emit();return
 	if success and open_import(receipt):return
 	if success:message=error
 	show_setup();reject(message)
@@ -244,7 +254,8 @@ func change_preference(key: String,value: Variant) -> bool:
 	if not preferences.save_file(_preferences_path,candidate):return reject(preferences.error)
 	if key in Preferences.DISPLAY_KEYS:
 		_display.apply(get_window(),candidate,_mobile)
-		if _settings_controls.has("resolution"):_settings_controls.resolution.disabled=candidate.window_mode=="fullscreen"
+		if is_instance_valid(_settings_controls.get("resolution")):_settings_controls.resolution.disabled=candidate.window_mode=="fullscreen"
+		if is_instance_valid(_settings_controls.get("window_mode")):_settings_controls.window_mode.select(1 if candidate.window_mode=="fullscreen" else 0)
 	else:apply_preferences()
 	return true
 
@@ -298,6 +309,9 @@ func _layout() -> void:
 	_notice.add_theme_font_size_override("font_size",18 if _mobile else 14)
 
 func _input(event: InputEvent) -> void:
+	if not _mobile and event is InputEventKey and event.pressed and not event.echo and (event.physical_keycode if event.physical_keycode else event.keycode)==KEY_F11:
+		change_preference("window_mode","windowed" if preferences.values.window_mode=="fullscreen" else "fullscreen")
+		get_viewport().set_input_as_handled();return
 	# Own the menu shortcut before SubViewportContainer forwards the same event
 	# into the flight viewport. Map Escape still belongs to its navigation panel.
 	if phase!="game" or not has_session() or not game._focused or not is_visible_in_tree():return

@@ -67,7 +67,23 @@ func check_options(args: PackedStringArray,directory: String) -> void:
 			check(root.get_texture().get_image().save_png(args[3].path_join("options-%dx%d.png"%[size.x,size.y]))==OK,"Could not capture options")
 	app.change_preference("aspect_ratio","16:10");await process_frame;await process_frame
 	check(absf(app.size.x/app.size.y-1.6)<0.002,"Fixed aspect ratio stretched the UI")
+	if DisplayServer.get_name()!="headless":
+		app.change_preference("aspect_ratio","auto")
+		app.change_preference("window_mode","fullscreen")
+		await wait_for_window(Window.MODE_FULLSCREEN)
+		check(root.mode==Window.MODE_FULLSCREEN and root.size==DisplaySettings.native_size(root),"Fullscreen did not use native display resolution: mode=%d size=%s native=%s"%[root.mode,root.size,DisplaySettings.native_size(root)])
+		check(Vector2i(app.size)==root.size and app._settings_controls.resolution.disabled,"Fullscreen did not fill the native aspect or explain window-only resolutions")
+		app.change_preference("window_mode","windowed")
+		await wait_for_window(Window.MODE_WINDOWED)
+		check(root.mode==Window.MODE_WINDOWED and not app._settings_controls.resolution.disabled,"Could not return from fullscreen")
 	app.free();await process_frame
+
+func wait_for_window(mode: int) -> void:
+	# The OS window manager applies modes asynchronously, beyond a few uncapped frames.
+	var deadline:=Time.get_ticks_msec()+2000
+	while Time.get_ticks_msec()<deadline:
+		await process_frame
+		if root.mode==mode and (mode!=Window.MODE_FULLSCREEN or root.size==DisplaySettings.native_size(root)):return
 
 func check(value: bool,message: String) -> void:
 	checks+=1

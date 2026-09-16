@@ -14,6 +14,14 @@ import run_checks
 
 
 class CheckRunnerTests(unittest.TestCase):
+    def test_both_godot_leak_messages_fail_the_check(self):
+        for message in ('WARNING: ObjectDB instances leaked at exit',
+                        'WARNING: 2 ObjectDB instances were leaked at exit'):
+            with self.subTest(message=message):
+                report, _ = run_checks.execute([sys.executable, '-c', 'print(' + repr(message) + ')'],
+                                              5, os.environ.copy())
+                self.assertFalse(report['passed'])
+
     def test_script_error_is_failure_even_with_zero_exit(self):
         report, _ = run_checks.execute([sys.executable, '-c', 'print("SCRIPT ERROR: bad state")'], 5, os.environ.copy())
         self.assertFalse(report['passed'])
