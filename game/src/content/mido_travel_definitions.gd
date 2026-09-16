@@ -42,6 +42,8 @@ const FreeArrival=preload("res://src/content/free_arrival_definitions.gd")
 const LocalArrivalEnvironment=preload("res://src/content/local_arrival_environment_definitions.gd")
 const Fitting=preload("res://src/content/ordinary_fitting_definitions.gd")
 const OrdinaryContracts=preload("res://src/content/ordinary_contracts_definitions.gd")
+const EMPBombs=preload("res://src/content/emp_bombs_definitions.gd")
+const KappaPreparation=preload("res://src/content/kappa_preparation_definitions.gd")
 const SuttnarVisit=preload("res://src/content/suttnar_visit_definitions.gd")
 const Shopping=preload("res://src/content/ordinary_shopping_definitions.gd")
 const GateArrival=preload("res://src/content/gate_arrival_definitions.gd")
@@ -50,7 +52,7 @@ const Worlds=preload("res://src/content/ordinary_world_definitions.gd")
 const GateEnvironment=preload("res://src/content/gate_environment_definitions.gd")
 
 static func parameters(data: Variant) -> bool:
-	if not data is Dictionary or data.size()!=VALUES.size()+1+int(data.has("continuation"))+int(data.has("return_visit"))+int(data.has("contract_navigation"))+int(data.has("contract_completion"))+int(data.has("convoy_capture"))+int(data.has("convoy_ship"))+int(data.has("convoy_lifecycle"))+int(data.has("convoy_effects"))+int(data.has("alioth_arrival"))+int(data.has("convoy_transit"))+int(data.has("alioth_attack"))+int(data.has("alioth_lifecycle"))+int(data.has("alioth_flight"))+int(data.has("alioth_return"))+int(data.has("free_navigation"))+int(data.has("free_population"))+int(data.has("free_traffic"))+int(data.has("free_lifecycle"))+int(data.has("free_flight"))+int(data.has("free_arrival"))+int(data.has("gate_environment"))+int(data.has("local_arrival_environment"))+int(data.has("gate_transit"))+int(data.has("ordinary_worlds"))+int(data.has("gate_arrival"))+int(data.has("ordinary_shopping"))+int(data.has("ordinary_fitting"))+int(data.has("ordinary_contracts"))+int(data.has("suttnar_visit")) or not data.get("provenance") is Dictionary:return false
+	if not data is Dictionary or data.size()!=VALUES.size()+1+int(data.has("continuation"))+int(data.has("return_visit"))+int(data.has("contract_navigation"))+int(data.has("contract_completion"))+int(data.has("convoy_capture"))+int(data.has("convoy_ship"))+int(data.has("convoy_lifecycle"))+int(data.has("convoy_effects"))+int(data.has("alioth_arrival"))+int(data.has("convoy_transit"))+int(data.has("alioth_attack"))+int(data.has("alioth_lifecycle"))+int(data.has("alioth_flight"))+int(data.has("alioth_return"))+int(data.has("free_navigation"))+int(data.has("free_population"))+int(data.has("free_traffic"))+int(data.has("free_lifecycle"))+int(data.has("free_flight"))+int(data.has("free_arrival"))+int(data.has("gate_environment"))+int(data.has("local_arrival_environment"))+int(data.has("gate_transit"))+int(data.has("ordinary_worlds"))+int(data.has("gate_arrival"))+int(data.has("ordinary_shopping"))+int(data.has("ordinary_fitting"))+int(data.has("ordinary_contracts"))+int(data.has("suttnar_visit"))+int(data.has("kappa_preparation"))+int(data.has("emp_bombs")) or not data.get("provenance") is Dictionary:return false
 	if data.has("continuation") and not Equal.equal_value(data.continuation,CONTINUATION):return false
 	if data.has("return_visit") and (not data.has("continuation") or not Equal.equal_value(data.return_visit,RETURN_VISIT)):return false
 	if data.has("contract_navigation") and (not data.has("return_visit") or not Equal.equal_value(data.contract_navigation,CONTRACT_NAVIGATION)):return false
@@ -78,6 +80,8 @@ static func parameters(data: Variant) -> bool:
 	if data.has("gate_arrival") and (not data.has("gate_transit") or not data.has("ordinary_worlds") or not GateArrival.parameters(data.gate_arrival)):return false
 	if data.has("ordinary_fitting") and (not data.has("ordinary_shopping") or not Fitting.parameters(data.ordinary_fitting)):return false
 	if data.has("ordinary_contracts") and (not data.has("ordinary_fitting") or not OrdinaryContracts.parameters(data.ordinary_contracts)):return false
+	if data.has("emp_bombs") and (not data.has("kappa_preparation") or not EMPBombs.parameters(data.emp_bombs)):return false
+	if data.has("kappa_preparation") and (not data.has("suttnar_visit") or not KappaPreparation.parameters(data.kappa_preparation)):return false
 	if data.has("suttnar_visit") and (not data.has("ordinary_contracts") or not SuttnarVisit.parameters(data.suttnar_visit)):return false
 	if data.has("ordinary_shopping") and (not data.has("ordinary_worlds") or not Shopping.parameters(data.ordinary_shopping)):return false
 	for key in VALUES:
@@ -120,6 +124,8 @@ static func validate(data: Variant, source_bytes: int, arch: String, arrival: Di
 	if data.has("ordinary_fitting"):spans.merge(Fitting.SPANS)
 	if data.has("ordinary_contracts"):spans.merge(OrdinaryContracts.SPANS)
 	if data.has("suttnar_visit"):spans.merge(SuttnarVisit.SPANS)
+	if data.has("kappa_preparation"):spans.merge(KappaPreparation.SPANS)
+	if data.has("emp_bombs"):spans.merge(EMPBombs.SPANS)
 	if data.provenance.size()!=spans.size():return "Invalid local travel provenance"
 	for key in spans:
 		var span: Variant=data.provenance.get(key);var rule: Array=spans[key]

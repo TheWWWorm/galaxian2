@@ -27,6 +27,8 @@ from .ordinary_shopping import extract_ordinary_shopping
 from .ordinary_fitting import extract_ordinary_fitting
 from .ordinary_contracts import extract_ordinary_contracts
 from .suttnar_visit import extract_suttnar_visit
+from .kappa_preparation import extract_kappa_preparation
+from .emp_bombs import extract_emp_bombs
 
 def extract_mido_travel(mach, arrival, station, training):
     if station.get('scope') != 'first_station_entry' or training.get('scope') != 'combat_training_encounter_construction':
@@ -71,6 +73,8 @@ def extract_mido_travel(mach, arrival, station, training):
             ('ordinary_fitting', extract_ordinary_fitting),
             ('ordinary_contracts', extract_ordinary_contracts),
             ('suttnar_visit', extract_suttnar_visit),
+            ('kappa_preparation', extract_kappa_preparation),
+            ('emp_bombs', extract_emp_bombs),
         )
         for name, extract in extensions:
             values, evidence = extract(mach, arrival)

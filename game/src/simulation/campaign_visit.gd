@@ -3,6 +3,7 @@ extends RefCounted
 ## The caller commits the acknowledged transition with its owned career. This
 ## component never relocates the player, pays rewards or opens destinations.
 const Definitions=preload("res://src/content/suttnar_visit_definitions.gd")
+const Kappa=preload("res://src/content/kappa_preparation_definitions.gd")
 const Lines=preload("res://src/content/dialogue_lines.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 var error:=""
@@ -12,9 +13,11 @@ var _lines:=[]
 
 func configure(bindings: RefCounted,library: RefCounted,cursor: Variant,mission: Variant) -> bool:
 	error=""
-	if not Definitions.selected(bindings,cursor,mission):return reject("Unsupported campaign visit")
+	var rules: Dictionary
+	if Definitions.selected(bindings,cursor,mission):rules=bindings.mido_travel.suttnar_visit
+	elif Kappa.selected(bindings,cursor,mission,"visit"):rules=bindings.mido_travel.kappa_preparation.visit
+	else:return reject("Unsupported campaign visit")
 	var resolver:=Lines.new()
-	var rules: Dictionary=bindings.mido_travel.suttnar_visit
 	var lines:=resolver.read(bindings,library,rules.events)
 	if lines.size()!=rules.events.size():return reject(resolver.error)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"language":library.active_language,
