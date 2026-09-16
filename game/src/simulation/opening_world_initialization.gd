@@ -174,6 +174,19 @@ func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,seed: D
 	_identity.merge({"campaign_cursor":context.campaign_cursor,"station_id":context.station_id,"entry_conditions":entry_conditions.duplicate(true)})
 	return true
 
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,seed: Dictionary,context: Dictionary,entry_conditions: Dictionary) -> bool:
+	clear()
+	if not FirstFlight.entry_conditions(entry_conditions):return reject("Kappa initialization requires ordinary entry with no additional companions")
+	var construction:=Construction.new()
+	if not construction.configure_kappa_rescue(bindings,catalogues,seed,context):return reject(construction.error)
+	var data:={"weapon_groups":["fighter"]}
+	if not _bind_faction_weapon_effects(bindings,data):return false
+	var hulls: Array=bindings.mido_travel.kappa_rescue.population.actors.map(func(actor):return int(actor.hull_catalogue_id))
+	var equipment: Array=seed.equipment_ids.map(func(id):return {"item_id":id})
+	if not _configure(bindings,catalogues,data,construction,hulls,equipment):return false
+	_identity.merge({"campaign_cursor":context.campaign_cursor,"station_id":context.station_id,"entry_conditions":entry_conditions.duplicate(true)})
+	return true
+
 func _configure(bindings: RefCounted, catalogues: RefCounted, data: Dictionary, construction: RefCounted, hulls: Array, equipment: Array=[]) -> bool:
 	var shared: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("world_initialization",{})
 	if not Definitions.parameters(shared):return reject("Shared world initialization is unavailable in this pack")

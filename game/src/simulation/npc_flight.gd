@@ -2,6 +2,8 @@ extends RefCounted
 ## Native ordinary NPC steering and bank response in source units. A controller
 ## must explicitly select direction, speed, steering and travel permissions.
 ## No target selection, avoidance, dodge, weapons or mission state is inferred.
+const Systems=preload("res://src/simulation/ship_systems.gd")
+const Fighters=preload("res://src/content/kappa_fighters_definitions.gd")
 const Definitions = preload("res://src/content/npc_flight_definitions.gd")
 const Library = preload("res://src/content/library.gd")
 const Vitals = preload("res://src/simulation/combat_vitals.gd")
@@ -15,6 +17,8 @@ var _target_bank := 0.0
 var _history: Array = []
 var _cursor := 0
 var _wrapped := false
+var _systems_supported := false
+var _systems_statistics_pose := Transform3D.IDENTITY
 
 func configure(bindings: RefCounted, initial_pose: Variant) -> bool:
 	clear()
@@ -24,7 +28,8 @@ func configure(bindings: RefCounted, initial_pose: Variant) -> bool:
 	if not rigid_pose(initial_pose): return reject("NPC flight requires a finite unscaled initial pose")
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	_definition=data.duplicate(true)
-	_root=initial_pose
+	_systems_supported=Fighters.available(bindings)
+	_root=initial_pose;_systems_statistics_pose=initial_pose
 	_history.resize(int(data.bank_samples))
 	_history.fill(0.0)
 	return true
@@ -68,10 +73,30 @@ func advance(delta_ms: Variant, desired_direction: Variant, speed: Variant, stee
 	staged._root.origin=Vectors.added(_root.origin,Vectors.scaled(staged._root.basis.z,distance))
 	if not rigid_pose(staged._root) or not staged.banked_pose().is_finite(): return fail("NPC flight produced an unsupported pose")
 	_root=staged._root; _bank=staged._bank; _target_bank=staged._target_bank
+	_systems_statistics_pose=banked_pose()
 	_history=staged._history; _cursor=staged._cursor; _wrapped=staged._wrapped
 	var result := snapshot()
 	result.travel_units=distance
 	result.signed_turn_angle=turn_angle
+	return result
+
+func advance_with_systems(delta_ms: Variant,desired_direction: Variant,speed: Variant,steering_enabled: Variant,travel_enabled: Variant,systems: RefCounted) -> Dictionary:
+	error=""
+	if not _systems_supported or not systems is Systems:return fail("Systems-aware motion requires supported live ship systems")
+	var state: Dictionary=systems.snapshot()
+	for key in ["base_content_id","binding_id"]:
+		if state.get(key)!=_identity.get(key):return fail("Ship systems belong to different flight content")
+	var retained_root:=_root;var retained_statistics:=_systems_statistics_pose
+	var result:=advance(delta_ms,desired_direction,speed,steering_enabled,travel_enabled)
+	if result.is_empty():return result
+	if not state.disabled:
+		result.statistics_pose=_systems_statistics_pose
+		return result
+	# Banking/turn history still update. The disabled actor skips committing its
+	# root rotation and translation; its local bank transform remains animated.
+	_root=retained_root;_systems_statistics_pose=retained_statistics
+	result.merge(snapshot(),true);result.travel_units=0.0
+	result.statistics_pose=retained_statistics
 	return result
 
 func record_turn(angle: float) -> void:
@@ -128,6 +153,7 @@ func fork_for_frame() -> RefCounted:
 	staged._identity=_identity.duplicate(); staged._definition=_definition.duplicate(true)
 	staged._root=_root; staged._bank=_bank; staged._target_bank=_target_bank
 	staged._history=_history.duplicate(); staged._cursor=_cursor; staged._wrapped=_wrapped
+	staged._systems_supported=_systems_supported;staged._systems_statistics_pose=_systems_statistics_pose
 	return staged
 
 static func rigid_pose(value: Variant) -> bool:
@@ -137,7 +163,7 @@ static func rigid_pose(value: Variant) -> bool:
 
 func clear() -> void:
 	error=""; _identity={}; _definition={}; _root=Transform3D.IDENTITY
-	_bank=0.0; _target_bank=0.0; _history=[]; _cursor=0; _wrapped=false
+	_bank=0.0; _target_bank=0.0; _history=[]; _cursor=0; _wrapped=false; _systems_supported=false; _systems_statistics_pose=Transform3D.IDENTITY
 
 func reject(message: String) -> bool:
 	error=message

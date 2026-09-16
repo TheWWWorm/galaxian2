@@ -32,12 +32,17 @@ const Vitals = preload("res://src/simulation/combat_vitals.gd")
 const Convoy = preload("res://src/content/convoy_world_definitions.gd")
 const ConvoyShip = preload("res://src/content/convoy_ship_definitions.gd")
 const ConvoyCapture = preload("res://src/simulation/convoy_capture.gd")
+const Kappa = preload("res://src/content/kappa_population_definitions.gd")
+const KappaFighters = preload("res://src/content/kappa_fighters_definitions.gd")
+const KappaRescue = preload("res://src/simulation/kappa_rescue.gd")
+const ShipSystems = preload("res://src/simulation/ship_systems.gd")
 const Alioth = preload("res://src/content/alioth_population_definitions.gd")
 const AliothAttack = preload("res://src/simulation/alioth_attack.gd")
 var error := ""
 var _initial_training_death := false
 var _state := {}
 var _vitals: RefCounted
+var _systems: RefCounted
 var _hostility := {}
 var _hull_percentage_scale := 0.0
 
@@ -46,6 +51,7 @@ func clear() -> void:
 	error = ""
 	_state = {}
 	_vitals = null
+	_systems = null
 	_hostility = {}
 	_hull_percentage_scale = 0.0
 
@@ -240,6 +246,69 @@ func enable_convoy_combat() -> bool:
 	if not _state.get("convoy",false):return reject("Convoy combat requires its generated body")
 	_state.local_combat=true;_state.forced_hostile=false
 	return true
+
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction or catalogues==null:return reject("Kappa bodies require their generated rescue population")
+	var packet: Dictionary=construction.snapshot()
+	var data:=Kappa.population(bindings,packet)
+	if data.is_empty() or catalogues.content_id!=bindings.base_content_id or not actor_id is int or actor_id<0 or actor_id>=data.actor_count:return reject("Unsupported Kappa body identity or context")
+	var row: Dictionary=packet.actors[actor_id]
+	var model: String=bindings.resolve_ship_model(row.hull_catalogue_id)
+	if model.is_empty():return reject(bindings.error)
+	var base: int=int(data.rank_base)+int(data.rank_multiplier)*int(data.rank)+int(data.cursor_multiplier)*int(data.campaign_cursor)
+	var hull:=scaled_hull(float(base),float(data.difficulty),float(data.difficulty_offset))
+	var rules:=KappaFighters.systems(bindings,int(data.rank))
+	var systems:=ShipSystems.new()
+	if rules.is_empty() or not systems.configure(bindings,rules.capacity,rules.recovery_ms):return reject("Kappa systems initialization is unavailable")
+	var initial:={"actor_id":actor_id,"actor_kind":row.actor_kind,"hull_catalogue_id":row.hull_catalogue_id,"hull_resource":model,"position":row.statistics_pose.origin,"current_hull":hull}
+	var policy:={"initial_hostile":row.script_hostile,"updated_hostile":row.script_hostile}
+	if not _initialize_body(bindings,bindings.opening_actors.npc_initialization,initial,float(data.difficulty),hull,float(data.percentage_scale),policy):return false
+	_systems=systems
+	_state.merge({"campaign_cursor":int(data.campaign_cursor),"station_id":int(data.station_id),"rank":int(data.rank),"kappa_rescue":true,
+		"population_group":"fighter","subtype":row.subtype,"friendly":false,"permanent_friendly":row.permanent_friendly,"scenery":false,
+		"script_hostile":row.script_hostile,"systems_disabled":false,"actor_mode":row.mode,"active":row.active,
+		"targeting_blocked":bool(data.initial_actor_targeting_blocked),"statistics_targeting_blocked":bool(data.npc_statistics_targeting_blocked),
+		"spatial_half_extent":int(data.engagement_half_extent),"model_draw_enabled":bool(data.initial_model_draw_enabled),
+		"node_draw_requested":bool(data.initial_node_draw_requested),"engine_draw_enabled":bool(data.initial_engine_draw_enabled)},true)
+	if row.has("name_text_id"):_state.name_text_id=row.name_text_id
+	return set_pose(row.statistics_pose,row.body_pose)
+
+func apply_kappa_guidance(decision: Dictionary) -> bool:
+	if not _state.get("kappa_rescue",false):return reject("Kappa guidance requires its generated fighter")
+	return _apply_guidance_activity(decision,true)
+
+func apply_kappa_hostile_cue(owner: RefCounted) -> bool:
+	if not _state.get("kappa_rescue",false) or not owner is KappaRescue:return reject("Kappa hostility requires its rescue sequence")
+	var sequence: Dictionary=owner.snapshot()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if sequence.get(key)!=_state[key]:return reject("Kappa hostility belongs to another encounter")
+	if sequence.force_hostile_actor_ids.has(_state.actor_id):
+		_state.script_hostile=true;_state.hostile=true;_state.friendly=false
+		_hostility.updated_hostile=true
+	return true
+
+func systems_hit(amount: Variant) -> Dictionary:
+	# This is the damage-pool transaction. The encounter stages faction reactions
+	# separately before committing a frame, just as for ordinary hull hits.
+	error=""
+	if _systems==null:return fail_hit("This actor has no supported systems pool")
+	var result: Dictionary=_systems.hit(amount,_vitals.snapshot().hull,_state.active,_state.damage_allowed)
+	if result.is_empty():return fail_hit(_systems.error)
+	return result
+
+func advance_systems(delta_ms: Variant) -> bool:
+	error=""
+	if _systems==null or not Vitals.integer(delta_ms):return reject("This actor has no supported systems recovery frame")
+	if _state.actor_mode in [3,4]:return true
+	if not _systems.advance(delta_ms):return reject(_systems.error)
+	# Radio reads the NPC projection, updated during the actor pass. A pulse
+	# changes statistics first; it must not fabricate an earlier radio event.
+	_state.systems_disabled=bool(_systems.snapshot().disabled)
+	return true
+
+func systems_for_frame() -> RefCounted:
+	return null if _systems==null else _systems.fork()
 
 func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
 	clear()
@@ -572,6 +641,7 @@ func snapshot() -> Dictionary:
 	if _state.is_empty(): return {}
 	var result := _state.duplicate(true)
 	result.vitals = _vitals.snapshot()
+	if _systems!=null:result.systems=_systems.snapshot()
 	if _state.has("max_hull"):
 		var fraction := Vitals.single(Vitals.single(float(result.vitals.hull))/Vitals.single(float(result.max_hull)))
 		result.hull_percent=int(Vitals.single(fraction*_hull_percentage_scale))
@@ -606,7 +676,7 @@ func apply_scene(scene: Variant) -> bool:
 func set_pose(pose: Variant, physical_pose: Variant=null) -> bool:
 	error = ""
 	if _state.is_empty() or not pose is Transform3D or not pose.is_finite(): return reject("Actor pose requires a configured body and finite transform")
-	if physical_pose!=null and ((_state.get("campaign_cursor") not in [4,7,10] and not _state.get("ambient_traffic",false) and not _state.get("contract_ship",false) and not _state.get("contract_debris",false) and not _state.get("convoy",false) and not _state.get("alioth_attack",false)) or not Flight.rigid_pose(physical_pose)):return reject("Separate physical motion requires a supported finite flight root")
+	if physical_pose!=null and ((_state.get("campaign_cursor") not in [4,7,10] and not _state.get("ambient_traffic",false) and not _state.get("contract_ship",false) and not _state.get("contract_debris",false) and not _state.get("convoy",false) and not _state.get("alioth_attack",false) and not _state.get("kappa_rescue",false)) or not Flight.rigid_pose(physical_pose)):return reject("Separate physical motion requires a supported finite flight root")
 	# The actor's source-space transform is also the collision-center authority.
 	var source_pose: Transform3D = pose
 	for axis in 3:
@@ -770,6 +840,7 @@ func _apply_guidance_activity(decision: Dictionary, training: bool=false) -> boo
 		if not dormant or decision.holding!=(activation=="target"):return reject("Second-trip activation has the wrong dispatch timing")
 	elif decision.holding!=dormant or (not dormant and not initializing and _state.get("actor_mode")!=1):return reject("Second-trip activity disagrees with its living mode")
 	var request: bool=not decision.holding or not activation.is_empty()
+	if _state.get("kappa_rescue",false) and dormant and not _state.hostile and activation.is_empty():request=bool(_state.node_draw_requested)
 	if not decision.get("node_draw_requested") is bool or decision.node_draw_requested!=request:return reject("Second-trip model request disagrees with its source activity")
 	if not activation.is_empty() or initializing:_state.active=true;_state.actor_mode=1
 	_state.node_draw_requested=request
@@ -795,6 +866,7 @@ func fork_for_frame() -> RefCounted:
 	copy._initial_training_death=_initial_training_death
 	copy._hostility = _hostility.duplicate(true)
 	copy._hull_percentage_scale = _hull_percentage_scale
+	if _systems!=null:copy._systems=_systems.fork()
 	if _vitals != null:
 		var pools: Dictionary = _vitals.snapshot()
 		copy._vitals = Vitals.new()

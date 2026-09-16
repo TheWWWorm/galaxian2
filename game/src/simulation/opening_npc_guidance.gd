@@ -1,4 +1,5 @@
 extends RefCounted
+const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 const AliothSequence=preload("res://src/simulation/alioth_attack.gd")
 ## Decisions for verified ordinary NPC target lists. Produces pre-motion
@@ -213,17 +214,7 @@ func configure_convoy(bindings: RefCounted,catalogues: RefCounted,construction: 
 	if rules.is_empty():return reject("Unsupported convoy ship guidance")
 	var actor:=Initial.new()
 	if not actor.configure_convoy(bindings,catalogues,construction,actor_id):return reject(actor.error)
-	var body:=actor.snapshot()
-	if body.population_group!="fighter":return reject("Capital ships require their own motion owner")
-	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
-	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Convoy guidance lacks ordinary ship tuning")
-	_training=rules;_training_death=rules
-	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=int(rules.rank)
-	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
-	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
-	if not set_initial_route(construction.route(actor_id)):
-		var message:=error;clear();return reject(message)
-	return true
+	return _configure_fighter_guidance(bindings,rules,actor.snapshot(),construction.route(actor_id))
 
 func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
 	clear()
@@ -232,17 +223,29 @@ func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,constru
 	if rules.is_empty():return reject("Unsupported Alioth ship guidance")
 	var actor:=Initial.new()
 	if not actor.configure_alioth_attack(bindings,catalogues,construction,actor_id):return reject(actor.error)
-	var body:=actor.snapshot()
-	if body.population_group!="fighter":return reject("Freighters require their own motion owner")
+	if not _configure_fighter_guidance(bindings,rules,actor.snapshot(),construction.route(actor_id)):return false
+	_boost_enabled=bool(rules.alioth_lifecycle.boost_enabled)
+	_state.alioth_targets_cleared=false
+	return true
+
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
+	clear()
+	if not construction is NPCConstruction:return reject("Kappa guidance requires its generated rescue")
+	var rules:=Kappa.guidance(bindings,construction.snapshot())
+	if rules.is_empty():return reject("Unsupported Kappa fighter guidance")
+	var actor:=Initial.new()
+	if not actor.configure_kappa_rescue(bindings,catalogues,construction,actor_id):return reject(actor.error)
+	return _configure_fighter_guidance(bindings,rules,actor.snapshot(),construction.route(actor_id))
+
+func _configure_fighter_guidance(bindings: RefCounted,rules: Dictionary,body: Dictionary,route: RefCounted) -> bool:
+	if body.population_group!="fighter":return reject("Large ships require their own motion owner")
 	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
-	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Alioth guidance lacks ordinary ship tuning")
+	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Fighter guidance lacks ordinary ship tuning")
 	_training=rules;_training_death=rules
 	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=int(rules.rank)
 	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
-	_boost_enabled=bool(rules.alioth_lifecycle.boost_enabled)
-	_state.alioth_targets_cleared=false
 	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
-	if not set_initial_route(construction.route(actor_id)):
+	if not set_initial_route(route):
 		var message:=error;clear();return reject(message)
 	return true
 
@@ -349,12 +352,12 @@ func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Di
 		next.target_selected=true
 		if not _training.is_empty():
 			next.target_index=0;next.desired_position=player.pose.origin;target=targets[0]
-		if actor.get("hostile")!=true:return fail("Second-trip holding requires its source hostility")
+		if actor.get("hostile")!=true and not _training.get("kappa_rescue",false):return fail("Second-trip holding requires its source hostility")
 		if player.alternate_position!=null:
 			steering_separation=Vectors.added(player.alternate_position,-root_pose.origin)
 			if not steering_separation.is_finite():return fail("Alternate player separation exceeds source precision")
 		var activation_rules: Dictionary=_training if not _training.is_empty() else _pirate
-		if inside(steering_separation,float(activation_rules.proximity_half_extent)):
+		if actor.get("hostile")==true and inside(steering_separation,float(activation_rules.proximity_half_extent)):
 			activation="proximity";held=false
 		elif not player.targeting_blocked and inside(steering_separation,float(activation_rules.target_activation_half_extent)):
 			activation="target"
@@ -374,6 +377,7 @@ func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Di
 		if not _full_hold.is_empty() or not _training.is_empty():
 			held_result.activation=activation
 			held_result.node_draw_requested=not activation.is_empty()
+			if _training.get("kappa_rescue",false) and not actor.hostile and activation.is_empty():held_result.node_draw_requested=bool(actor.node_draw_requested)
 		if not _training.is_empty():held_result.initializing=false;held_result.target_actor_id=-1
 		_state=next
 		_started=true

@@ -22,6 +22,7 @@ const Random = preload("res://src/simulation/seeded_random.gd")
 const Loadout = preload("res://src/simulation/opening_loadout.gd")
 const Vitals = preload("res://src/simulation/combat_vitals.gd")
 const Convoy = preload("res://src/content/convoy_world_definitions.gd")
+const Kappa = preload("res://src/content/kappa_population_definitions.gd")
 const Alioth = preload("res://src/content/alioth_attack_definitions.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Vectors = preload("res://src/simulation/source_vectors.gd")
@@ -43,6 +44,7 @@ var _traffic_sample := {}
 var _authored_route: RefCounted
 var _convoy:={}
 var _alioth:={}
+var _kappa:={}
 
 func configure(bindings: RefCounted, catalogues: RefCounted) -> bool:
 	clear()
@@ -262,13 +264,28 @@ func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,seed: D
 	data.context=context.duplicate(true);data.player_position=player_position
 	return _configure(bindings,catalogues,seed,{},{},{},{},{},{},data)
 
-func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, arrival: Dictionary, full_hold: Dictionary={}, training: Dictionary={}, traffic: Dictionary={}, contract: Dictionary={}, convoy: Dictionary={}, alioth: Dictionary={}) -> bool:
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,seed: Dictionary,context: Dictionary) -> bool:
+	clear()
+	if not Kappa.context_valid(bindings,context) or catalogues==null:return reject("Kappa construction requires its original rescue context")
+	for key in ["base_content_id","binding_id","station_id","system_id"]:
+		if seed.get(key)!=context[key]:return reject("Kappa loadout belongs to another content identity or location")
+	if catalogues.content_id!=bindings.base_content_id or seed.get("ship_id")!=0:return reject("Kappa construction requires the retained starter ship")
+	var ids: Variant=seed.get("equipment_ids")
+	if not ids is Array or ids.any(func(id):return not Numbers.integer(id,0,catalogues.tables.items.size()-1)):return reject("Kappa construction requires installed catalogue equipment")
+	var data: Dictionary=bindings.mido_travel.kappa_rescue.population.duplicate(true)
+	for row in data.actors:
+		if bindings.resolve_ship_model(int(row.hull_catalogue_id)).is_empty():return reject(bindings.error)
+	data.context=context.duplicate(true)
+	data.permanent_friendly=bool(bindings.mido_travel.kappa_fighters.initial_permanent_friendly)
+	return _configure(bindings,catalogues,seed,{},{},{},{},{},{},{},data)
+
+func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, arrival: Dictionary, full_hold: Dictionary={}, training: Dictionary={}, traffic: Dictionary={}, contract: Dictionary={}, convoy: Dictionary={}, alioth: Dictionary={}, kappa: Dictionary={}) -> bool:
 	var data: Variant = bindings.opening_actors.get("npc_initialization",{}).get("construction",{})
 	if not Definitions.parameters(data): return reject("NPC construction is unavailable in this pack")
 	if bindings.resolve(int(data.fragment_resource),"mesh").is_empty(): return reject(bindings.error)
 	var expected_ship:=10 if full_hold.is_empty() else 0
 	var expected_equipment: Array=[2,2,36,54,59,82,73] if full_hold.is_empty() else [90,81]
-	if not traffic.has("free_context") and alioth.is_empty() and convoy.is_empty() and contract.is_empty() and ((training.is_empty() and traffic.is_empty() and (seed.ship_id!=expected_ship or seed.equipment_ids!=expected_equipment)) or ((not training.is_empty() or not traffic.is_empty()) and seed.ship_id!=0) or seed.station_id!=(int(traffic.station_id) if not traffic.is_empty() else 78)):
+	if kappa.is_empty() and not traffic.has("free_context") and alioth.is_empty() and convoy.is_empty() and contract.is_empty() and ((training.is_empty() and traffic.is_empty() and (seed.ship_id!=expected_ship or seed.equipment_ids!=expected_equipment)) or ((not training.is_empty() or not traffic.is_empty()) and seed.ship_id!=0) or seed.station_id!=(int(traffic.station_id) if not traffic.is_empty() else 78)):
 		return reject("NPC construction requires its supported retained loadout")
 	var items: Variant = catalogues.tables.get("items")
 	if not items is Array or items.size()!=233: return reject("Unsupported NPC cargo catalogue")
@@ -302,6 +319,7 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, 
 	if not contract.is_empty():count=0 if int(contract.context.mission.kind)==7 else int(contract.actor_count)
 	if not convoy.is_empty():count=int(convoy.actor_count)
 	if not alioth.is_empty():count=int(alioth.actor_count)
+	if not kappa.is_empty():count=int(kappa.actor_count)
 	if traffic.has("free_context"):count=FreePopulation.maximum_actor_count(bindings,int(traffic.free_context.rank),float(traffic.free_context.difficulty),traffic.free_context)
 	elif traffic.get("ambient",false):count=AmbientDefinitions.maximum_actor_count(bindings.ambient_population,traffic)
 	for id in count:
@@ -309,7 +327,8 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, 
 		if not convoy.is_empty() and int(convoy.actors[id].subtype)!=0:routes.append(null);continue
 		var route := Route.new()
 		var ready: bool
-		if not alioth.is_empty():ready=route.configure_alioth_generated(bindings,id)
+		if not kappa.is_empty():ready=route.configure_kappa_generated(bindings,id)
+		elif not alioth.is_empty():ready=route.configure_alioth_generated(bindings,id)
 		elif not convoy.is_empty():ready=route.configure_convoy_generated(bindings,id)
 		elif not contract.is_empty():ready=route.configure_contract_generated(bindings,id,int(contract.context.campaign_cursor))
 		elif traffic.has("free_context"):ready=route.configure_free_generated(bindings,id,traffic.free_context)
@@ -322,6 +341,10 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, 
 		if not ready: return reject(route.error)
 		routes.append(route)
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
+	if not kappa.is_empty():
+		_identity.campaign_cursor=int(kappa.context.campaign_cursor)
+		_identity.station_id=int(kappa.context.station_id)
+		_kappa=kappa.duplicate(true)
 	if not alioth.is_empty():
 		_identity.campaign_cursor=int(alioth.context.campaign_cursor)
 		_identity.station_id=int(alioth.context.station_id)
@@ -362,6 +385,7 @@ func generate(random_state: Variant) -> Dictionary:
 	if _identity.is_empty() or not _actors.is_empty() or _generated: return fail("Configure fresh NPC construction before generating once")
 	var random := Random.new()
 	if not random.restore(random_state): return fail(random.error)
+	if not _kappa.is_empty():return _generate_kappa(random)
 	if not _alioth.is_empty():return _generate_alioth(random)
 	if not _convoy.is_empty():return _generate_convoy(random)
 	if not _contract.is_empty():return _generate_contract(random)
@@ -507,6 +531,34 @@ func _generate_convoy(random: RefCounted) -> Dictionary:
 		actor.population_group="capital" if capital else "fighter"
 		actor.body_pose=Transform3D(Basis.IDENTITY,position);actor.statistics_pose=actor.body_pose;actor.model_local_pose=Transform3D.IDENTITY
 		actors.append(actor);routes.append(sampled.route)
+	_actors=actors;_routes=routes;_random_state=random.snapshot();_generated=true
+	return snapshot()
+
+func _generate_kappa(random: RefCounted) -> Dictionary:
+	var actors:=[];var routes:=[]
+	actors.resize(int(_kappa.actor_count));routes.resize(int(_kappa.actor_count))
+	# The mission constructs escorts before actor0, then the shared world builds
+	# weapons in actor-list order. Generated cargo, patrol and fragments still
+	# consume the factory stream before the authored route replaces the patrol.
+	for value in _kappa.construction_order:
+		var id:=int(value);var source: Dictionary=_kappa.actors[id]
+		var waypoint:=Kappa.vec(_kappa.waypoints[int(source.waypoint_index)])
+		var sampled:=_sample_actor(id,waypoint,random)
+		if sampled.is_empty():return {}
+		var actor: Dictionary=sampled.actor;var route: RefCounted=sampled.route
+		if not route.replace_with_kappa_patrol():return fail(route.error)
+		var position: Vector3=actor.factory_position
+		if id==int(_kappa.target_actor_id):
+			position=Vectors.added(waypoint,Kappa.vec(_kappa.target_position_offset))
+			actor.name_text_id=int(_kappa.target_name_text_id)
+		for key in ["actor_kind","subtype","hull_catalogue_id"]:actor[key]=int(source[key])
+		actor.population_group="fighter";actor.cargo=actor.discarded_cargo;actor.discarded_cargo=[]
+		actor.discarded_route=actor.route;actor.route=route.snapshot()
+		actor.script_hostile=bool(source.initial_hostile);actor.permanent_friendly=_kappa.permanent_friendly
+		actor.mode=int(_kappa.initial_actor_mode);actor.active=bool(_kappa.initial_active)
+		actor.body_pose=Transform3D(Basis.from_euler(Vector3(0,float(_kappa.actor_yaw),0),EULER_ORDER_XYZ),position)
+		actor.statistics_pose=actor.body_pose;actor.model_local_pose=Transform3D.IDENTITY
+		actors[id]=actor;routes[id]=route
 	_actors=actors;_routes=routes;_random_state=random.snapshot();_generated=true
 	return snapshot()
 
@@ -734,6 +786,7 @@ func snapshot() -> Dictionary:
 	if not _contract_layout.is_empty():value.contract_encounter=_contract_layout.duplicate(true)
 	if not _convoy.is_empty():value.convoy_context=_convoy.context.duplicate(true)
 	if not _alioth.is_empty():value.alioth_context=_alioth.context.duplicate(true)
+	if not _kappa.is_empty():value.kappa_context=_kappa.context.duplicate(true)
 	if _traffic.has("free_context"):
 		value.free_context=_traffic.free_context.duplicate(true);value.player_ship_id=int(_traffic.free_player_ship_id)
 		value.station_id=int(_traffic.station_id)
@@ -741,7 +794,7 @@ func snapshot() -> Dictionary:
 
 func clear() -> void:
 	error="";_identity={};_definition={};_items=[];_routes=[];_actors=[];_random_state={};_arrival={};_full_hold={};_training={};_traffic={};_traffic_sample={};_authored_route=null;_ambient={};_free={};_population_owner=null
-	_contract={};_contract_layout={};_generated=false;_convoy={};_alioth={}
+	_contract={};_contract_layout={};_generated=false;_convoy={};_alioth={};_kappa={}
 
 var _contract:={}
 var _contract_layout:={}

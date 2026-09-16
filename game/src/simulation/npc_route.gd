@@ -9,6 +9,7 @@ const Training = preload("res://src/content/combat_training_definitions.gd")
 const Travel = preload("res://src/content/mido_travel_definitions.gd")
 const Contracts = preload("res://src/content/early_contract_definitions.gd")
 const Convoy = preload("res://src/content/convoy_world_definitions.gd")
+const Kappa = preload("res://src/content/kappa_rescue_definitions.gd")
 const Alioth = preload("res://src/content/alioth_attack_definitions.gd")
 const AliothSequence = preload("res://src/simulation/alioth_attack.gd")
 const Random = preload("res://src/simulation/seeded_random.gd")
@@ -23,6 +24,7 @@ var _index := 0
 var _loop := true
 var _authored := false
 var _ambient_restart := false
+var _kappa_patrol := {}
 
 func configure(bindings: RefCounted, actor_id: Variant) -> bool:
 	clear()
@@ -147,6 +149,33 @@ func configure_alioth_generated(bindings: RefCounted,actor_id: int) -> bool:
 	_identity.campaign_cursor=int(bindings.mido_travel.alioth_attack.campaign_cursor)
 	return true
 
+func configure_kappa_generated(bindings: RefCounted,actor_id: int) -> bool:
+	clear()
+	if not Kappa.available(bindings) or actor_id<0 or actor_id>=int(bindings.mido_travel.kappa_rescue.population.actor_count):return reject("Unknown Kappa fighter route")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated fighter routes are unavailable")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=int(bindings.mido_travel.kappa_rescue.campaign_cursor)
+	var population: Dictionary=bindings.mido_travel.kappa_rescue.population
+	var point: Array=population.waypoints[int(population.actors[actor_id].waypoint_index)]
+	_kappa_patrol={"point":Vector3(point[0],point[1],point[2]),"index":int(population.route_initial_index),"loop":bool(population.actor_route_loop)}
+	return true
+
+func replace_with_kappa_patrol() -> bool:
+	error=""
+	if _kappa_patrol.is_empty() or _points.is_empty() or _authored:return reject("Generate a Kappa fighter route before assigning its patrol")
+	_points=[_kappa_patrol.point];_candidates=[]
+	_index=_kappa_patrol.index;_loop=_kappa_patrol.loop;_authored=true
+	return true
+
+func configure_kappa_player(bindings: RefCounted) -> bool:
+	if not configure_kappa_generated(bindings,0):return false
+	var data: Dictionary=bindings.mido_travel.kappa_rescue.population
+	_points=data.waypoints.map(func(point):return Vector3(point[0],point[1],point[2]))
+	_index=int(data.route_initial_index);_loop=bool(data.route_loop);_authored=true
+	_identity.erase("actor_id");_identity.owner="player"
+	return true
+
 func replace_with_contract_path(points: Array) -> bool:
 	error=""
 	if _identity.get("campaign_cursor") not in [13,14] or _points.is_empty() or _authored or points.size()<3 or points.size()>4:return reject("Generate the rival route before replacing it with the mission path")
@@ -258,10 +287,11 @@ func fork_for_frame() -> RefCounted:
 	copy._points=_points.duplicate();copy._candidates=_candidates.duplicate();copy._index=_index
 	copy._loop=_loop;copy._authored=_authored
 	copy._ambient_restart=_ambient_restart
+	copy._kappa_patrol=_kappa_patrol.duplicate(true)
 	return copy
 
 func clear() -> void:
-	error="";_identity={};_definition={};_points=[];_candidates=[];_index=0;_loop=true;_authored=false;_ambient_restart=false
+	error="";_identity={};_definition={};_points=[];_candidates=[];_index=0;_loop=true;_authored=false;_ambient_restart=false;_kappa_patrol={}
 
 func reject(message: String) -> bool:
 	error=message

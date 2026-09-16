@@ -20,6 +20,7 @@ const Construction=preload("res://src/simulation/opening_npc_construction.gd")
 const ContractCombat=preload("res://src/content/contract_ship_combat_definitions.gd")
 const Junk=preload("res://src/content/contract_junk_definitions.gd")
 const Convoy=preload("res://src/content/convoy_world_definitions.gd")
+const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 const AliothSequence=preload("res://src/simulation/alioth_attack.gd")
 var error := ""
@@ -129,20 +130,24 @@ func configure_contract(bindings: RefCounted,catalogues: RefCounted,construction
 func configure_convoy(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted) -> bool:
 	clear()
 	if not _matching_content(bindings,catalogues) or not construction is Construction:return reject("Convoy weapons require their generated population")
-	var data:=Convoy.population(bindings,construction.snapshot())
-	if data.is_empty():return reject("This population has no supported convoy weapons")
-	if not _configure_rows(bindings,catalogues,data.npc_weapons,int(data.campaign_cursor)):return false
-	_identity.campaign_cursor=int(data.campaign_cursor);_training=data
-	return true
+	return _configure_encounter_weapons(bindings,catalogues,Convoy.population(bindings,construction.snapshot()))
 
 func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted) -> bool:
 	clear()
 	if not _matching_content(bindings,catalogues) or not construction is Construction:return reject("Alioth weapons require their generated original population")
-	var data:=Alioth.combat(bindings,construction.snapshot())
-	if data.is_empty():return reject("This population has no supported Alioth weapons")
+	if not _configure_encounter_weapons(bindings,catalogues,Alioth.combat(bindings,construction.snapshot())):return false
+	_alioth_revision=0
+	return true
+
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted) -> bool:
+	clear()
+	if not _matching_content(bindings,catalogues) or not construction is Construction:return reject("Kappa weapons require their generated rescue population")
+	return _configure_encounter_weapons(bindings,catalogues,Kappa.combat(bindings,construction.snapshot()))
+
+func _configure_encounter_weapons(bindings: RefCounted,catalogues: RefCounted,data: Dictionary) -> bool:
+	if data.is_empty():return reject("This population has no supported encounter weapons")
 	if not _configure_rows(bindings,catalogues,data.npc_weapons,int(data.campaign_cursor)):return false
 	_identity.campaign_cursor=int(data.campaign_cursor);_training=data
-	_alioth_revision=0
 	return true
 
 func apply_alioth_sequence(owner: RefCounted) -> bool:
@@ -195,7 +200,7 @@ func _resolve_weapon(bindings: RefCounted, catalogues: RefCounted, data: Diction
 		var properties: Dictionary=items[int(data.item_id)].get("properties",{})
 		var extra: Variant=properties.get(int(policy.get("additional_damage_property",-1)),int(policy.get("missing_additional_damage",0)))
 		if extra!=int(policy.get("missing_additional_damage",0)) or policy.is_empty():return fail("NPC weapon requires unsupported additional damage")
-		if cursor not in [7,10,11,12,13,14,16,18,19]:return fail("NPC contacts require an explicit supported encounter")
+		if cursor not in [7,10,11,12,13,14,16,18,19,21]:return fail("NPC contacts require an explicit supported encounter")
 		weapon.campaign_cursor=cursor
 		weapon.nonplayer_source=bool(data.nonplayer_source)
 		weapon.ordinary_hit_policy={"additional_damage":int(extra),"additional_damage_required":false,"nonplayer_damage":weapon.damage}
