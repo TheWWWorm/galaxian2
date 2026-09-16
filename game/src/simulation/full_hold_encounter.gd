@@ -102,7 +102,7 @@ func configure_free(bindings: RefCounted,catalogues: RefCounted,library: RefCoun
 	var career: RefCounted=construction.contract_owner()
 	var context: Dictionary=career.free_flight_context(bindings,int(state.station_id))
 	if context.is_empty():return reject(career.error)
-	if not _configure_equipped(bindings,catalogues,library,construction.player_owner(),construction.scenery_owner(),state.rank,state.difficulty,18,construction.equipment_owner(),state.reputation):return false
+	if not _configure_equipped(bindings,catalogues,library,construction.player_owner(),construction.scenery_owner(),state.rank,state.difficulty,state.campaign_cursor,construction.equipment_owner(),state.reputation):return false
 	_contract_context=context
 	return true
 
@@ -132,7 +132,7 @@ func _configure_equipped(bindings: RefCounted, catalogues: RefCounted, library: 
 	var freight_resources: RefCounted
 	var contract_world: bool=ContractWorld.supports(bindings,cursor) and world.snapshot().has("contract_context")
 	var contract_mission: Dictionary=world.snapshot().get("contract_context",{}).get("mission",{})
-	var ambient: bool=cursor==18 or (contract_world and contract_mission.is_empty()) or (cursor in [11,12] and world.snapshot().station_id==int(Travel.journey(bindings.mido_travel,cursor).from_station_id))
+	var ambient: bool=load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) or (contract_world and contract_mission.is_empty()) or (cursor in [11,12] and world.snapshot().station_id==int(Travel.journey(bindings.mido_travel,cursor).from_station_id))
 	if cursor==16:
 		var population: RefCounted=world.npc_construction_owner()
 		freight_resources=FreightResources.new()
@@ -147,7 +147,7 @@ func _configure_equipped(bindings: RefCounted, catalogues: RefCounted, library: 
 		var population: RefCounted=world.npc_construction_owner()
 		if population==null:return reject("The mixed encounter requires its retained generated actors")
 		freight_resources=FreightResources.new()
-		var ready: bool=resources.configure_free(library,bindings,population) and freight_resources.configure_free(library,bindings,population) if cursor==18 else resources.configure_ambient(library,bindings,cursor) and freight_resources.configure(library,bindings,cursor)
+		var ready: bool=resources.configure_free(library,bindings,population) and freight_resources.configure_free(library,bindings,population) if load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) else resources.configure_ambient(library,bindings,cursor) and freight_resources.configure(library,bindings,cursor)
 		if not ready:return reject(resources.error+freight_resources.error)
 		if not control.configure_ambient(bindings,catalogues,population,rank,difficulty,equipment,reputation):return reject(control.error)
 		if not weapons.configure_ambient(bindings,catalogues,population,rank,difficulty):return reject(weapons.error)
@@ -168,7 +168,7 @@ func _configure_equipped(bindings: RefCounted, catalogues: RefCounted, library: 
 	var mounts:=Mounts.new();var primaries:=Primaries.new();var inventory:=Inventory.new()
 	if not mounts.open(library,catalogues):return reject(mounts.error)
 	if not primaries.configure(bindings,catalogues,mounts,player.loadout()):return reject(primaries.error)
-	var targets:=inventory.configure_local_travel(bindings,catalogues,player,scenery,cursor) if cursor in [10,11,12,13,14,16,18] else inventory.configure_combat_training(bindings,catalogues,player,scenery)
+	var targets:=inventory.configure_local_travel(bindings,catalogues,player,scenery,cursor) if cursor in [10,11,12,13,14,16,18,19] else inventory.configure_combat_training(bindings,catalogues,player,scenery)
 	if not targets:return reject(inventory.error)
 	var identity:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":cursor}
 	if not _accept_configuration(bindings,library,identity,control,control.combat_owner(),weapons,resources,primaries,inventory,scenery.presentation_identity()):return false
@@ -228,6 +228,14 @@ func finish_contract_session(session: RefCounted) -> RefCounted:
 	if result==null:reject(session.error)
 	return result
 
+func acknowledge_campaign_visit(bindings: RefCounted,session: RefCounted,visit: RefCounted) -> RefCounted:
+	error=""
+	if _contract_context.is_empty() or not is_instance_of(session,load("res://src/simulation/contract_session.gd")):reject("The encounter has no retained campaign career");return null
+	var control: RefCounted=_control.fork_for_frame();control._combat=_combat.fork_for_frame()
+	var result: RefCounted=session.acknowledge_campaign_visit(bindings,control,visit)
+	if result==null:reject(session.error)
+	return result
+
 func evaluate_weapons(player: RefCounted, pose: Transform3D, milliseconds: int, scenery: RefCounted=null, shared_random_state: Variant=null, display_available:=true) -> Dictionary:
 	error=""
 	if _control==null or not Numbers.integer(milliseconds,0,150) or target(player,pose).is_empty():return fail("Invalid encounter weapon frame")
@@ -263,7 +271,7 @@ func evaluate_world_logic(milliseconds: int, random_state: Dictionary) -> Dictio
 	var random:=Random.new()
 	if not random.restore(random_state):return fail(random.error)
 	var next:=fork_for_frame()
-	if _identity.campaign_cursor in [11,12,13,14,18] and _control.snapshot().has("traffic_clock"):
+	if _identity.campaign_cursor in [11,12,13,14,18,19] and _control.snapshot().has("traffic_clock"):
 		var result: Dictionary=_control.evaluate_ambient_world_logic(milliseconds,_combat,random_state)
 		if result.is_empty():return fail(_control.error)
 		next._control=result.controller;next._combat=result.combat

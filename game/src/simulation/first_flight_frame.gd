@@ -163,7 +163,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 	if encounter!=null and not bindings.player_destruction.is_empty():
 		death=Death.new()
 		var resources: RefCounted=encounter.destruction_resources()
-		if entry.campaign_cursor in [13,14,16,18]:
+		if entry.campaign_cursor in [13,14,16,18,19]:
 			resources=DeathResources.new()
 			if not resources.configure(library,bindings):return reject(resources.error)
 		if not death.configure(bindings,resources,construction,catalogues):return reject(death.error)
@@ -212,7 +212,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 		var strip:=ScanAnimation.source_geometry(library,bindings,bindings.opening_staging.npc_scanner)
 		if art.has("error") or strip.has("error"):return reject("Training NPC acquisition art is unavailable")
 		scanner=Scanner.new()
-		if not scanner.configure(bindings,catalogues,TargetFrame.logical_radii(art.quarter_size,mobile_layout),int(strip.frames),equipment,encounter.snapshot().combat if entry.campaign_cursor in [10,11,12,13,14,16,18] else {}):return reject(scanner.error)
+		if not scanner.configure(bindings,catalogues,TargetFrame.logical_radii(art.quarter_size,mobile_layout),int(strip.frames),equipment,encounter.snapshot().combat if entry.campaign_cursor in [10,11,12,13,14,16,18,19] else {}):return reject(scanner.error)
 		if not scanner.advance(encounter.snapshot().combat,entry.player_pose,camera.snapshot().pose,aim.snapshot(),0,false):return reject(scanner.error)
 	var approach: RefCounted
 	if not bindings.mining_approach.is_empty():
@@ -229,7 +229,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 	var objective: RefCounted
 	if ordinary_world or free_world:
 		objective=ContractObjective.new()
-		if not objective.configure(bindings,construction,encounter):return reject(objective.error)
+		if not objective.configure(bindings,construction,encounter,library):return reject(objective.error)
 	elif not bindings.mining_objective.is_empty():
 		objective=Objective.new()
 		if not objective.configure(bindings,library,construction,autopilot_key,dock_key):return reject(objective.error)
@@ -267,12 +267,12 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 			if not gate_transit.configure(bindings,gate_animation,system_navigation):return reject(gate_transit.error)
 			for world in GateArrival.Worlds.SYSTEMS.values():
 				for destination in world.station_ids:
-					if not GateArrival.route(bindings.mido_travel,entry.location.station_id,destination).is_empty() and not GateArrival.Worlds.catalogue_location(bindings,catalogues,destination).is_empty():gate_destinations.append(destination)
+					if not GateArrival.packet(bindings,catalogues,{"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"from_station_id":entry.location.station_id,"destination_station_id":destination},entry.campaign_cursor).is_empty() and load("res://src/content/free_navigation_definitions.gd").ordinary_departure_at(bindings,entry.campaign_cursor,entry.departure.mission,destination):gate_destinations.append(destination)
 			gate_animation=null # Transit now owns the one animation clock.
 	if not trip.is_empty():
 		return_rules=OrdinaryFlight.docking(bindings,int(entry.campaign_cursor)) if entry.location.station_id==int(trip.station_id) else {}
 	elif ordinary_world:return_rules=ContractWorld.docking(bindings,int(entry.location.station_id),entry.campaign_cursor)
-	elif free_world:return_rules=FreeFlight.docking(bindings,int(entry.location.station_id))
+	elif free_world:return_rules=FreeFlight.docking(bindings,int(entry.location.station_id),entry.campaign_cursor)
 	if entry.campaign_cursor==4 and not bindings.full_hold_return.is_empty() and (return_rules.is_empty() or autopilot==null or objective==null):return reject("This departure has incomplete second station return support")
 	# Every mutable owner is detached from the station and construction. Failed
 	# preparation cannot replace the current good flight.
@@ -300,7 +300,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted
 	_alioth=alioth;_portal=portal;_alioth_camera={}
 	_convoy=convoy;_convoy_camera={}
 	_convoy_career=construction.contract_owner() if convoy!=null or alioth!=null else null
-	_story_bindings=bindings if return_rules.get("alioth_return",false) else null
+	_story_bindings=bindings if free_world or return_rules.get("alioth_return",false) else null
 	_gate_animation=gate_animation;_gate_transit=gate_transit;_gate_destinations=gate_destinations
 	_gate_cruise_speed=float(bindings.cruise.speed_units_per_millisecond)
 	return true
@@ -506,7 +506,9 @@ func evaluate(milliseconds: Variant, commands:=Vector2.ZERO, throttle:=1.0, paus
 	if next._objective is ContractObjective:
 		var radio_active: bool=next._radio!=null and next._radio.snapshot().get("visible",false)
 		if not next._objective.poll_contract(next._cargo,next._scenery,next._encounter,next._player.snapshot().vitals.hull>0,radio_active,next._briefing.mission_poll_due()):reject(next._objective.error);return null
-		completion_opened=next.contract_result_pending()
+		var visit_clock: Dictionary=next._briefing.snapshot()
+		if not next._objective.poll_visit(int(visit_clock.world_elapsed_ms),int(visit_clock.hud_elapsed_ms),not next._briefing.mission_poll_due() or next.death_active() or next.contract_result_pending()):reject(next._objective.error);return null
+		completion_opened=next.contract_result_pending() or next._objective.snapshot().dialogue.visible
 	elif next._objective!=null and next._briefing.mission_poll_due():
 		if not next._objective.poll(next._cargo,next._scenery,next._player.snapshot().vitals.hull>0,next._encounter,next._radio):reject(next._objective.error);return null
 		completion_opened=next._objective.snapshot().dialogue.visible
@@ -851,8 +853,9 @@ func construct_local_arrival(bindings: RefCounted, catalogues: RefCounted, envir
 
 func construct_gate_arrival(bindings: RefCounted,catalogues: RefCounted,environment_seconds: Variant,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null,location_settings: Dictionary={},location_library: RefCounted=null) -> RefCounted:
 	error=""
-	var packet:=GateArrival.packet(bindings,catalogues,prepare_gate_arrival())
-	if packet.is_empty() or not _objective is ContractObjective or _equipment==null:reject("Complete the surviving gate flight before constructing arrival");return null
+	if not _objective is ContractObjective or _equipment==null:reject("Complete the surviving gate flight before constructing arrival");return null
+	var packet:=GateArrival.packet(bindings,catalogues,prepare_gate_arrival(),int(_objective.snapshot().campaign_cursor))
+	if packet.is_empty():reject("Complete the surviving gate flight before constructing arrival");return null
 	return _construct_arrival(bindings,catalogues,packet,environment_seconds,unix_seconds,large_display,body_resources,effect_resources,location_settings,location_library,true)
 
 func _construct_arrival(bindings: RefCounted,catalogues: RefCounted,packet: Dictionary,environment_seconds: Variant,unix_seconds: Variant,large_display: bool,body_resources: RefCounted,effect_resources: RefCounted,location_settings: Dictionary,location_library: RefCounted,gate: bool) -> RefCounted:
@@ -1044,7 +1047,16 @@ func navigate(action: String, paused:=false) -> RefCounted:
 	if _briefing==null or paused:reject("Mining briefing navigation requires the active flight");return null
 	var next:=fork_for_frame()
 	if _objective!=null and _objective.snapshot().dialogue.visible:
-		if not next._objective.navigate(action):reject(next._objective.error);return null
+		if next._objective is ContractObjective:
+			if not next._objective.navigate(action,next._encounter):reject(next._objective.error);return null
+			var state: Dictionary=next._objective.snapshot()
+			if state.campaign_cursor!=_objective.snapshot().campaign_cursor:
+				if next._local_travel==null or not next._local_travel.rebase_campaign(_story_bindings,state.campaign_cursor,state.mission):reject("Campaign navigation: "+str(next._local_travel.error if next._local_travel!=null else "missing travel"));return null
+				var guidance: Dictionary=next._autopilot.snapshot()
+				if guidance.active and guidance.target_kind=="planet" and not next._local_travel.supports_destination(guidance.station_id):
+					if not next._autopilot.clear_target():reject(next._autopilot.error);return null
+				next._return_rules=FreeFlight.docking(_story_bindings,int(_entry.location.station_id),state.campaign_cursor)
+		elif not next._objective.navigate(action):reject(next._objective.error);return null
 		if _entry.campaign_cursor==7 and _equipment!=null and next._objective.snapshot().combat_objective_acknowledged and not _objective.snapshot().combat_objective_acknowledged:
 			if not next._equipment.complete_training(next._cargo.snapshot()):reject(next._equipment.error);return null
 			if not _navigation.is_empty() and _navigation.clear_on_completion_acknowledgement:next._route=null
@@ -1119,6 +1131,7 @@ func snapshot() -> Dictionary:
 		state.mining_objective=_objective.snapshot()
 		if _objective is ContractObjective:
 			state.contracts=state.mining_objective.contracts;state.contract_result=state.mining_objective.contract_result
+			state.campaign_cursor=state.mining_objective.campaign_cursor;state.mission=state.mining_objective.mission.duplicate(true)
 		if _equipment!=null:
 			state.progress=state.mining_objective.progress
 			state.combat_objective_satisfied=state.mining_objective.combat_objective_satisfied

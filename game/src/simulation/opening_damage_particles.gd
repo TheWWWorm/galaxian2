@@ -81,9 +81,9 @@ func configure_local_traffic(bindings: RefCounted,combat: Dictionary,seed_second
 	if not valid_combat(combat):clear();return reject("Local smoke/fire requires its initialized ships")
 	var keys:=[]
 	for actor in actors:
-		if combat.campaign_cursor not in [13,14,16,18] and actor.get("actor_kind")!=3:clear();return reject("Local smoke/fire belongs to another faction")
+		if combat.campaign_cursor not in [13,14,16,18,19] and actor.get("actor_kind")!=3:clear();return reject("Local smoke/fire belongs to another faction")
 		if actor.get("population_group") not in ["freighter","capital","debris"]:keys.append("npc%d"%int(actor.actor_id))
-	return _configure_owners(bindings,combat,seed_seconds,keys,actors.map(func(actor):return int(actor.actor_mode) if combat.campaign_cursor in [13,14,16,18] else (4 if actor.get("population_group")=="travel" else 0)))
+	return _configure_owners(bindings,combat,seed_seconds,keys,actors.map(func(actor):return int(actor.actor_mode) if combat.campaign_cursor in [13,14,16,18,19] else (4 if actor.get("population_group")=="travel" else 0)))
 
 func presentation_identity() -> RefCounted:return _presentation_identity
 
@@ -185,7 +185,7 @@ func valid_combat(combat: Dictionary) -> bool:
 	if not actors is Array or actors.size()!=_npc_count:return false
 	for id in _npc_count:
 		var actor: Variant=actors[id]
-		var minimum_mode:=0 if _identity.get("campaign_cursor") in [10,11,12,13,14,16,18] or (_identity.get("campaign_cursor")==7 and id==3) else 1
+		var minimum_mode:=0 if _identity.get("campaign_cursor") in [10,11,12,13,14,16,18,19] or (_identity.get("campaign_cursor")==7 and id==3) else 1
 		if not actor is Dictionary or actor.get("actor_id")!=id or not Flight.rigid_pose(actor.get("pose")) or not Numbers.integer(actor.get("actor_mode"),minimum_mode,9):return false
 		if not actor.get("vitals") is Dictionary or not Numbers.integer(actor.vitals.get("hull"),0,2147483647) or not Numbers.integer(actor.get("max_hull"),1,2147483647):return false
 	return true

@@ -26,7 +26,7 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	var context: Variant=entry.get("location")
 	if not context is Dictionary:return reject("Station exterior requires its constructed location")
 	var cursor:=int(entry.get("campaign_cursor",-1));var station_id:=int(context.get("station_id",-1));var system_id:=int(context.get("system_id",-1))
-	if cursor in [10,11,12,13,14,16,18]:
+	if cursor in [10,11,12,13,14,16,18,19]:
 		if OrdinaryFlight.for_departure(bindings,entry).is_empty():return reject("This local exterior has no supported flight world")
 	elif OrdinaryFlight.select(bindings,cursor).is_empty():return reject("Station exterior requires a supported flight")
 	return _prepare_location(library,bindings,catalogues,station_id,system_id)

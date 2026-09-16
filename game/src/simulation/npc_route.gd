@@ -103,14 +103,14 @@ func configure_free_generated(bindings: RefCounted,actor_id: int,context: Dictio
 	if not rules.available(bindings):return reject("Ordinary routes require imported population declarations")
 	var limits=preload("res://src/content/opening_definitions.gd")
 	var population: Dictionary=bindings.mido_travel.free_population
-	if context.get("campaign_cursor")!=int(population.campaign_cursor) or not limits.integer(context.get("rank"),0,bindings.opening_handoff.rank_thresholds.size()-1):return reject("Invalid ordinary route context")
+	if not load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,context.get("campaign_cursor")) or not limits.integer(context.get("rank"),0,bindings.opening_handoff.rank_thresholds.size()-1):return reject("Invalid ordinary route context")
 	var difficulty: Variant=context.get("difficulty")
 	if (not difficulty is float and not difficulty is int) or not population.supported_difficulties.any(func(value):return float(value)==float(difficulty)):return reject("Invalid ordinary route difficulty")
 	if actor_id<0 or actor_id>=rules.maximum_actor_count(bindings,int(context.rank),float(context.difficulty),context):return reject("Unknown ordinary traffic route owner")
 	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
 	if not Definitions.parameters(data):return reject("Generated NPC routes are unavailable in this pack")
 	_configure_generated(bindings,actor_id,data)
-	_identity.campaign_cursor=int(bindings.mido_travel.free_population.campaign_cursor)
+	_identity.campaign_cursor=int(context.campaign_cursor)
 	_ambient_restart=true
 	return true
 

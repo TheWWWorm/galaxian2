@@ -71,6 +71,13 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, visua
 	if rules.is_empty():return reject("Mining return resources are unavailable for this departure")
 	return _configure_resources(library,bindings,visuals,rules)
 
+func configure_campaign_visit(library: RefCounted,bindings: RefCounted,visuals: RefCounted,cursor: int,mission: Dictionary) -> bool:
+	if library==null or bindings==null or visuals==null or not load("res://src/content/suttnar_visit_definitions.gd").selected(bindings,cursor,mission):return reject("Campaign conversation resources are unavailable")
+	var rules:=MiningStory.briefing(bindings,cursor,true)
+	if rules.is_empty():return reject("Campaign conversation navigation is unavailable")
+	rules.events=bindings.mido_travel.suttnar_visit.events.duplicate(true)
+	return _configure_resources(library,bindings,visuals,rules)
+
 func configure_station_return(library: RefCounted, bindings: RefCounted, visuals: RefCounted, campaign_cursor:=3) -> bool:
 	if library==null or bindings==null or visuals==null or not Definitions.parameters(bindings.station_presentation):return reject("Station return resources are unavailable")
 	var rules:=StationReturn.station_conversation(bindings,campaign_cursor)

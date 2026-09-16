@@ -108,8 +108,8 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 		return reject("This profile has no supported fresh player initialization")
 	var seed: Dictionary
 	if entry.uses_equipment:
-		if cursor in [10,11,12,13,14,16,18] and (not equipment.snapshot().get("training_inventory_released",false) or not equipment.snapshot().get("prototype_drill_replaced",false)):return reject("Complete the station drill exchange before local flight")
-		if not (cursor==18 and Fitting.available(bindings)) and not equipment.requirements().satisfied:return reject("Install the required weapon and armor before combat training")
+		if cursor in [10,11,12,13,14,16,18,19] and (not equipment.snapshot().get("training_inventory_released",false) or not equipment.snapshot().get("prototype_drill_replaced",false)):return reject("Complete the station drill exchange before local flight")
+		if not (cursor in [18,19] and Fitting.available(bindings)) and not equipment.requirements().satisfied:return reject("Install the required weapon and armor before combat training")
 		seed=equipment.snapshot().loadout
 		if seed.get("base_content_id")!=bindings.base_content_id or seed.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id:return reject("Equipped player belongs to another source identity")
 		for key in ["ship_id","station_id","system_id"]:

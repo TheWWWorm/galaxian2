@@ -77,7 +77,7 @@ func configure_return(bindings: RefCounted, catalogues: RefCounted, library: Ref
 	if current.get("boundary")=="convoy_arrival_transition_required":return _configure_convoy_return(bindings,catalogues,library,flight,current,location_settings,unix_seconds)
 	var packet: Dictionary=flight.prepare_station()
 	if packet.is_empty():return fail(flight.error)
-	if ContractWorld.supports(bindings,packet.get("campaign_cursor")) or (packet.get("campaign_cursor")==18 and FreeFlight.available(bindings)):return _configure_contract_return(bindings,catalogues,library,flight,current,packet)
+	if ContractWorld.supports(bindings,packet.get("campaign_cursor")) or (FreeFlight.Campaign.supported(bindings.mido_travel,packet.get("campaign_cursor")) and FreeFlight.available(bindings)):return _configure_contract_return(bindings,catalogues,library,flight,current,packet)
 	var rules:=OrdinaryFlight.station_return(bindings,packet.get("campaign_cursor"))
 	if rules.is_empty():return fail("This pack has no supported conversation for the accepted station return")
 	if current.get("boundary")!="station_transition_required" or packet.get("base_content_id")!=bindings.base_content_id or packet.get("binding_id")!=bindings.binding_id or packet.get("campaign_cursor")!=int(rules.campaign_cursor) or packet.get("source_state")!=int(rules.source_state):return fail("Station return needs an accepted docking transition")
@@ -177,13 +177,13 @@ func _configure_convoy_return(bindings: RefCounted,catalogues: RefCounted,librar
 
 func _configure_contract_return(bindings: RefCounted,catalogues: RefCounted,library: RefCounted,flight: RefCounted,current: Dictionary,packet: Dictionary) -> bool:
 	if not LoungeLifecycle.available(bindings):return fail("This pack has no supported retained station contracts")
-	var free_flight: bool=packet.campaign_cursor==18
+	var free_flight: bool=FreeFlight.Campaign.supported(bindings.mido_travel,packet.campaign_cursor)
 	var equipment: RefCounted=flight.equipment_owner()
 	var contracts: RefCounted=flight.contract_owner()
 	if equipment==null or contracts==null:return fail("Station entry lost its retained inventory or contract career")
 	var owned: Dictionary=equipment.snapshot()
 	var seed: Dictionary=owned.loadout
-	var rules:=FreeFlight.docking(bindings,int(seed.station_id)) if free_flight else ContractWorld.docking(bindings,int(seed.station_id),packet.campaign_cursor)
+	var rules:=FreeFlight.docking(bindings,int(seed.station_id),packet.campaign_cursor) if free_flight else ContractWorld.docking(bindings,int(seed.station_id),packet.campaign_cursor)
 	if rules.is_empty() or current.get("boundary")!="station_transition_required" or packet.get("source_state")!=int(rules.source_state):return fail("Station contracts require actual accepted docking")
 	if packet.get("base_content_id")!=bindings.base_content_id or packet.get("binding_id")!=bindings.binding_id or packet.get("contracts")!=contracts.snapshot():return fail("The station lost its accepted contract owner")
 	if packet.get("equipment")!=owned or current.get("equipment")!=owned or packet.get("loadout")!=seed or packet.get("source_ship_configuration")!=int(bindings.station_entry.source_ship_configuration):return fail("Station contracts changed the arriving ship")
@@ -584,15 +584,15 @@ func _prepare_alioth_departure(bindings: RefCounted,catalogues: RefCounted) -> D
 
 func _prepare_free_departure(bindings: RefCounted,catalogues: RefCounted) -> Dictionary:
 	if not FreeFlight.available(bindings) or catalogues==null or catalogues.content_id!=bindings.base_content_id or not Departure.parameters(bindings.station_departure):fail("The ordinary departure is unavailable");return {}
-	if _state.get("campaign_cursor")!=18 or not _state.get("acknowledged",false) or not _state.get("alioth_return_acknowledged",false):fail("Acknowledge the complete Alioth return before ordinary departure");return {}
+	if not FreeFlight.Campaign.supported(bindings.mido_travel,_state.get("campaign_cursor")) or not _state.get("acknowledged",false) or not _state.get("alioth_return_acknowledged",false):fail("Acknowledge the complete Alioth return before ordinary departure");return {}
 	if _contracts==null or _equipment==null:fail("Ordinary departure lost its retained career or equipment");return {}
 	var career: Dictionary=_contracts.snapshot();var owned: Dictionary=_equipment.snapshot()
 	var station_id: int=owned.loadout.station_id
 	if owned.cargo.used>owned.cargo.capacity:fail("Cargo hold is overfilled. Sell cargo before departing.");return {}
-	if FreeFlight.flight(bindings,station_id).is_empty() or not FreeNavigation.ordinary_departure_at(bindings,18,_state.get("mission",{}),station_id):fail("This station selects an unsupported story encounter");return {}
+	if FreeFlight.flight(bindings,station_id,_state.campaign_cursor).is_empty() or not FreeNavigation.ordinary_departure_at(bindings,_state.campaign_cursor,_state.get("mission",{}),station_id):fail("This station selects an unsupported story encounter");return {}
 	for key in ["base_content_id","binding_id"]:
 		if _state.get(key)!=bindings.get(key) or career.get(key)!=bindings.get(key):fail("Ordinary departure belongs to another content identity");return {}
-	if _rules!=bindings.station_entry or _progress_rules!=bindings.opening_handoff or career.campaign_cursor!=18 or _state.progress!=career.progress or career.station_id!=station_id or owned.loadout!=_state.loadout or owned.cargo!=_state.cargo or owned.cargo_cache_stale:fail("Ordinary departure differs from its acknowledged career, location or inventory");return {}
+	if _rules!=bindings.station_entry or _progress_rules!=bindings.opening_handoff or career.campaign_cursor!=_state.campaign_cursor or _state.progress!=career.progress or career.station_id!=station_id or owned.loadout!=_state.loadout or owned.cargo!=_state.cargo or owned.cargo_cache_stale:fail("Ordinary departure differs from its acknowledged career, location or inventory");return {}
 	if _contracts.free_flight_context(bindings,station_id).is_empty():fail(_contracts.error);return {}
 	if owned.get("ship_affiliation")!=int(bindings.mido_travel.alioth_return.next_player_ship_affiliation):fail("Ordinary departure lost the acknowledged ship affiliation");return {}
 	if not FreeFlight.response_flags(bindings,_state.get("station_response_flags",{})):fail("Ordinary departure has unsupported station-response history");return {}

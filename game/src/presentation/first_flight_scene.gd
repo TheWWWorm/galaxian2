@@ -129,7 +129,9 @@ func build(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalogu
 		notice_panel=NoticePanel.new();overlay.add_child(notice_panel);notice_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		if not notice_panel.configure(library,bindings,visuals):return fail(notice_panel.error)
 	dialogue=Dialogue.new();overlay.add_child(dialogue);dialogue.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	if state.has("mining_objective") and not state.has("contracts"):
+	if state.get("mining_objective",{}).has("campaign_visit"):
+		if not dialogue.configure_campaign_visit(library,bindings,visuals,state.campaign_cursor,state.mission):return fail(dialogue.error)
+	elif state.has("mining_objective") and not state.has("contracts"):
 		if not dialogue.configure_mining_objective(library,bindings,visuals,int(state.player.campaign_cursor)):return fail(dialogue.error)
 	elif not dialogue.configure_mining_briefing(library,bindings,visuals,int(state.player.campaign_cursor),state.has("contracts")):return fail(dialogue.error)
 	if death!=null and not bindings.game_over_presentation.is_empty():

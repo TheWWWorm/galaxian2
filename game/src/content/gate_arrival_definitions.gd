@@ -19,23 +19,24 @@ static func route(data: Dictionary,from_station: Variant,to_station: Variant) ->
 	return {"from_station_id":origin.station_id,"from_system_id":origin.system_id,
 		"station_id":destination.station_id,"system_id":destination.system_id}
 
-static func packet(bindings: RefCounted,catalogues: RefCounted,request: Dictionary) -> Dictionary:
-	if not available(bindings) or request.size()!=4:return {}
+static func packet(bindings: RefCounted,catalogues: RefCounted,request: Dictionary,cursor: int=18) -> Dictionary:
+	if not available(bindings) or not load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) or request.size()!=4:return {}
 	for key in ["base_content_id","binding_id"]:
 		if request.get(key)!=bindings.get(key):return {}
 	var trip:=route(bindings.mido_travel,request.get("from_station_id"),request.get("destination_station_id"))
 	if trip.is_empty():return {}
+	if catalogues==null or not catalogues.tables.systems[trip.from_system_id].linked_system_ids.has(trip.system_id):return {}
 	for id in [trip.from_station_id,trip.station_id]:
 		if Worlds.catalogue_location(bindings,catalogues,id).is_empty():return {}
 	var result:=trip.duplicate()
 	result.merge({"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
-		"campaign_cursor":18,"source_state":int(bindings.mido_travel.travel.source_state),
+		"campaign_cursor":cursor,"source_state":int(bindings.mido_travel.travel.source_state),
 		"world_type":int(bindings.mido_travel.travel.world_type),"audio_selector":int(bindings.mido_travel.gate_arrival.arrival.audio_selector)})
 	return result
 
 static func packet_matches(bindings: RefCounted,catalogues: RefCounted,arrival: Dictionary) -> bool:
 	var expected:=packet(bindings,catalogues,{"base_content_id":arrival.get("base_content_id"),"binding_id":arrival.get("binding_id"),
-		"from_station_id":arrival.get("from_station_id"),"destination_station_id":arrival.get("station_id")})
+		"from_station_id":arrival.get("from_station_id"),"destination_station_id":arrival.get("station_id")},int(arrival.get("campaign_cursor",-1)))
 	if expected.is_empty() or arrival!=expected:return false
 	for key in expected:
 		if typeof(arrival[key])!=typeof(expected[key]):return false

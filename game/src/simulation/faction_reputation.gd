@@ -39,7 +39,7 @@ func configure(bindings: RefCounted, cursor: Variant, kinds: Variant, difficulty
 	# The world validates the mission/population pair before supplying this
 	# faction ledger. A selected courier supplies an empty list; delivery pirates
 	# can extend the ordinary list beyond the no-job population bound.
-	var free: bool=cursor==18 and FreeLife.available(bindings) and (not kinds.is_empty() or OrdinaryContracts.available(bindings)) and kinds.size()<=FreeLife.Traffic.Population.maximum_actor_count(bindings,20,float(difficulty))+OrdinaryContracts.maximum_extra_count(bindings) and kinds.all(func(kind):return kind is int and kind in [0,1,2,8])
+	var free: bool=load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) and FreeLife.available(bindings) and (not kinds.is_empty() or OrdinaryContracts.available(bindings)) and kinds.size()<=FreeLife.Traffic.Population.maximum_actor_count(bindings,20,float(difficulty))+OrdinaryContracts.maximum_extra_count(bindings) and kinds.all(func(kind):return kind is int and kind in [0,1,2,8])
 	if contract or convoy or alioth or free:
 		if float(difficulty) not in [0.5,1.0]:return reject("Reputation requires the supported contract ship population")
 		expected=kinds.duplicate()

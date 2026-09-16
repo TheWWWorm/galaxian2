@@ -12,7 +12,6 @@ static func available(bindings: RefCounted) -> bool:
 
 static func location_supported(bindings: RefCounted,cat: RefCounted,cursor: Variant,station_id: Variant) -> bool:
 	if not available(bindings) or cat==null or cat.content_id!=bindings.base_content_id:return false
-	var flight: Dictionary=bindings.mido_travel.free_flight
 	var numbers=load("res://src/content/opening_definitions.gd")
-	if not numbers.integer(cursor,int(flight.campaign_cursor),int(flight.campaign_cursor)) or not numbers.integer(station_id,0,cat.tables.stations.size()-1):return false
+	if not load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) or not numbers.integer(station_id,0,cat.tables.stations.size()-1):return false
 	return not load("res://src/content/ordinary_world_definitions.gd").catalogue_location(bindings,cat,station_id).is_empty()

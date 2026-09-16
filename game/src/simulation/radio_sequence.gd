@@ -63,7 +63,7 @@ func _configure_records(bindings: RefCounted, library: RefCounted, data: Diction
 
 func configure_local_message(bindings: RefCounted, library: RefCounted, layout: RefCounted, text_id: int, cursor: int=10) -> bool:
 	clear()
-	if bindings==null or library==null or layout==null or (Travel.journey(bindings.mido_travel,cursor).is_empty() and not ContractWorld.supports(bindings,cursor) and not (cursor==18 and FreeFlight.available(bindings))) or not Definitions.valid_parameters(bindings.opening_dialogue,0):return fail("Local radio requires its verified dialogue and clock")
+	if bindings==null or library==null or layout==null or (Travel.journey(bindings.mido_travel,cursor).is_empty() and not ContractWorld.supports(bindings,cursor) and not (load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) and FreeFlight.available(bindings))) or not Definitions.valid_parameters(bindings.opening_dialogue,0):return fail("Local radio requires its verified dialogue and clock")
 	if library.manifest.get("content_id")!=bindings.base_content_id or layout.content_id!=bindings.base_content_id or layout.binding_id!=bindings.binding_id or layout.language!=library.active_language:return fail("Local radio layout belongs to another content or language")
 	var rule: Dictionary=bindings.mido_travel.traffic_combat.radio
 	if not rule.warning_text_ids.any(func(value):return int(value)==text_id) and not rule.response_text_ids.any(func(value):return int(value)==text_id):return fail("Local radio text is outside the verified faction messages")

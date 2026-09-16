@@ -8,14 +8,14 @@ const Cache=preload("res://src/simulation/lounge_cache.gd")
 var error:=""
 var _state:={}
 
-func configure(bindings: RefCounted,catalogues: RefCounted,station_id: int,locations: RefCounted) -> bool:
+func configure(bindings: RefCounted,catalogues: RefCounted,station_id: int,locations: RefCounted,cursor: int=18) -> bool:
 	error=""
-	if not Definitions.location_supported(bindings,catalogues,station_id,18) or not locations is Cache:return reject("Local arrival requires matching ordinary scenery and retained locations")
+	if not Definitions.location_supported(bindings,catalogues,station_id,cursor) or not locations is Cache:return reject("Local arrival requires matching ordinary scenery and retained locations")
 	var cache: Dictionary=locations.snapshot()
 	if cache.get("base_content_id")!=bindings.base_content_id or cache.get("binding_id")!=bindings.binding_id or cache.get("current_station_id")!=station_id:return reject("Local arrival locations do not select this destination")
 	var gates:=Gates.new()
 	if not gates.configure(bindings,catalogues,station_id):return reject(gates.error)
-	var planets:=Planets.new();var layout:=planets.for_lounge(bindings,catalogues,station_id,18)
+	var planets:=Planets.new();var layout:=planets.for_lounge(bindings,catalogues,station_id,cursor)
 	if layout.is_empty():return reject(planets.error)
 	var rules: Dictionary=bindings.mido_travel.local_arrival_environment.arrival
 	var gate_state: Dictionary=gates.snapshot()
@@ -39,7 +39,7 @@ func configure(bindings: RefCounted,catalogues: RefCounted,station_id: int,locat
 		position*=float(rules.planet_multiplier)
 		facing=bool(rules.face_origin)
 	if not position.is_finite() or (facing and position.is_zero_approx()):return reject("The original arrival position cannot define a flight heading")
-	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":18,
+	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":cursor,
 		"station_id":station_id,"system_id":int(layout.system_id),"position":position,"face_origin":facing,
 		"source":source,"cache_station_id":cached_station,"planet_index":planet_index,
 		"location_order":cache.locations.map(func(entry):return int(entry.station_id)),

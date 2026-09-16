@@ -45,7 +45,7 @@ static func standing(rules: Dictionary,faction: int,reputation: Dictionary,force
 	return {"hostile":value>int(rules.threshold),"friendly":value< -int(rules.threshold)}
 
 static func npc_hit(data: Dictionary,weapon: Dictionary) -> bool:
-	if data.get("campaign_cursor")!=18 or not data.has("free_lifecycle"):return false
+	if not data.has("free_context") or data.get("campaign_cursor")!=data.free_context.get("campaign_cursor") or not data.has("free_lifecycle"):return false
 	for row in data.npc_weapons:
 		if row.get("unarmed",false):continue
 		var matches:=true
@@ -62,7 +62,7 @@ static func live_population(bindings: RefCounted,combat: Dictionary) -> bool:
 	if combat.get("campaign_cursor")!=context.campaign_cursor or combat.get("provocation",{}).get("station_id")!=context.station_id:return false
 	var actors: Variant=combat.get("actors")
 	if not actors is Array or actors.size()>Traffic.Population.maximum_actor_count(bindings,int(context.rank),float(context.difficulty),context):return false
-	if actors.is_empty() and not Traffic.Delivery.active_courier(context):return false
+	if actors.is_empty() and not Traffic.Delivery.active_courier(context) and not Traffic.Campaign.active_visit(bindings.mido_travel,context):return false
 	var order: Array=Traffic.Delivery.group_order(bindings,context)
 	var previous:=-1
 	for id in actors.size():

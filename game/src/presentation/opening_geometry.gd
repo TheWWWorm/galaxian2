@@ -14,6 +14,7 @@ const ArrivalConstruction = preload("res://src/content/arrival_actor_constructio
 const ImportedModel = preload("res://src/presentation/imported_model.gd")
 const SurfaceResponse = preload("res://src/presentation/surface_response.gd")
 const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
+const Campaign=preload("res://src/content/free_campaign_definitions.gd")
 var error := ""
 var player: Node3D
 var actors := {}
@@ -27,6 +28,8 @@ var _campaign_cursor:=0
 var _departure_return_available:=false
 var _departure_return_cursor:=3
 var _departure_return_mission:={}
+var _visit_transition:={}
+var _visit_system_id:=-1
 var _arrival_player_origin:=Vector3.ZERO
 
 func apply_surface_response(bindings: RefCounted, lighting: Dictionary, reflection: RefCounted, diffuse_bias: Variant, normal_bias: Variant, variant: String) -> bool:
@@ -97,7 +100,15 @@ func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCoun
 	if _departure_return_available:
 		_departure_return_mission={"kind":int(objective.next_kind),"station_id":int(objective.station_id),"reward":0,"bonus":0}
 		if objective.get("alioth_attack",false):_departure_return_mission.source_parameter=0
-	if (state.get("campaign_cursor")!=context.campaign_cursor and not _is_departure_return(state)) or state.get("base_content_id")!=context.base_content_id or state.get("binding_id")!=context.binding_id or state.get("actors")!=[]:
+	if Campaign.visit_at(bindings.mido_travel,context.campaign_cursor,context.station_id):
+		var visit: Dictionary=bindings.mido_travel.suttnar_visit
+		_visit_transition={"base_content_id":context.base_content_id,"binding_id":context.binding_id,
+			"from_cursor":int(context.campaign_cursor),"campaign_cursor":int(visit.next_cursor),
+			"previous_mission":Campaign.mission(bindings.mido_travel,int(context.campaign_cursor)),
+			"mission":Campaign.mission(bindings.mido_travel,int(visit.next_cursor)),
+			"station_id":int(context.station_id),"reward_credits":int(visit.reward_credits)}
+		_visit_system_id=int(context.system_id)
+	if (state.get("campaign_cursor")!=context.campaign_cursor and not _is_departure_return(state) and not _is_acknowledged_visit(state)) or state.get("base_content_id")!=context.base_content_id or state.get("binding_id")!=context.binding_id or state.get("actors")!=[]:
 		return reject("Departure player geometry requires its supported mining world")
 	var selected:={"player":bindings.resolve_ship_layers(context.ship_id)}
 	if selected.player.is_empty():return reject(bindings.error)
@@ -194,14 +205,26 @@ func _is_departure_return(state: Dictionary) -> bool:
 	var objective: Variant=state.get("mining_objective",{})
 	return _departure_return_available and state.get("campaign_cursor")==_departure_return_cursor and objective is Dictionary and objective.get("phase")=="return_required" and objective.get("combat_objective_acknowledged",objective.get("cargo_objective_acknowledged",false)) and state.get("mission")==_departure_return_mission
 
+func _is_acknowledged_visit(state: Dictionary) -> bool:
+	if _visit_transition.is_empty():return false
+	var visit: Dictionary=state.get("mining_objective",{}).get("campaign_visit",{})
+	var location: Dictionary=state.get("location",{})
+	return state.get("campaign_cursor")==_visit_transition.campaign_cursor and state.get("mission")==_visit_transition.mission \
+		and state.get("contracts",{}).get("flight",{}).get("story_transition") == _visit_transition \
+		and location.get("station_id")==_visit_transition.station_id and location.get("system_id")==_visit_system_id \
+		and state.get("player",{}).get("campaign_cursor")==_visit_transition.from_cursor \
+		and visit.get("base_content_id")==_visit_transition.base_content_id and visit.get("binding_id")==_visit_transition.binding_id \
+		and visit.get("campaign_cursor")==_visit_transition.from_cursor and visit.get("mission")==_visit_transition.previous_mission \
+		and visit.get("phase")=="acknowledged" and visit.get("acknowledged")==true
+
 func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 	error = ""
 	if player == null: return reject("Build opening geometry before applying scene state")
 	if state.get("base_content_id") != _content_id or state.get("binding_id") != _binding_id:
 		return reject("Opening geometry received another content identity")
-	# Completing cargo instructions changes the mission while retaining this
+	# Acknowledged objectives change the mission while retaining this
 	# same world and ship. It does not construct a new station or flight scene.
-	if state.get("campaign_cursor",0)!=_campaign_cursor and not _is_departure_return(state):return reject("Flight geometry received another campaign scene")
+	if state.get("campaign_cursor",0)!=_campaign_cursor and not _is_departure_return(state) and not _is_acknowledged_visit(state):return reject("Flight geometry received another campaign scene")
 	if not valid_pose(state.get("player_pose")): return reject("Opening player pose is unavailable or invalid")
 	var rows: Variant = state.get("actors")
 	if not rows is Array or rows.size() != actors.size(): return reject("Opening actor set changed")
@@ -232,7 +255,7 @@ func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 	var player_pose: Transform3D=state.player_pose
 	var player_visible:=true
 	if state.has("player_model_basis"):
-		if _campaign_cursor not in [2,4,7,10,11,12,13,14,16,18] or not state.player_model_basis is Basis or not valid_pose(Transform3D(state.player_model_basis,Vector3.ZERO)):return reject("Invalid mining-flight visual model orientation")
+		if _campaign_cursor not in [2,4,7,10,11,12,13,14,16,18,19] or not state.player_model_basis is Basis or not valid_pose(Transform3D(state.player_model_basis,Vector3.ZERO)):return reject("Invalid mining-flight visual model orientation")
 		player_pose=player_pose*Transform3D(state.player_model_basis,Vector3.ZERO)
 		if not valid_pose(player_pose):return reject("First-flight visual model orientation overflowed")
 	if not escape.is_empty():
@@ -272,6 +295,7 @@ func clear() -> void:
 	_with_detail = false
 	_escape_available=false
 	_campaign_cursor=0;_departure_return_available=false;_departure_return_cursor=3;_departure_return_mission={}
+	_visit_transition={};_visit_system_id=-1
 	_arrival_player_origin=Vector3.ZERO
 
 func reject(message: String) -> bool:

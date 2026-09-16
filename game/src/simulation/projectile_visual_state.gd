@@ -61,7 +61,7 @@ func fork_for_frame() -> RefCounted:
 func reject(message: String) -> bool:error=message;return false
 
 static func model_mapping(bindings: RefCounted, weapon: Dictionary, key: String, impact: bool) -> Dictionary:
-	if weapon.get("campaign_cursor")==18 and key.begins_with("player:") and Fitting.available(bindings):return Fitting.model(bindings,weapon,impact)
+	if weapon.get("campaign_cursor") in [18,19] and key.begins_with("player:") and Fitting.available(bindings):return Fitting.model(bindings,weapon,impact)
 	if weapon.get("campaign_cursor")==16:
 		if not load("res://src/content/alioth_flight_definitions.gd").available(bindings):return {}
 		if key.begins_with("player:"):
@@ -75,8 +75,8 @@ static func model_mapping(bindings: RefCounted, weapon: Dictionary, key: String,
 		var model:=int(void_weapon.impact_model_id if impact else void_weapon.model_resource_id) if id<7 else (ContractWorld.impact_model(bindings,0) if impact else int(bindings.early_contracts.ship_combat.weapons.factions[0].model_resource_id))
 		var path: String=bindings.resolve(model,"mesh")
 		return {} if path.is_empty() else {"id":model,"resource":path,"captured_up":false}
-	if weapon.get("campaign_cursor") in [13,14,18]:
-		if weapon.get("campaign_cursor")==18 and not load("res://src/content/free_flight_definitions.gd").available(bindings):return {}
+	if weapon.get("campaign_cursor") in [13,14,18,19]:
+		if weapon.get("campaign_cursor") in [18,19] and not load("res://src/content/free_flight_definitions.gd").available(bindings):return {}
 		if not ContractWorld.available(bindings) or weapon.get("category")!=0:return {}
 		if key.begins_with("player:"):
 			var source:=weapon.duplicate(true);source.campaign_cursor=7
@@ -109,7 +109,7 @@ static func weapons(world: Dictionary) -> Array:
 		result.append({"key":"player:%d"%i,"projectiles":primary[i].projectiles})
 	for actor in actors:
 		if not actor is Dictionary or not Numbers.integer(actor.get("actor_id"),0,2147483647) or not actor.get("projectiles") is Dictionary:return []
-		if world.get("campaign_cursor") in [11,12,13,14,16,18] and actor.get("definition",{}).get("unarmed",false) and actor.projectiles.is_empty():continue
+		if world.get("campaign_cursor") in [11,12,13,14,16,18,19] and actor.get("definition",{}).get("unarmed",false) and actor.projectiles.is_empty():continue
 		result.append({"key":"npc:%d"%int(actor.actor_id),"projectiles":actor.projectiles})
 	return result
 
@@ -117,13 +117,13 @@ static func empty_ordinary_population(bindings: RefCounted,world: Dictionary) ->
 	# An equipped owner can contain zero guns. Require its explicit identity
 	# and well-formed unarmed traffic; malformed weapon packets also resolve
 	# to an empty list and must not be mistaken for this supported population.
-	if not Fitting.available(bindings) or world.get("campaign_cursor")!=18:return false
+	if not Fitting.available(bindings) or world.get("campaign_cursor") not in [18,19]:return false
 	var primary: Variant=world.get("primaries");var traffic: Variant=world.get("weapons")
 	if not primary is Dictionary or not primary.get("guns") is Array or not primary.guns.is_empty() or not primary.get("loadout") is Dictionary:return false
 	var loadout: Dictionary=primary.loadout
 	for key in ["base_content_id","binding_id"]:
 		if loadout.get(key)!=bindings.get(key):return false
-	if loadout.get("campaign_cursor")!=18 or not loadout.get("slots") is Array or not loadout.get("equipment_ids") is Array:return false
+	if loadout.get("campaign_cursor") not in [18,19] or not loadout.get("slots") is Array or not loadout.get("equipment_ids") is Array:return false
 	var ids:=[]
 	for slot in loadout.slots:
 		if slot==null:continue

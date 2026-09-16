@@ -41,7 +41,7 @@ func resolve_departure(bindings: RefCounted, catalogues: RefCounted, departure_c
 	error=""
 	if bindings==null or catalogues==null or not departure_cache is Dictionary:return reject("Mining-flight environment is unavailable")
 	if departure_cache.get("campaign_cursor")==7:return resolve_combat_training(bindings,catalogues,equipment,departure_cache)
-	if departure_cache.get("campaign_cursor") in [10,11,12,13,14,16,18]:return resolve_local_travel(bindings,catalogues,equipment,departure_cache)
+	if departure_cache.get("campaign_cursor") in [10,11,12,13,14,16,18,19]:return resolve_local_travel(bindings,catalogues,equipment,departure_cache)
 	var flight:=MiningFlight.flight(bindings,departure_cache.get("campaign_cursor"))
 	if flight.is_empty():return reject("This departure has no supported mining-flight environment")
 	if not Definitions.parameters(bindings.arrival_environment) or not SkyDefinitions.parameters(bindings.opening_sky) or not Planets.parameters(bindings.opening_sky.get("planet_resources",{})):return reject("First flight requires the shared ordinary environment")
@@ -58,7 +58,7 @@ func _resolve(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, cu
 	if seed.system_id==int(data.special_system_id) or not Numbers.integer(system.get("sky_index"),0,int(data.maximum_sky_index)):
 		return reject("This flight uses an unsupported system background")
 	var local_travel:=(not Travel.player_entry(bindings.mido_travel,int(seed.station_id),cursor).is_empty() or (cursor==16 and not Cache.alioth_entry(bindings.mido_travel).is_empty())) and Travel.location_supported(bindings.mido_travel,int(seed.station_id),int(seed.system_id),int(station.get("planet_type",-1)))
-	if cursor==18 and FreeFlight.available(bindings) and not FreeFlight.player_entry(bindings.mido_travel,int(seed.station_id),int(seed.get("ship_id",-1))).is_empty():local_travel=Numbers.integer(station.get("planet_type"),0,bindings.opening_sky.planet_resources.near_textures.size()-1)
+	if FreeFlight.Campaign.supported(bindings.mido_travel,cursor) and FreeFlight.available(bindings) and not FreeFlight.player_entry(bindings.mido_travel,int(seed.station_id),int(seed.get("ship_id",-1)),cursor).is_empty():local_travel=Numbers.integer(station.get("planet_type"),0,bindings.opening_sky.planet_resources.near_textures.size()-1)
 	if load("res://src/content/local_arrival_environment_definitions.gd").location_supported(bindings,catalogues,int(seed.station_id),cursor):local_travel=true
 	if station.get("planet_type")!=int(data.supported_planet_type) and not local_travel:return reject("This flight uses an unsupported planet layout")
 	var index:=int(system.sky_index)
@@ -89,7 +89,7 @@ func resolve_local_travel(bindings: RefCounted, catalogues: RefCounted, equipmen
 	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false):return reject("Local travel requires the drill exchange")
 	var seed: Dictionary=owned.loadout
 	var cursor: Variant=player_cache.get("campaign_cursor")
-	var ordinary: bool=cursor==18 and FreeFlight.available(bindings) and not FreeFlight.player_entry(bindings.mido_travel,int(seed.station_id),int(seed.ship_id)).is_empty()
+	var ordinary: bool=FreeFlight.Campaign.supported(bindings.mido_travel,cursor) and FreeFlight.available(bindings) and not FreeFlight.player_entry(bindings.mido_travel,int(seed.station_id),int(seed.ship_id),cursor).is_empty()
 	if not cursor is int or (Travel.player_entry(bindings.mido_travel,int(seed.station_id),cursor).is_empty() and not (cursor==16 and seed.station_id==98 and not Cache.alioth_entry(bindings.mido_travel).is_empty()) and not ordinary):return reject("This local location has no supported player entry")
 	if catalogues.content_id!=bindings.base_content_id or seed.base_content_id!=bindings.base_content_id or seed.binding_id!=bindings.binding_id or not Cache.matches(player_cache,seed,cursor):return reject("Local travel cache belongs to another equipped location")
 	if not Definitions.parameters(bindings.arrival_environment) or not SkyDefinitions.parameters(bindings.opening_sky) or not Planets.parameters(bindings.opening_sky.get("planet_resources",{})):return reject("Local travel requires the shared ordinary environment")

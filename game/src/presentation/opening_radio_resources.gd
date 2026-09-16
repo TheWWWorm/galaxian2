@@ -49,7 +49,7 @@ func prepare(library: RefCounted, bindings: RefCounted, visuals: RefCounted = nu
 
 func prepare_local_traffic(library: RefCounted, bindings: RefCounted, visuals: RefCounted,cursor: int=10) -> bool:
 	error="";line_counts=[];speakers={};portrait_diagnostics={};_clear_local()
-	if library==null or bindings==null or visuals==null or (Travel.journey(bindings.mido_travel,cursor).is_empty() and not ContractWorld.supports(bindings,cursor) and not (cursor==18 and load("res://src/content/free_flight_definitions.gd").available(bindings))):return fail("Local radio requires its imported content and declarations")
+	if library==null or bindings==null or visuals==null or (Travel.journey(bindings.mido_travel,cursor).is_empty() and not ContractWorld.supports(bindings,cursor) and not (load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) and load("res://src/content/free_flight_definitions.gd").available(bindings))):return fail("Local radio requires its imported content and declarations")
 	if library.manifest.get("content_id")!=bindings.base_content_id or visuals.base_content_id!=bindings.base_content_id:return fail("Local radio resources belong to another content identity")
 	var id:=int(bindings.mido_travel.traffic_combat.radio.speaker_id)
 	var label: String=bindings.resolve_speaker_name(id,library)

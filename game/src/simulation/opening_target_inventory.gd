@@ -43,7 +43,7 @@ func configure_combat_training(bindings: RefCounted, catalogues: RefCounted, pla
 
 func configure_local_travel(bindings: RefCounted, catalogues: RefCounted, player: RefCounted, scenery: RefCounted, cursor: int=10) -> bool:
 	if bindings==null or not Travel.parameters(bindings.mido_travel):clear();return reject("Local targets require their source declarations")
-	if not (cursor==18 and load("res://src/content/free_flight_definitions.gd").available(bindings)) and not (cursor==16 and load("res://src/content/alioth_flight_definitions.gd").available(bindings)) and not (cursor==14 and not load("res://src/content/convoy_world_definitions.gd").flight(bindings,79).is_empty()) and not (ContractWorld.supports(bindings,cursor)) and (cursor not in [10,11,12] or Travel.journey(bindings.mido_travel,cursor).is_empty()):clear();return reject("Unsupported local target context")
+	if not (load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) and load("res://src/content/free_flight_definitions.gd").available(bindings)) and not (cursor==16 and load("res://src/content/alioth_flight_definitions.gd").available(bindings)) and not (cursor==14 and not load("res://src/content/convoy_world_definitions.gd").flight(bindings,79).is_empty()) and not (ContractWorld.supports(bindings,cursor)) and (cursor not in [10,11,12] or Travel.journey(bindings.mido_travel,cursor).is_empty()):clear();return reject("Unsupported local target context")
 	return _configure_equipped(bindings,catalogues,player,scenery,cursor)
 
 func _configure_equipped(bindings: RefCounted, catalogues: RefCounted, player: RefCounted, scenery: RefCounted, cursor: int) -> bool:
@@ -117,7 +117,7 @@ func _configure_source(bindings: RefCounted, catalogues: RefCounted, source: Dic
 	var npc_ids := []
 	var cast:=[]
 	for actor in actor_rows:
-		var free_freight: bool=source.get("campaign_cursor")==18 and actor.get("population_group")=="freighter"
+		var free_freight: bool=source.get("campaign_cursor") in [18,19] and actor.get("population_group")=="freighter"
 		if free_freight and not load("res://src/content/free_traffic_definitions.gd").actor_matches(bindings,actor,"freighter"):return reject("Ordinary target changed its source freighter assembly")
 		var alioth_freight: bool=source.get("campaign_cursor")==16 and actor.get("population_group")=="freighter"
 		if alioth_freight and actor.get("assembly")!=bindings.mido_travel.alioth_attack.population.freighter_assembly:return reject("Alioth target changed its original freighter assembly")

@@ -30,7 +30,7 @@ const StationSaveFile=preload("res://src/simulation/station_save_file.gd")
 const BASE_STOCK_SETTINGS={"difficulty":0.5,"valkyrie_owned":false,"supernova_owned":false,
 	"energy_availability_percent":0,"missile_availability_percent":0}
 const STATION_DEPARTURE_PHASES=["ready_to_launch","combat_departure_required","local_departure_required","contracts_required","convoy_departure_required","alioth_departure_required","free_play_required"]
-const PRIMARY_FLIGHT_CURSORS=[7,10,11,12,13,14,16,17,18]
+const PRIMARY_FLIGHT_CURSORS=[7,10,11,12,13,14,16,17,18,19]
 
 var library: RefCounted
 var bindings: RefCounted
@@ -651,9 +651,9 @@ func enter_first_flight(now_microseconds: int, environment_seconds: Variant=null
 	if not _autosave_station():cancel_departure();refresh_render_mode();return false
 	var candidate:=FirstFlightSession.new();viewport.add_child(candidate)
 	var prepared: bool
-	if _launch_packet.campaign_cursor in [16,18]:
+	if _launch_packet.campaign_cursor in [16,18,19]:
 		var seconds:=int(Time.get_unix_time_from_system())
-		var configure_flight: Callable=candidate.configure_free if _launch_packet.campaign_cursor==18 else candidate.configure_alioth
+		var configure_flight: Callable=candidate.configure_free if _launch_packet.campaign_cursor in [18,19] else candidate.configure_alioth
 		prepared=configure_flight.call(library,bindings,visuals,session.station_owner(),now_microseconds,seconds if environment_seconds==null else int(environment_seconds),seconds if unix_seconds==null else int(unix_seconds),OS.has_feature("mobile"))
 	else:prepared=candidate.configure(library,bindings,visuals,_launch_packet,true,now_microseconds,environment_seconds,unix_seconds,OS.has_feature("mobile"),session.equipment_owner(),session.contract_owner())
 	if not prepared:
@@ -674,7 +674,7 @@ func _enter_flight_arrival(now_microseconds: int,environment_seconds: Variant,un
 	var contract_trip: bool=session.flight_owner().contract_owner()!=null
 	if gate and not contract_trip:return transition_error("Gate arrival lost its retained career")
 	var settings:=BASE_STOCK_SETTINGS.duplicate(true) if contract_trip else {}
-	if contract_trip and session.snapshot().campaign_cursor==18:settings.ship_price_percent=0
+	if contract_trip and session.snapshot().campaign_cursor in [18,19]:settings.ship_price_percent=0
 	if StationGeneration.available(bindings) and not contract_trip:
 		var departing: RefCounted=session.flight_owner()
 		var trip: Dictionary=departing.prepare_local_arrival()
@@ -716,7 +716,7 @@ func enter_game_over() -> bool:
 	if _user_paused or not _focused or not is_visible_in_tree():return false
 	var packet: Dictionary=session.prepare_game_over();var state: Dictionary=session.snapshot()
 	var expected:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"source_state":1,"campaign_cursor":state.campaign_cursor}
-	if packet!=expected or state.campaign_cursor not in [4,5,7,8,10,11,12,13,14,16,17,18] or state.get("boundary")!="game_over_transition_required" or state.get("player_destruction",{}).get("phase")!="game_over" or not state.player_destruction.get("exit_requested",false):return transition_error("Game-over exit lost its accepted source state")
+	if packet!=expected or state.campaign_cursor not in [4,5,7,8,10,11,12,13,14,16,17,18,19] or state.get("boundary")!="game_over_transition_required" or state.get("player_destruction",{}).get("phase")!="game_over" or not state.player_destruction.get("exit_requested",false):return transition_error("Game-over exit lost its accepted source state")
 	# Source state1 is the main menu, with no implicit retry or inventory change.
 	var result:={"transition":packet.duplicate(true),"flight":state.duplicate(true)}
 	reset();_last_game_over=result
@@ -733,7 +733,7 @@ func enter_station(now_microseconds: int, camera_seed: int=0, unix_seconds: Vari
 	var returning:=session is FirstFlightSession
 	var captured: bool=returning and session.status=="convoy_arrival_transition_required"
 	var alioth_return: bool=returning and session.snapshot().get("campaign_cursor")==17
-	var ordinary_return: bool=returning and session.snapshot().get("campaign_cursor")==18
+	var ordinary_return: bool=returning and session.snapshot().get("campaign_cursor") in [18,19]
 	var captured_settings:=BASE_STOCK_SETTINGS.duplicate(true) if captured or alioth_return else {}
 	if captured:captured_settings.ship_price_percent=0
 	var seconds: Variant=int(Time.get_unix_time_from_system()) if unix_seconds==null else unix_seconds
@@ -888,7 +888,7 @@ func present_session() -> void:
 		elif state.dialogue.visible:status.text=session.station_name+" · Enter / controller A continues · Left / controller B goes back · Esc / Start pauses"
 		elif state.get("lounge_open",false):status.text=session.station_name+" · Space Lounge · Arrows / D-pad select · Enter / A confirms · Backspace / B returns"
 		elif state.get("hangar_open",false):status.text=session.station_name+" · Hangar · Tab / controller focus navigates · Esc / Start pauses"
-		elif state.phase in STATION_DEPARTURE_PHASES and FirstFlightSession.supported(bindings,int(state.campaign_cursor)):status.text=session.station_name+" · Depart when ready · Enter / controller A"+(" · Space Lounge: L" if state.campaign_cursor in [13,14] else " · Hangar: H" if state.campaign_cursor==18 and Shopping.available(bindings) else "")
+		elif state.phase in STATION_DEPARTURE_PHASES and FirstFlightSession.supported(bindings,int(state.campaign_cursor)):status.text=session.station_name+" · Depart when ready · Enter / controller A"+(" · Space Lounge: L" if state.campaign_cursor in [13,14] else " · Hangar: H" if state.campaign_cursor in [18,19] and Shopping.available(bindings) else "")
 		elif state.phase=="station_equipment_required":status.text=session.station_name+(" · Enter the hangar · Enter / controller A" if EquipmentDefinitions.parameters(bindings.station_equipment) else " · This content pack has no equipment tutorial declarations.")
 		elif state.phase=="combat_departure_required":status.text=session.station_name+" · Equipment ready. The combat-training flight is still being reconstructed."
 		elif state.phase=="station_reload_required":status.text=session.station_name+" · Entering station"

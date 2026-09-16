@@ -32,7 +32,7 @@ func configure(bindings: RefCounted,combat: Dictionary,death: RefCounted,seed_se
 	for key in ["base_content_id","binding_id"]:
 		if initial.get(key)!=bindings.get(key) or combat.get(key)!=bindings.get(key):return reject("Second-flight particles belong to another departure")
 	var training: bool=combat.get("campaign_cursor")==7
-	var local_flight: bool=combat.get("campaign_cursor") in [10,11,12,13,14,16,18]
+	var local_flight: bool=combat.get("campaign_cursor") in [10,11,12,13,14,16,18,19]
 	if initial.get("phase")!="ready" or initial.get("departure_cursor")!=(int(combat.campaign_cursor) if local_flight else (7 if training else 4)):return reject("Register ordinary-flight particles before player death in the same encounter")
 	var smoke:=Smoke.new()
 	var ready:=smoke.configure_local_traffic(bindings,combat,seed_seconds) if local_flight else (smoke.configure_combat_training(bindings,combat,seed_seconds) if training else smoke.configure_full_hold(bindings,combat,seed_seconds))

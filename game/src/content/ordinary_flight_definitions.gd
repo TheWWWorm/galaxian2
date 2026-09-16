@@ -23,7 +23,7 @@ static func select(bindings: RefCounted, cursor: Variant) -> Dictionary:
 
 static func for_departure(bindings: RefCounted, entry: Dictionary) -> Dictionary:
 	var rules:=select(bindings,entry.get("campaign_cursor"))
-	if FreeFlight.ordinary_entry(bindings,entry):rules=FreeFlight.flight(bindings,int(entry.get("location",{}).get("station_id",-1)))
+	if FreeFlight.ordinary_entry(bindings,entry):rules=FreeFlight.flight(bindings,int(entry.get("location",{}).get("station_id",-1)),entry.campaign_cursor)
 	if entry.get("campaign_cursor")==16:rules=Attack.flight(bindings,int(entry.get("location",{}).get("station_id",-1)))
 	if entry.get("campaign_cursor")==14 and not ContractWorld.ordinary_entry(bindings,entry):rules=Convoy.flight(bindings,int(entry.get("location",{}).get("station_id",-1)))
 	if ContractWorld.ordinary_entry(bindings,entry):rules=ContractWorld.flight(bindings,int(entry.get("location",{}).get("station_id",-1)),entry.campaign_cursor)
@@ -36,11 +36,11 @@ static func for_departure(bindings: RefCounted, entry: Dictionary) -> Dictionary
 	return rules
 
 static func briefing(bindings: RefCounted,cursor: Variant,ordinary_world:=false) -> Dictionary:
-	if cursor==18:
+	if bindings!=null and FreeFlight.Campaign.supported(bindings.mido_travel,cursor):
 		if not FreeFlight.available(bindings):return {}
 		var shared:=MiningStory.briefing(bindings,2)
 		if shared.is_empty():return {}
-		shared.campaign_cursor=18;shared.mission_kind=-1;shared.events=[]
+		shared.campaign_cursor=cursor;shared.mission_kind=-1;shared.events=[]
 		shared.entry_release_ms=int(bindings.mido_travel.free_flight.launch_clear_after_ms)+1
 		return shared
 	if cursor==16:

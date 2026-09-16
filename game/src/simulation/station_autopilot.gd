@@ -34,7 +34,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	for data in [entry,target]:
 		if data.get("base_content_id")!=bindings.base_content_id or data.get("binding_id")!=bindings.binding_id:return reject("Station autopilot belongs to another flight identity")
 	var rules: Dictionary=bindings.station_autopilot
-	if entry.get("campaign_cursor") in [10,11,12,13,14,16,18] and not OrdinaryFlight.for_departure(bindings,entry).is_empty():
+	if entry.get("campaign_cursor") in [10,11,12,13,14,16,18,19] and not OrdinaryFlight.for_departure(bindings,entry).is_empty():
 		rules=rules.duplicate(true);rules.station_id=int(entry.location.station_id);rules.system_id=int(entry.location.system_id)
 	if OrdinaryFlight.for_departure(bindings,entry).is_empty() or entry.get("location",{}).get("station_id")!=int(rules.station_id) or entry.location.get("system_id")!=int(rules.system_id) or target.get("station_id")!=int(rules.station_id) or target.get("system_id")!=int(rules.system_id):return reject("Station autopilot requires the supported mining location")
 	var destination:=Vector3(rules.target_position[0],rules.target_position[1],rules.target_position[2])

@@ -42,6 +42,13 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, campa
 		ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
 
+func configure_campaign_visit(library: RefCounted,bindings: RefCounted,cursor: int,mission: Dictionary) -> bool:
+	clear();_resources=Resources.new()
+	if not _resources.configure_campaign_visit(library,bindings,cursor,mission):return reject(_resources.error)
+	var ids:=[]
+	for event in bindings.mido_travel.suttnar_visit.events:ids.append(int(event.voice_event_id))
+	return _prepare_voices(ids)
+
 func configure_station_return(library: RefCounted, bindings: RefCounted, campaign_cursor:=3) -> bool:
 	clear();_resources=Resources.new()
 	if not _resources.configure_station_return(library,bindings,campaign_cursor):return reject(_resources.error)

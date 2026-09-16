@@ -16,9 +16,9 @@ static func select(bindings: RefCounted, station_id: int, cursor: int) -> Dictio
 	if bindings==null or not parameters(bindings.station_presentation):return {}
 	if station_id==98:
 		if not Alioth.available(bindings):return {}
-		if cursor not in [15,16] and not (cursor in [17,18] and load("res://src/content/alioth_return_definitions.gd").available(bindings)):return {}
+		if cursor not in [15,16] and not (cursor in [17,18,19] and load("res://src/content/alioth_return_definitions.gd").available(bindings)):return {}
 		return alioth_view(bindings.station_presentation)
-	if cursor==18 and not load("res://src/content/ordinary_world_definitions.gd").location(bindings.mido_travel,station_id).is_empty():
+	if load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) and not load("res://src/content/ordinary_world_definitions.gd").location(bindings.mido_travel,station_id).is_empty():
 		if not load("res://src/content/local_arrival_environment_definitions.gd").available(bindings):return {}
 		# These supported Terran locations use the same catalogue-selected
 		# Terran hangar. The scene also checks the actual imported hangar row.
@@ -43,7 +43,7 @@ static func view_parameters(data: Dictionary) -> bool:
 	if parameters(data):return true
 	if not data.get("provenance") is Dictionary:return false
 	var shared:=VALUES.duplicate(true);shared.provenance=data.provenance
-	if data.get("station_id") in [70,71,72,73,74,95,96,97,99]:return Values.equal_value(data,ordinary_view(shared,int(data.station_id)))
+	if data.get("station_id") in [55,56,57,70,71,72,73,74,95,96,97,99]:return Values.equal_value(data,ordinary_view(shared,int(data.station_id)))
 	return Values.equal_value(data,alioth_view(shared))
 
 static func validate(data: Variant, source_bytes: int, arch: String, arrival: Dictionary, station: Dictionary) -> String:

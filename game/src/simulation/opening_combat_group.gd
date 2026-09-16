@@ -539,7 +539,7 @@ func supports_weapon_hit(weapon: Variant) -> bool:
 			var valid: bool=FreeLife.npc_hit(_training_weapons,weapon) if _training_weapons.has("free_lifecycle") else Alioth.npc_hit(_training_weapons,weapon) if _training_weapons.has("alioth_lifecycle") else Convoy.npc_hit(_training_weapons,weapon) if _training_weapons.has("capital_death") else (ContractLife.npc_hit(_training_weapons,weapon) if not _contract_encounter.is_empty() else (Travel.npc_hit(_training_weapons,weapon) if _provocation!=null else TrainingWeapons.npc_hit(_training_weapons,weapon)))
 			if not valid:return reject("NPC damage differs from this encounter's weapon declaration")
 			kinds=[0,1]
-		elif weapon.get("campaign_cursor")==18 and preload("res://src/content/ordinary_fitting_definitions.gd").ordinary(weapon):kinds=[0,1,2]
+		elif weapon.get("campaign_cursor") in [18,19] and preload("res://src/content/ordinary_fitting_definitions.gd").ordinary(weapon):kinds=[0,1,2]
 		elif weapon.get("kind")==2:
 			if not TrainingWeapons.dispersed_primary(weapon):return reject("Player damage lacks its verified primary declaration")
 			kinds=[0,2]

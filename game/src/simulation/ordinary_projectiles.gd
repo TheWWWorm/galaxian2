@@ -166,7 +166,7 @@ func fire_from_mount(mount: Dictionary, ship_transform: Variant, world_direction
 	var up:=scaled(basis.y,1.0)
 	if not up.is_finite():return fail("Weapon up axis exceeds finite world coordinates")
 	var result:=fire(muzzle, world_direction, firing_allowed,random_state)
-	if result.get("fired",false) and _weapon.get("campaign_cursor") in [7,10,11,12,13,14,16,18] and not _weapon.get("nonplayer_source",false):
+	if result.get("fired",false) and _weapon.get("campaign_cursor") in [7,10,11,12,13,14,16,18,19] and not _weapon.get("nonplayer_source",false):
 		# The original ordinary launch stores the firing matrix's Y column in
 		# each slot. It survives ship rotation and is reused by the draw root.
 		_slots[result.projectile.slot].up=up

@@ -43,7 +43,7 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 	if not bindings.station_flight.is_empty():
 		var data: Dictionary=bindings.station_flight
 		if not StationFlight.parameters(data):return reject("Station notices require their verified declarations")
-		if entry.campaign_cursor in [10,11,12,13,14,16,18]:
+		if entry.campaign_cursor in [10,11,12,13,14,16,18,19]:
 			data=data.duplicate(true);data.station_id=int(entry.location.station_id);data.system_id=int(entry.location.system_id)
 		if entry.location.station_id!=int(data.station_id) or entry.location.system_id!=int(data.system_id):return reject("Station notices belong to another flight location")
 		var tables: RefCounted=catalogues

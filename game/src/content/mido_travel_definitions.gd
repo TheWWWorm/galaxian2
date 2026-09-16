@@ -145,7 +145,7 @@ static func navigation_available(data: Dictionary, cursor: int) -> bool:
 	return parameters(data) and data.has("contract_navigation") and Transit.supports(data,cursor)
 
 static func free_local_navigation(data: Dictionary,cursor: int) -> bool:
-	return parameters(data) and data.has("local_arrival_environment") and cursor==int(data.free_flight.campaign_cursor)
+	return parameters(data) and data.has("local_arrival_environment") and load("res://src/content/free_campaign_definitions.gd").supported(data,cursor)
 
 static func navigation_system(data: Dictionary,cursor: int,station_id: int=-1) -> int:
 	if free_local_navigation(data,cursor):
@@ -167,8 +167,7 @@ static func route(data: Dictionary, cursor: int, from_station_id: int, station_i
 
 static func navigation_mission(data: Dictionary, cursor: int, mission: Dictionary) -> bool:
 	if free_local_navigation(data,cursor):
-		var next: Dictionary=data.alioth_return
-		return mission=={"kind":int(next.next_kind),"station_id":int(next.next_station_id),"reward":0,"bonus":0,"source_parameter":0}
+		return mission==load("res://src/content/free_campaign_definitions.gd").mission(data,cursor)
 	if cursor==14 and navigation_available(data,cursor):return mission==Transit.mission(data)
 	if navigation_available(data,cursor):
 		var target: Variant=mission.get("completed_contract_target")

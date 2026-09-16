@@ -8,6 +8,7 @@ const SPANS = {"ordinary_world_special_planet":[872426,80],"ordinary_world_stati
 # This is a native implementation support boundary, not imported progression.
 # Catalogue rows and all resources are checked before constructing a location.
 const SYSTEMS={
+	11:{"system_id":11,"station_ids":[55,56,57],"planet_types":[4,15,6],"faction":0,"security":2,"gate_station_id":55,"sky_index":3},
 	19:{"system_id":19,"station_ids":[95,96,97,98,99],"planet_types":[3,8,14,12,6],"faction":0,"security":3,"gate_station_id":95,"sky_index":6},
 	14:{"system_id":14,"station_ids":[70,71,72,73,74],"planet_types":[13,7,5,9,16],"faction":0,"security":3,"gate_station_id":70,"sky_index":5},
 }
@@ -20,6 +21,7 @@ static func available(bindings: RefCounted) -> bool:
 static func location(data: Dictionary,station_id: Variant) -> Dictionary:
 	if not station_id is int or not data.has("free_population"):return {}
 	for id in SYSTEMS:
+		if id==11 and not load("res://src/content/suttnar_visit_definitions.gd").parameters(data.get("suttnar_visit")):continue
 		if id!=19 and not parameters(data.get("ordinary_worlds")):continue
 		var world: Dictionary=SYSTEMS[id]
 		var index: int=world.station_ids.find(station_id)

@@ -4,15 +4,25 @@ extends "res://tests/alioth_return.gd"
 var _free_capture_dir:=""
 
 func _initialize() -> void:
-	if OS.get_environment("GOF2_FREE_PLAY_STATION_SCENARIO").is_empty():super._initialize()
+	if OS.get_environment("GOF2_FREE_PLAY_STATION_SCENARIO").is_empty() and OS.get_environment("GOF2_SOURCE_SAVE").is_empty():super._initialize()
 	else:call_deferred("run_free_checkpoint")
 
 func run_free_checkpoint() -> void:
 	var args:=OS.get_cmdline_user_args()
 	if not open_application_content(args):quit(1);return
-	var checkpoint:=FreePlayCheckpoint.new()
-	var station: RefCounted=checkpoint.open(OS.get_environment("GOF2_FREE_PLAY_STATION_SCENARIO"),definitions)
-	if station==null:check(false,checkpoint.error);quit(1);return
+	var station: RefCounted
+	var saved:=OS.get_environment("GOF2_SOURCE_SAVE")
+	if saved.is_empty():
+		var checkpoint:=FreePlayCheckpoint.new()
+		station=checkpoint.open(OS.get_environment("GOF2_FREE_PLAY_STATION_SCENARIO"),definitions)
+		if station==null:check(false,checkpoint.error);quit(1);return
+	else:
+		var file=load("res://src/simulation/station_save_file.gd").new()
+		var archive=load("res://src/simulation/station_archive.gd").new()
+		var document: Dictionary=file.load_document(saved,definitions,catalogue,source)
+		if document.is_empty():check(false,file.error);quit(1);return
+		station=archive.restore(definitions,catalogue,source,document)
+		if station==null:check(false,archive.error);quit(1);return
 	app=Host.new();root.add_child(app);app.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	app.set_context(source,definitions,visual);app.set_process(false);app._focused=true
 	var restored:=StationSession.new();app.viewport.add_child(restored);restored._world=station.fork()
@@ -152,3 +162,45 @@ func capture_free_application(label: String) -> void:
 	RenderingServer.force_draw(false);await RenderingServer.frame_post_draw
 	check(root.get_texture().get_image().save_png(_free_capture_dir.path_join(label+".png"))==OK,"Could not capture ordinary application "+label)
 	resume_application_focus()
+
+func acquire_passenger_cabin() -> bool:
+	# Visit the source-stocked cabin supplier first so the three-location cache
+	# can retain Alioth's original passenger offer through the shopping trip.
+	for destination in [-1,99,96,97,95]:
+		if destination==int(app.session.station_owner().snapshot().loadout.station_id):continue
+		if destination>=0 and not await visit_delivery_station(destination):return false
+		if await fit_passenger_cabin():
+			return true if int(app.session.station_owner().snapshot().loadout.station_id)==98 else await visit_delivery_station(98)
+		if failures:return false
+	check(false,"Actual local station stock supplied no affordable supported cabin")
+	return false
+
+func fit_passenger_cabin() -> bool:
+	if not app.equipment_action("open"):check(false,app.session.error);return false
+	var shop: Dictionary=app.session.station_owner().snapshot()
+	var cabin:={}
+	for row in shop.equipment.market_rows:
+		var properties: Dictionary=catalogue.tables.items[row.item_id].properties
+		if int(properties.get(2,-1))==20 and int(properties.get(34,0))>=3 and row.stock>0 and row.unit_price<=shop.contracts.credits and shop.equipment.fitting_support[row.item_id].is_empty():
+			if cabin.is_empty() or row.unit_price<cabin.price:cabin={"item_id":row.item_id,"price":row.unit_price}
+	if cabin.is_empty():
+		print("No affordable supported cabin at station ",shop.loadout.station_id)
+		check(app.equipment_action("close"),app.session.error)
+		return false
+	# Vacate the starter's actual scanner slot. The scanner stays owned in cargo.
+	var slot:=-1
+	for index in shop.loadout.slots.size():
+		if shop.loadout.slots[index]!=null and shop.loadout.slots[index].item_id==81:slot=index;break
+	if slot<0:check(false,"The earned ship lost its original scanner slot");return false
+	if not app.equipment_action("unmount",81,slot) or not app.equipment_action("buy",int(cabin.item_id)) or not app.equipment_action("mount",int(cabin.item_id)):check(false,app.session.error);return false
+	var fitted: Dictionary=app.session.station_owner().snapshot()
+	check(fitted.contracts.credits==shop.contracts.credits-int(cabin.price) and fitted.equipment.fitting_stats.passenger_capacity>=3,"Paid fitting lost its cabin places or price")
+	print("Passenger cabin purchased: ",cabin)
+	await capture_free_application("ordinary-contract-passenger-cabin")
+	if not app.equipment_action("close"):check(false,app.session.error);return false
+	return failures==0
+
+func visit_delivery_station(destination: int) -> bool:
+	if not app.request_departure() or not app.enter_first_flight(now_us,4096,1789100000):check(false,app.status.text);return false
+	if not await release_application_flight() or not await travel_application(destination) or not await dock_application():return false
+	return true

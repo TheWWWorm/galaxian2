@@ -32,15 +32,15 @@ static func available(bindings: RefCounted) -> bool:return Delivery.available(bi
 static func can_capture(state: Dictionary) -> bool:
 	if state.get("hangar_open",false) or state.get("lounge_open",false) or not state.get("acknowledged",false):return false
 	if not state.get("contracts",{}).get("pending_result",{}).is_empty():return false
-	return Opening.accepts(state) or (state.get("phase")=="free_play_required" and state.get("campaign_cursor")==18 and state.get("alioth_return_acknowledged")==true and state.get("contracts",{}).get("pending_result",{}).is_empty())
+	return Opening.accepts(state) or (state.get("phase")=="free_play_required" and state.get("campaign_cursor") in [18,19] and state.get("alioth_return_acknowledged")==true and state.get("contracts",{}).get("pending_result",{}).is_empty())
 
 func capture(station: RefCounted,bindings: RefCounted,locations: RefCounted=null) -> Dictionary:
 	error=""
 	if not station is Station or not available(bindings):return fail("This game has no supported station save")
 	var state: Dictionary=station.snapshot()
 	if Opening.accepts(state):return Opening.new().capture(self,station,bindings,locations)
-	if state.get("phase")!="free_play_required" or state.get("campaign_cursor")!=18 or state.get("acknowledged")!=true or state.get("alioth_return_acknowledged")!=true:return fail("Finish the station conversation before saving")
-	return _capture_career(station,bindings,1)
+	if state.get("phase")!="free_play_required" or not FreeFlight.Campaign.supported(bindings.mido_travel,state.get("campaign_cursor")) or state.get("acknowledged")!=true or state.get("alioth_return_acknowledged")!=true:return fail("Finish the station conversation before saving")
+	return _capture_career(station,bindings,1 if state.campaign_cursor==18 else 3)
 
 func _capture_career(station: RefCounted,bindings: RefCounted,version: int) -> Dictionary:
 	var state: Dictionary=station.snapshot()
@@ -59,7 +59,7 @@ func _capture_career(station: RefCounted,bindings: RefCounted,version: int) -> D
 func restore(bindings: RefCounted,cat: RefCounted,library: RefCounted,data: Variant) -> RefCounted:
 	error="";restored_locations=null
 	if not available(bindings) or cat==null or library==null or cat.content_id!=bindings.base_content_id or library.manifest.get("content_id")!=bindings.base_content_id:return reject("Select the game's content and current bindings before loading")
-	if not data is Dictionary or data.size()!=8 or data.get("format")!="gof2-native-station" or data.get("version") not in [1,2] or not data.version is int:return reject("Unsupported station save format")
+	if not data is Dictionary or data.size()!=8 or data.get("format")!="gof2-native-station" or data.get("version") not in [1,2,3] or not data.version is int:return reject("Unsupported station save format")
 	if not _identity(data,bindings):return reject("This save belongs to different content or gameplay bindings")
 	if not data_tree(data):return reject("The save contains unsupported or oversized data")
 	if data.version==2:return Opening.new().restore(self,bindings,cat,library,data)
@@ -69,13 +69,15 @@ func restore(bindings: RefCounted,cat: RefCounted,library: RefCounted,data: Vari
 	if owned==null:return null
 	var locations:=_locations(bindings,cat,library,data.locations)
 	if locations==null:return null
-	var contracts:=_career(bindings,cat,data.career,owned,locations)
+	var cursor: Variant=data.station.get("campaign_cursor")
+	if not cursor is int or (data.version==1 and cursor!=18) or (data.version==3 and cursor!=19):return reject("The station save version does not support this campaign stage")
+	var contracts:=_career(bindings,cat,data.career,owned,locations,cursor)
 	if contracts==null:return null
 	var saved: Dictionary=data.station
 	var inventory: Dictionary=owned.snapshot();var career: Dictionary=contracts.snapshot()
-	if not _identity(saved,bindings) or saved.get("campaign_cursor")!=18 or saved.get("phase")!="free_play_required" or saved.get("acknowledged")!=true or saved.get("alioth_return_acknowledged")!=true:return reject("The save has not reached an acknowledged ordinary station")
+	if not _identity(saved,bindings) or saved.get("campaign_cursor")!=cursor or saved.get("phase")!="free_play_required" or saved.get("acknowledged")!=true or saved.get("alioth_return_acknowledged")!=true:return reject("The save has not reached an acknowledged ordinary station")
 	if saved.get("loadout")!=inventory.loadout or saved.get("cargo")!=inventory.cargo or saved.get("progress")!=career.progress or saved.get("completed_side_missions")!=career.completed_side_missions:return reject("The saved station differs from its inventory or career")
-	if not saved.get("mission") is Dictionary or not FreeNavigation.ordinary_departure_at(bindings,18,saved.mission,int(inventory.loadout.station_id)) or not FreeFlight.response_flags(bindings,saved.get("station_response_flags",{})):return reject("The saved station has an unsupported story or response state")
+	if not saved.get("mission") is Dictionary or not FreeNavigation.ordinary_departure_at(bindings,cursor,saved.mission,int(inventory.loadout.station_id)) or not FreeFlight.response_flags(bindings,saved.get("station_response_flags",{})):return reject("The saved station has an unsupported story or response state")
 	if saved.get("source_ship_configuration")!=int(bindings.station_entry.source_ship_configuration) or saved.get("display_ship_configuration")!=int(bindings.station_entry.display_ship_configuration) or saved.get("source_marked_item_ids")!=[]:return reject("The station's ship presentation disagrees with its content")
 	if not saved.get("language") is String or not Numbers.integer(saved.get("line_index"),0,128) or not Numbers.integer(saved.get("flight_elapsed_ms"),0,2147483647):return reject("The station has invalid retained conversation or flight metadata")
 	for key in ["return_visit","delivery_acknowledged","mining_completed","alioth_return","local_visit","contract_station","local_visit_acknowledged"]:
@@ -83,7 +85,7 @@ func restore(bindings: RefCounted,cat: RefCounted,library: RefCounted,data: Vari
 	if saved.get("reward_credits")!=0:return reject("The acknowledged station retains an unclaimed story reward")
 	if saved.has("cargo_cache_stale") and saved.cargo_cache_stale!=false:return reject("The station cargo cache is not current")
 	if saved.has("hangar_open") and saved.hangar_open!=false:return reject("Close the saved station's hangar before loading")
-	if not _player_cache(bindings,cat,saved.get("player_cache"),inventory.loadout):return null
+	if not _player_cache(bindings,cat,saved.get("player_cache"),inventory.loadout,cursor):return null
 	var station:=Station.new()
 	station._state=saved.duplicate(true);station._rules=bindings.station_entry.duplicate(true)
 	station._progress_rules=bindings.opening_handoff.duplicate(true)
@@ -95,7 +97,7 @@ func restore(bindings: RefCounted,cat: RefCounted,library: RefCounted,data: Vari
 		if station._lines.is_empty():return reject(station.error)
 		if saved.line_index!=station._lines.size()-1:return reject("The saved Alioth conversation is not acknowledged through its final line")
 	else:
-		station._return_rules=FreeFlight.docking(bindings,int(inventory.loadout.station_id))
+		station._return_rules=FreeFlight.docking(bindings,int(inventory.loadout.station_id),cursor)
 		if saved.line_index!=0:return reject("An ordinary station retained an unknown conversation")
 	station._state.language=library.active_language
 	restored_locations=locations
@@ -167,11 +169,11 @@ func _locations(bindings: RefCounted,cat: RefCounted,library: RefCounted,data: V
 	return cache
 
 func _career(bindings: RefCounted,cat: RefCounted,data: Dictionary,equipment: RefCounted,locations: RefCounted,cursor: int=18) -> RefCounted:
-	if cursor not in [13,14,16,18] or not _identity(data,bindings) or data.get("campaign_cursor")!=cursor or data.get("station_id")!=equipment.snapshot().loadout.station_id or data.get("station_id")!=locations.snapshot().current_station_id:return reject("The saved career belongs to another station")
+	if (cursor not in [13,14,16] and not FreeFlight.Campaign.supported(bindings.mido_travel,cursor)) or not _identity(data,bindings) or data.get("campaign_cursor")!=cursor or data.get("station_id")!=equipment.snapshot().loadout.station_id or data.get("station_id")!=locations.snapshot().current_station_id:return reject("The saved career belongs to another station")
 	if data.get("difficulty") not in [0.5,1.0,1.5] or not data.get("difficulty") is float or not data.get("progress") is Dictionary or not Reputation.valid_state(data.get("reputation")):return reject("The saved difficulty or career is invalid")
 	var progress: Dictionary=data.progress
 	if not Opening.new().valid_progress(self,bindings,progress,cursor):return null
-	if cursor==18 and progress.size()!=9:return reject("The saved unlocked career lacks its counters")
+	if FreeFlight.Campaign.supported(bindings.mido_travel,cursor) and progress.size()!=9:return reject("The saved unlocked career lacks its counters")
 	var earned:=Career.calculate_progress(bindings.opening_handoff,cursor,progress.player_kills,progress.pirate_kills,progress.other_score)
 	if earned.is_empty() or progress.get("reputation")!=data.reputation or data.get("rank")!=earned.rank:return reject("The saved rank or faction standing disagrees with its career")
 	for key in earned:
@@ -208,7 +210,7 @@ func _career(bindings: RefCounted,cat: RefCounted,data: Dictionary,equipment: Re
 	career._progress_rules=bindings.opening_handoff.duplicate(true)
 	career._stations=cat.tables.systems[int(bindings.early_contracts.system_id)].station_ids.duplicate()
 	career._lounges=locations
-	if cursor==18 and career.free_flight_context(bindings,data.station_id).is_empty():return reject(career.error)
+	if FreeFlight.Campaign.supported(bindings.mido_travel,cursor) and career.free_flight_context(bindings,data.station_id).is_empty():return reject(career.error)
 	if cursor in [13,14] and career.flight_context(data.station_id,bindings).is_empty():return reject(career.error)
 	return career
 

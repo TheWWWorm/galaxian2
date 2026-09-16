@@ -702,7 +702,7 @@ func _sample_cargo(random: RefCounted) -> Array:
 
 func sample_relaunch_cargo(random_state: Variant) -> Dictionary:
 	error=""
-	if _ambient.is_empty() or _actors.is_empty() or (_identity.get("campaign_cursor") not in [11,12,13,14,18] or (_identity.get("campaign_cursor")==18 and _free.is_empty())):return fail("Traffic cargo regeneration requires its retained generated population")
+	if _ambient.is_empty() or _actors.is_empty() or (_identity.get("campaign_cursor") not in [11,12,13,14,18,19] or (_identity.get("campaign_cursor") in [18,19] and _free.is_empty())):return fail("Traffic cargo regeneration requires its retained generated population")
 	var random:=Random.new()
 	if not random.restore(random_state):return fail(random.error)
 	return {"cargo":_sample_cargo(random),"random_state":random.snapshot()}

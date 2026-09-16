@@ -70,9 +70,10 @@ func verify(args: PackedStringArray) -> void:
 	for language in library.manifest.languages:
 		check(library.select_language(language),library.error)
 		check(Visit.new().configure(bindings,library,18,mission),"Visit text/speakers are missing in "+language)
-	# Declarations and a component are insufficient to release this destination.
-	check(not Navigation.ordinary_departure_at(bindings,18,mission,56),"The isolated component bypassed the playable story guard")
-	print("Eight original voiced lines; strict clock and acknowledgement boundaries; route remains guarded")
+	# The matching capability enables the native visit; later Kappa remains guarded.
+	check(Navigation.ordinary_departure_at(bindings,18,mission,56),"The native visit is unavailable with its source capability")
+	check(not Navigation.ordinary_departure_at(bindings,19,Navigation.Campaign.mission(bindings.mido_travel,19),55),"The unsupported next visit bypassed its guard")
+	print("Eight original voiced lines; strict clock and acknowledgement boundaries; next visit remains guarded")
 
 func check(condition: bool,message: String) -> void:
 	checks+=1

@@ -29,7 +29,7 @@ func configure(bindings: RefCounted, resources: RefCounted, construction: RefCou
 	for key in ["base_content_id","binding_id"]:
 		if entry.get(key)!=bindings.get(key) or effect.get(key)!=bindings.get(key):return reject("Player destruction belongs to another content identity")
 	var training: bool=entry.get("campaign_cursor")==7
-	var local_flight: bool=entry.get("campaign_cursor") in [10,11,12,13,14,16,18]
+	var local_flight: bool=entry.get("campaign_cursor") in [10,11,12,13,14,16,18,19]
 	if training:
 		if Training.flight(bindings).is_empty() or construction.equipment_owner()==null:return reject("Training destruction requires its equipped ordinary departure")
 		rules=rules.duplicate(true)
@@ -49,7 +49,7 @@ func configure(bindings: RefCounted, resources: RefCounted, construction: RefCou
 	# retained drill/scanner. None supplies the escape-pod subtype27.
 	if training and not expected_equipment.all(func(id):return id in [0,22,55,81,90]):return reject("Training destruction has an unsupported escape-device context")
 	if local_flight:
-		if entry.campaign_cursor==18 and Fitting.available(bindings) and catalogues!=null:
+		if entry.campaign_cursor in [18,19] and Fitting.available(bindings) and catalogues!=null:
 			if catalogues.content_id!=bindings.base_content_id:return reject("Destruction equipment belongs to another catalogue")
 			for id in expected_equipment:
 				if not Numbers.integer(id,0,catalogues.tables.items.size()-1) or catalogues.tables.items[id].arrays[2][5]==27:return reject("Escape-device destruction is not yet supported")

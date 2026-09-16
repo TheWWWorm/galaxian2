@@ -15,7 +15,7 @@ static func available(bindings: RefCounted) -> bool:
 
 static func maximum_actor_count(bindings: RefCounted,rank: int,difficulty: float,context: Dictionary={}) -> int:
 	var delivery=preload("res://src/content/ordinary_contracts_definitions.gd")
-	if delivery.active_courier(context):return 0
+	if delivery.active_courier(context) or delivery.Campaign.active_visit(bindings.mido_travel,context):return 0
 	var rules: Dictionary=bindings.mido_travel.free_population
 	var groups: Dictionary=bindings.ambient_population
 	var hostiles:=int(3.0*(1.0+difficulty+float(rules.hostile_difficulty_offset)))+int(float(rank)/float(rules.hostile_rank_divisor))

@@ -9,7 +9,7 @@ const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const Alioth=preload("res://src/content/alioth_lifecycle_definitions.gd")
 const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
 const Cache=preload("res://src/simulation/flight_player_cache.gd")
-const KINDS={0:"opening",1:"arrival",2:"mining",4:"full_hold",7:"training",10:"local",11:"local",12:"local",13:"local",14:"convoy",16:"alioth",18:"free"}
+const KINDS={0:"opening",1:"arrival",2:"mining",4:"full_hold",7:"training",10:"local",11:"local",12:"local",13:"local",14:"convoy",16:"alioth",18:"free",19:"free"}
 var error:=""
 var cursor:=-1
 var is_arrival:=false
@@ -40,7 +40,7 @@ func configure(bindings: RefCounted, value: int, station_id: int=-1, restoring_l
 		departure=true
 	if kind=="free":
 		if not FreeFlight.available(bindings):return reject("Ordinary player entry is unavailable")
-		equipped_entry=FreeFlight.player_entry(bindings.mido_travel,station_id,ship_id)
+		equipped_entry=FreeFlight.player_entry(bindings.mido_travel,station_id,ship_id,value)
 		if equipped_entry.is_empty():return reject("Ordinary player entry requires its equipped location")
 		_travel=bindings.mido_travel.duplicate(true);departure=not restoring_local;restores_local=restoring_local
 	if kind in ["local","convoy"]:
@@ -62,7 +62,7 @@ func configure(bindings: RefCounted, value: int, station_id: int=-1, restoring_l
 func player_cache(parameters: Dictionary, seed: Dictionary, hull: int, capacities: Dictionary, reset:=false) -> Dictionary:
 	if cursor<0:return {}
 	if _kind=="alioth":return Cache.alioth_attack_cache(parameters,_travel,seed,hull,capacities,reset)
-	if _kind=="free":return Cache.free_flight_cache(parameters,_travel,seed,hull,capacities,reset)
+	if _kind=="free":return Cache.free_flight_cache(parameters,_travel,seed,hull,capacities,reset,cursor)
 	if _kind in ["local","convoy"]:return Cache.local_travel_cache(parameters,_travel,seed,hull,capacities,reset,cursor)
 	if _kind=="training":return Cache.combat_training_cache(parameters,_training,seed,hull,capacities,reset)
 	if is_departure:return Cache.departure_cache(parameters,_departure,seed,hull,capacities,reset)

@@ -21,10 +21,10 @@ func configure_departure(bindings: RefCounted, catalogues: RefCounted, construct
 	var entry: Dictionary=construction.snapshot()
 	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id:return reject("Cargo belongs to another departure identity")
 	if OrdinaryFlight.for_departure(bindings,entry).is_empty():return reject("Cargo requires a supported ordinary departure")
-	var equipped: bool=entry.campaign_cursor in [7,10,11,12,13,14,16,18]
+	var equipped: bool=entry.campaign_cursor in [7,10,11,12,13,14,16,18,19]
 	var ship_id:=int(bindings.station_departure.ship_id)
 	var ships: Array=catalogues.tables.get("ships",[])
-	if entry.campaign_cursor==18:
+	if load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,entry.campaign_cursor):
 		if not Numbers.integer(entry.departure.loadout.get("ship_id"),0,ships.size()-1):return reject("Ordinary cargo requires its actual equipped ship")
 		ship_id=int(entry.departure.loadout.ship_id)
 	if entry.departure.loadout.ship_id!=ship_id or ship_id>=ships.size() or (not equipped and entry.departure.cargo_used!=0) or int(bindings.station_departure.initial_cargo_used)!=0:return reject("Unsupported initial cargo or ship")

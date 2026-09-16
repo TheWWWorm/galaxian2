@@ -47,6 +47,11 @@ other layouts may report that they are unsupported.
 - Main menu, display and sound settings, language selection, mouse/controller input and optional
   larger touch controls. Play is landscape only.
 
+The development branch also includes the trip through Magnetar to Union, the
+Suttnar conversation, and saving, shopping and travel to Tornard afterward.
+**Kappa is still unfinished:** after completing Suttnar, you cannot yet return
+through Union's jumpgate. This extension is not included in preview 3.
+
 ![Portal and freighters](screenshots/02-portal-and-freighters.png)
 
 ## Controls and station services

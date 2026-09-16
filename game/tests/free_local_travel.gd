@@ -11,6 +11,11 @@ func verify_free_application() -> void:
 		check(not load("res://src/content/mido_travel_definitions.gd").free_local_navigation(definitions.mido_travel,18),"Earlier bindings exposed unfinished ordinary travel")
 		return
 	var initial_stock: Dictionary=app.session.location_owner().location(98).stock
+	var mission_markers:=[]
+	for mission in [original.mission,original.contracts.mission]:
+		var destination: int=mission.get("station_id",-1)
+		if catalogue.tables.systems[19].station_ids.has(destination) and not mission_markers.has(destination):mission_markers.append(destination)
+	mission_markers.sort()
 	app.show();app.present_session();await process_frame;resume_application_focus()
 	for destination in local_destinations():
 		var mobile: bool=destination==96
@@ -25,7 +30,7 @@ func verify_free_application() -> void:
 		if not app.open_map():check(false,app.status.text);return
 		var map: Dictionary=app.map_panel.snapshot()
 		check(map.system_id==19 and map.rows.map(func(row):return row.station_id)==[95,96,97,98,99],"Augmenta map lost its actual station membership")
-		check(map.rows.filter(func(row):return row.supported).size()==4 and map.rows.filter(func(row):return row.mission_target).is_empty(),"Ordinary map disabled travel or relocated the pending Suttnar story")
+		check(map.rows.filter(func(row):return row.supported).size()==4 and map.rows.filter(func(row):return row.mission_target).map(func(row):return row.station_id)==mission_markers,"Ordinary map disabled travel or changed its retained story/contract markers")
 		app.map_panel.select_station(destination);app.map_panel.request_confirmation()
 		await capture_free_application("free-local-map-%d"%destination)
 		if not app.close_map(now_us):check(false,app.status.text);return

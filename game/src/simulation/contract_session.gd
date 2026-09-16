@@ -19,6 +19,7 @@ const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const Story=preload("res://src/content/lounge_story_definitions.gd")
 const GateArrival=preload("res://src/content/gate_arrival_definitions.gd")
 const Shopping=preload("res://src/content/ordinary_shopping_definitions.gd")
+const Campaign=preload("res://src/content/free_campaign_definitions.gd")
 const OrdinaryContracts=preload("res://src/content/ordinary_contracts_definitions.gd")
 var error:=""
 var _state:={}
@@ -246,7 +247,7 @@ func transact_shopping(bindings: RefCounted,cat: RefCounted,equipment: RefCounte
 	return inventory
 
 func _shopping_inventory(bindings: RefCounted,cat: RefCounted,equipment: RefCounted) -> Dictionary:
-	if not equipment is Equipment or _lounges==null or _state.get("campaign_cursor")!=18 or _state.get("progress",{}).get("campaign_cursor")!=18:reject("Shopping requires the earned ordinary station career");return {}
+	if not equipment is Equipment or _lounges==null or not Campaign.supported(bindings.mido_travel,_state.get("campaign_cursor")) or _state.get("progress",{}).get("campaign_cursor")!=_state.get("campaign_cursor"):reject("Shopping requires the earned ordinary station career");return {}
 	if not _flight.is_empty() or not _pending_flight.is_empty() or not _state.get("pending_result",{}).is_empty():reject("Resolve the current flight or result before shopping");return {}
 	var place:=Shopping.location(bindings,cat,_state.station_id)
 	if place.is_empty() or _state.get("mission",{}).get("kind",-1)==int(bindings.mido_travel.ordinary_shopping.pricing.special_mission_kind):reject("This station pricing context is not supported");return {}
@@ -263,7 +264,7 @@ func _shopping_reject(message: String) -> RefCounted:
 
 func rebase_gate_arrival(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,arrival: Dictionary) -> bool:
 	error=""
-	if not GateArrival.packet_matches(bindings,catalogues,arrival) or _state.get("campaign_cursor")!=18 or _state.get("station_id")!=arrival.from_station_id:return reject("Gate arrival must follow this retained career's location")
+	if not GateArrival.packet_matches(bindings,catalogues,arrival) or _state.get("campaign_cursor")!=arrival.campaign_cursor or _state.get("station_id")!=arrival.from_station_id:return reject("Gate arrival must follow this retained career's location")
 	if not equipment is Equipment or equipment.snapshot().get("loadout",{}).get("station_id")!=arrival.station_id or not _pending_flight.is_empty():return reject("Gate arrival requires its detached destination inventory and retired flight")
 	var statistics: Variant=_state.get("travel_statistics")
 	if not GateArrival.valid_statistics(statistics):return reject("Gate arrival lost its earned travel statistics")
@@ -334,8 +335,8 @@ func preview(offer_id: int,equipment: RefCounted,bindings: RefCounted=null) -> D
 static func acceptance_supported(rules: Dictionary,cursor: int,quote: Dictionary,bindings: RefCounted=null) -> bool:
 	# Quotation coverage can grow before the corresponding flight/objective
 	# owners. Retained earlier contacts do not grant post-unlock acceptance.
-	if cursor==18 and OrdinaryContracts.available(bindings):
-		return rules==bindings.early_contracts and Numbers.integer(quote.get("context",{}).get("campaign_cursor"),Definitions.first_generation_cursor(rules),18) and OrdinaryContracts.delivery_mission(bindings,quote.get("mission"))
+	if OrdinaryContracts.available(bindings) and Campaign.supported(bindings.mido_travel,cursor):
+		return rules==bindings.early_contracts and Numbers.integer(quote.get("context",{}).get("campaign_cursor"),Definitions.first_generation_cursor(rules),cursor) and OrdinaryContracts.delivery_mission(bindings,quote.get("mission"))
 	return not rules.is_empty() and Numbers.integer(cursor,Definitions.first_generation_cursor(rules),int(rules.last_cursor)) and Numbers.integer(quote.get("context",{}).get("campaign_cursor"),Definitions.first_generation_cursor(rules),int(rules.last_cursor)) and quote.get("choices",{}).has("kind_index")
 
 func accept(offer_id: int,equipment: RefCounted,replace_current: bool=false,bindings: RefCounted=null) -> RefCounted:
@@ -386,7 +387,7 @@ func accept(offer_id: int,equipment: RefCounted,replace_current: bool=false,bind
 func active_mission_for(station_id: int,bindings: RefCounted=null) -> Dictionary:
 	# The active world mission and the retained side slot are different things.
 	# Passenger delivery is handled by the station even at its destination.
-	var ordinary: bool=_state.get("campaign_cursor")==18 and OrdinaryContracts.delivery_mission(bindings,_state.get("mission"))
+	var ordinary: bool=OrdinaryContracts.delivery_mission(bindings,_state.get("mission")) and Campaign.supported(bindings.mido_travel,_state.get("campaign_cursor"))
 	if not _rules.has("delivery_results") or (station_id not in _stations and not ordinary) or _state.mission.is_empty() or not _state.pending_result.is_empty():return {}
 	var mission: Dictionary=_state.mission
 	if mission.station_id!=station_id or _rules.delivery_results.active_flight_excluded_kinds.any(func(value):return int(value)==int(mission.kind)):return {}
@@ -395,7 +396,7 @@ func active_mission_for(station_id: int,bindings: RefCounted=null) -> Dictionary
 func flight_context(station_id: int,bindings: RefCounted=null) -> Dictionary:
 	error=""
 	if not _flight.is_empty():reject("Retain the current contract flight before preparing another encounter");return {}
-	var ordinary: bool=_state.get("campaign_cursor")==18 and OrdinaryContracts.available(bindings) and not load("res://src/content/free_flight_definitions.gd").flight(bindings,station_id).is_empty()
+	var ordinary: bool=OrdinaryContracts.available(bindings) and Campaign.supported(bindings.mido_travel,_state.get("campaign_cursor")) and not load("res://src/content/free_flight_definitions.gd").flight(bindings,station_id,int(_state.get("campaign_cursor",-1))).is_empty()
 	if _state.is_empty() or not Definitions.encounter_parameters(_rules) or (station_id not in _stations and not ordinary):
 		reject("This contract session has no supported encounter context");return {}
 	if not _state.pending_result.is_empty():reject("Acknowledge the contract result before preparing another encounter");return {}
@@ -419,7 +420,7 @@ func flight_context(station_id: int,bindings: RefCounted=null) -> Dictionary:
 func free_flight_context(bindings: RefCounted,station_id: int) -> Dictionary:
 	error=""
 	var definitions=load("res://src/content/free_flight_definitions.gd")
-	if not definitions.available(bindings) or definitions.flight(bindings,station_id).is_empty() or _state.get("campaign_cursor")!=18 or _state.get("station_id")!=station_id:return fail("The ordinary flight requires its retained unlocked career")
+	if not definitions.available(bindings) or definitions.flight(bindings,station_id,int(_state.get("campaign_cursor",-1))).is_empty() or not Campaign.supported(bindings.mido_travel,_state.get("campaign_cursor")) or _state.get("station_id")!=station_id:return fail("The ordinary flight requires its retained unlocked career")
 	if _state.get("base_content_id")!=bindings.base_content_id or _state.get("binding_id")!=bindings.binding_id or _rules!=bindings.early_contracts:return fail("The ordinary career belongs to another content identity")
 	if GateArrival.available(bindings) and not GateArrival.valid_statistics(_state.get("travel_statistics")):return fail("The ordinary career lost its earned travel statistics")
 	if not _flight.is_empty() or not _pending_flight.is_empty() or not _state.get("pending_result",{}).is_empty():return fail("Resolve the retained flight or result before ordinary departure")
@@ -524,7 +525,7 @@ func bind_flight(controller: RefCounted) -> bool:
 func bind_world(controller: RefCounted,context: Dictionary,bindings: RefCounted=null) -> bool:
 	error=""
 	if not _rules.has("world_initialization") or not _flight.is_empty() or not is_instance_of(controller,load("res://src/simulation/combat_training_control.gd")):return reject("Bind an ordinary world to its retained contract session")
-	var expected:=free_flight_context(bindings,int(context.get("station_id",-1))) if context.get("campaign_cursor")==18 else flight_context(int(context.get("station_id",-1)))
+	var expected:=free_flight_context(bindings,int(context.get("station_id",-1))) if bindings!=null and Campaign.supported(bindings.mido_travel,context.get("campaign_cursor")) else flight_context(int(context.get("station_id",-1)))
 	if expected.is_empty() or context!=expected:return reject("The prepared world changed its retained contract context")
 	var scene: Dictionary=controller.snapshot()
 	if not scene.get("contract_result",{}).is_empty():return bind_flight(controller)
@@ -604,12 +605,39 @@ func finish_flight(controller: RefCounted,retain_active_mission: bool=false) -> 
 	next._flight_identity=null
 	return next
 
+func acknowledge_campaign_visit(bindings: RefCounted,controller: RefCounted,visit: RefCounted) -> RefCounted:
+	# Keep the existing world and its accounting ledger. The new story cursor
+	# changes the career; it does not regenerate ships or reset the flight clock.
+	error=""
+	if not _valid_flight(controller):return null
+	if not is_instance_of(visit,load("res://src/simulation/campaign_visit.gd")) or not _flight.has("ordinary_context") or _flight.has("story_transition") or not _state.pending_result.is_empty():reject("No campaign visit awaits acknowledgement in this flight");return null
+	var transition: Dictionary=visit.transition()
+	var scene: Dictionary=controller.snapshot()
+	if transition.is_empty() or not Campaign.active_visit(bindings.mido_travel,scene.combat.get("free_context",{})):reject("The campaign visit does not belong to the active world");return null
+	for key in ["base_content_id","binding_id"]:
+		if transition.get(key)!=_state[key] or bindings.get(key)!=_state[key]:reject("The campaign visit belongs to another content identity");return null
+	if transition.from_cursor!=_state.campaign_cursor or transition.station_id!=_state.station_id or transition.previous_mission!=Campaign.mission(bindings.mido_travel,_state.campaign_cursor) or transition.mission!=Campaign.mission(bindings.mido_travel,transition.campaign_cursor) or transition.reward_credits!=0:reject("The campaign visit changed its earned transition");return null
+	var next:=fork()
+	if not next._retain_combat_progress(controller):reject(next.error);return null
+	var progress: Dictionary=next._state.progress
+	var earned:=Career.calculate_progress(_progress_rules,transition.campaign_cursor,progress.player_kills,progress.pirate_kills,progress.other_score)
+	if earned.is_empty():reject("The campaign visit exceeds the supported career range");return null
+	next._state.progress.merge(earned,true);next._state.rank=earned.rank
+	next._state.campaign_cursor=transition.campaign_cursor
+	next._flight.story_transition=transition.duplicate(true)
+	return next
+
 func _valid_flight(controller: RefCounted) -> bool:
 	if _flight.is_empty() or not is_instance_of(controller,load("res://src/simulation/combat_training_control.gd")):return reject("The retained contract has no matching flight owner")
 	if _flight_identity==null or controller.flight_identity()!=_flight_identity:return reject("The contract lost its retained native flight")
 	var scene: Dictionary=controller.snapshot()
-	for key in ["base_content_id","binding_id","campaign_cursor"]:
+	for key in ["base_content_id","binding_id"]:
 		if scene.get(key)!=_state[key]:return reject("The contract flight belongs to another career")
+	var transition: Dictionary=_flight.get("story_transition",{})
+	if transition.is_empty():
+		if scene.get("campaign_cursor")!=_state.campaign_cursor:return reject("The contract flight belongs to another campaign stage")
+	elif not _flight.has("ordinary_context") or scene.get("campaign_cursor")!=transition.from_cursor or _state.campaign_cursor!=transition.campaign_cursor or _state.station_id!=transition.station_id:
+		return reject("The retained world lost its acknowledged story transition")
 	if _flight.has("ordinary_context"):
 		if not scene.has("accounting") or scene.has("contract_result") or scene.get("combat",{}).get("provocation",{}).get("station_id")!=_flight.ordinary_context.station_id:return reject("The ordinary flight changed its retained station or accounting")
 		return true
@@ -655,8 +683,8 @@ func _station_inventory(equipment: RefCounted,bindings: RefCounted=null) -> Dict
 	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false) or owned.get("cargo_cache_stale",true):reject("The delivery inventory is unavailable");return {}
 	for key in ["base_content_id","binding_id"]:
 		if owned.loadout.get(key)!=_state[key]:reject("The delivery inventory belongs to another content identity");return {}
-	if _state.campaign_cursor==18 and bindings!=null:
-		var free_rules: Dictionary=load("res://src/content/free_flight_definitions.gd").flight(bindings,int(owned.loadout.station_id))
+	if bindings!=null and Campaign.supported(bindings.mido_travel,_state.campaign_cursor):
+		var free_rules: Dictionary=load("res://src/content/free_flight_definitions.gd").flight(bindings,int(owned.loadout.station_id),_state.campaign_cursor)
 		if free_rules.is_empty() or owned.loadout.system_id!=int(free_rules.system_id) or _state.base_content_id!=bindings.base_content_id or _state.binding_id!=bindings.binding_id:reject("The ordinary station is outside the supported content");return {}
 	elif owned.loadout.system_id!=int(_rules.system_id) or owned.loadout.station_id not in _stations:reject("The delivery station is outside the supported system");return {}
 	var candidate: RefCounted=equipment.fork()

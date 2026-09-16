@@ -80,7 +80,7 @@ func for_departure(station_id: Variant, entry_conditions: Variant, cursor: int=2
 	elif cursor==10 and Travel.parameters(_travel):data=_travel.arrival_flight if station_id==79 else _travel.departure_traffic
 	elif cursor in [11,12] and station_id is int and not Travel.journey(_travel,cursor).is_empty() and not Travel.player_entry(_travel,int(station_id),cursor).is_empty():data={"station_id":station_id}
 	elif cursor==16 and station_id==98 and _alioth:data={"station_id":station_id}
-	elif cursor==18 and _free and station_id is int and not load("res://src/content/ordinary_world_definitions.gd").location(_travel,station_id).is_empty():data={"station_id":station_id}
+	elif load("res://src/content/free_campaign_definitions.gd").supported(_travel,cursor) and _free and station_id is int and not load("res://src/content/ordinary_world_definitions.gd").location(_travel,station_id).is_empty():data={"station_id":station_id}
 	elif cursor==14 and station_id==79 and not Travel.player_entry(_travel,station_id,cursor).is_empty():data={"station_id":station_id}
 	elif Travel.navigation_available(_travel,cursor) and station_id is int and Travel.navigation_stations(_travel,cursor,station_id).has(station_id):data={"station_id":station_id}
 	else:return fail("This departure has no supported scenery center")

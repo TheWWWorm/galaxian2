@@ -34,7 +34,7 @@ func build(owner: RefCounted, library: RefCounted, visuals: RefCounted, bindings
 	if not owner is Encounter or owner.snapshot().is_empty():return fail("Prepare the ordinary encounter before its geometry")
 	var state: Dictionary=owner.snapshot()
 	if bindings==null or state.base_content_id!=bindings.base_content_id or state.binding_id!=bindings.binding_id:return fail("NPC geometry belongs to another content identity")
-	var local_traffic: bool=state.campaign_cursor in [10,11,12,13,14,16,18]
+	var local_traffic: bool=state.campaign_cursor in [10,11,12,13,14,16,18,19]
 	if local_traffic:
 		if not OrdinaryFlight.combat_population(bindings,state.combat):return fail("Unsupported local encounter population")
 	elif state.campaign_cursor not in [4,7] or state.combat.actors.size()!=(4 if state.campaign_cursor==7 else 1):return fail("Unsupported ordinary encounter population")
@@ -44,13 +44,13 @@ func build(owner: RefCounted, library: RefCounted, visuals: RefCounted, bindings
 			if not _build_debris(owner,id,actor,library,visuals,bindings):return false
 			continue
 		var ship_id: int=int(actor.hull_catalogue_id) if local_traffic else (30 if id==3 else 2)
-		if actor.actor_id!=id or actor.hull_catalogue_id!=ship_id or (state.campaign_cursor not in [13,14,16,18] and actor.actor_kind!=(3 if local_traffic or id==3 else 8)):return fail("Unsupported ordinary NPC model construction")
+		if actor.actor_id!=id or actor.hull_catalogue_id!=ship_id or (state.campaign_cursor not in [13,14,16,18,19] and actor.actor_kind!=(3 if local_traffic or id==3 else 8)):return fail("Unsupported ordinary NPC model construction")
 		if actor.get("population_group") in ["freighter","capital"]:
 			if not _build_freighter(owner,id,actor,library,visuals,bindings):return false
 			continue
 		var exhaust: Dictionary
 		if local_traffic:
-			if state.campaign_cursor not in [13,14,16,18] and not bindings.mido_travel.departure_traffic.hull_candidates.any(func(value):return int(value)==ship_id):return fail("Unsupported local NPC hull")
+			if state.campaign_cursor not in [13,14,16,18,19] and not bindings.mido_travel.departure_traffic.hull_candidates.any(func(value):return int(value)==ship_id):return fail("Unsupported local NPC hull")
 			var engine_id:=int(bindings.mido_travel.traffic_presentation.engine_model_base)+ship_id
 			exhaust={"id":engine_id,"path":bindings.resolve(engine_id,"mesh")}
 		else:exhaust=ENGINES[ship_id]

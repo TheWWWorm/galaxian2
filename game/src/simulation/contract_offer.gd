@@ -30,8 +30,8 @@ func configure(bindings: RefCounted,catalogues: RefCounted,context: Variant,choi
 	if systems.size()<=system_id or not Numbers.integer(context.get("station_id"),0,stations.size()-1):
 		return reject("The offer station is absent from this catalogue")
 	var station_ids: Array=systems[system_id].station_ids
-	if station_ids.size()<int(rules.initial_destination_count) or context.station_id not in station_ids or stations[context.station_id].system_id!=system_id:
-		return reject("Early offers are restricted to the source Mido system")
+	if (not ordinary and station_ids.size()<int(rules.initial_destination_count)) or context.station_id not in station_ids or stations[context.station_id].system_id!=system_id:
+		return reject("The offer location is outside its supported system")
 	var extra: Dictionary=rules.ordinary_generation.offers if ordinary else {}
 	if not choices is Dictionary:return reject("Unsupported contract selection")
 	if ordinary:

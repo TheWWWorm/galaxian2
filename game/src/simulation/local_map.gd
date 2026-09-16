@@ -17,6 +17,7 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	var travel: Dictionary=flight.get("local_travel",{})
 	var cursor:=int(flight.get("campaign_cursor",-1))
 	var stations:=Definitions.navigation_stations(bindings.mido_travel,cursor,int(location.get("station_id",-1)))
+	if Definitions.free_local_navigation(bindings.mido_travel,cursor):stations=stations.filter(func(id):return id==location.get("station_id") or load("res://src/content/free_navigation_definitions.gd").ordinary_departure_at(bindings,cursor,flight.get("mission",{}),id))
 	if stations.is_empty() or location.get("system_id")!=Definitions.navigation_system(bindings.mido_travel,cursor,int(location.get("station_id",-1))) or travel.get("phase")!="flight":return reject("The local map is unavailable at this campaign boundary")
 	if (Definitions.navigation_available(bindings.mido_travel,cursor) or Definitions.free_local_navigation(bindings.mido_travel,cursor)) and not Definitions.navigation_mission(bindings.mido_travel,cursor,flight.get("mission",{})):return reject("The local map lost the pending story objective")
 	# The same original system display serves both local courses and a gate's
@@ -26,7 +27,7 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	for destination in destinations:
 		if not destination is int:return reject("Gate map destinations must be imported station identifiers")
 		var request:={"base_content_id":base,"binding_id":bindings.binding_id,"from_station_id":int(location.station_id),"destination_station_id":destination}
-		var arrival:=GateArrival.packet(bindings,catalogues,request)
+		var arrival:=GateArrival.packet(bindings,catalogues,request,cursor)
 		if arrival.is_empty():return reject("Gate map destination has no supported arrival")
 		if not systems.has(arrival.system_id):systems.append(arrival.system_id)
 	var gate_map: bool=flight.get("gate_transit",{}).get("phase")=="map"

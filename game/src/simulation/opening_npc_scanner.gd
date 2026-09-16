@@ -42,8 +42,8 @@ func configure(bindings: RefCounted, catalogues: RefCounted, frame_radii: Vector
 	var loadout: Dictionary
 	var training:=equipment_owner!=null
 	var local_flight:=not local_combat.is_empty()
-	var ordinary: bool=local_combat.get("campaign_cursor")==18 and preload("res://src/content/ordinary_fitting_definitions.gd").available(bindings)
-	if local_flight and (not training or not Travel.parameters(bindings.mido_travel) or local_combat.get("campaign_cursor") not in [10,11,12,13,14,16,18]):return reject("Local scanner requires its equipped traffic encounter")
+	var ordinary: bool=local_combat.get("campaign_cursor") in [18,19] and preload("res://src/content/ordinary_fitting_definitions.gd").available(bindings)
+	if local_flight and (not training or not Travel.parameters(bindings.mido_travel) or local_combat.get("campaign_cursor") not in [10,11,12,13,14,16,18,19]):return reject("Local scanner requires its equipped traffic encounter")
 	if training:
 		if not equipment_owner is Equipment or not Training.parameters(bindings.combat_training_control) or (not ordinary and not equipment_owner.requirements().satisfied):return reject("Training scanner requires the retained equipped ship and complete cast")
 		loadout=equipment_owner.snapshot().loadout
@@ -82,7 +82,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, frame_radii: Vector
 		_hulls=[];_kinds=[];_campaign_cursor=int(local_combat.campaign_cursor)
 		for id in actors.size():
 			var actor: Variant=actors[id]
-			if not actor is Dictionary or actor.get("actor_id")!=id or (local_combat.campaign_cursor not in [13,14,16,18] and actor.get("actor_kind")!=3):return reject("Local scanner has an unsupported ship")
+			if not actor is Dictionary or actor.get("actor_id")!=id or (local_combat.campaign_cursor not in [13,14,16,18,19] and actor.get("actor_kind")!=3):return reject("Local scanner has an unsupported ship")
 			_hulls.append(int(actor.hull_catalogue_id));_kinds.append(int(actor.actor_kind))
 			if actor.get("population_group")=="travel" and actor.has("travel_cycle"):
 				if not TrafficLife.parameters(bindings.ambient_lifecycle):return reject("Travelling scanner targets lack their source lifecycle")
@@ -98,7 +98,7 @@ func advance(combat: Dictionary, player: Transform3D, camera: Transform3D, aim: 
 	var population: Variant=combat.get("actors")
 	var point: Variant=aim.get("point");var viewport: Variant=aim.get("viewport_size")
 	if not population is Array or population.size()!=_hulls.size() or not point is Vector3 or not point.is_finite() or not TargetProjection.safe_pixel(point.x) or not TargetProjection.safe_pixel(point.y) or not viewport is Vector2i or not player.is_finite():return reject("Invalid ordinary scanner sample")
-	if _campaign_cursor in [7,10,11,12,13,14,16,18] and combat.get("campaign_cursor")!=_campaign_cursor:return reject("Equipped scanner lost its encounter context")
+	if _campaign_cursor in [7,10,11,12,13,14,16,18,19] and combat.get("campaign_cursor")!=_campaign_cursor:return reject("Equipped scanner lost its encounter context")
 	var projection := TargetProjection.new()
 	if not projection.configure(_perspective,viewport,_radii):return reject(projection.error)
 	# Check all inputs before committing selection, including invisible bodies.
@@ -154,7 +154,7 @@ func advance(combat: Dictionary, player: Transform3D, camera: Transform3D, aim: 
 	return true
 
 func valid_mode(actor_id: int,mode: Variant) -> bool:
-	var minimum:=0 if _campaign_cursor in [10,11,12,13,14,16,18] or (_campaign_cursor==7 and actor_id==3) else 1
+	var minimum:=0 if _campaign_cursor in [10,11,12,13,14,16,18,19] or (_campaign_cursor==7 and actor_id==3) else 1
 	return Numbers.integer(mode,minimum,5) or (mode is int and _departure_modes.has(actor_id) and _departure_modes[actor_id]==mode)
 
 static func selectable(actor: Dictionary) -> bool:

@@ -164,7 +164,7 @@ func apply_alioth_sequence(owner: RefCounted) -> bool:
 func _configure_rows(bindings: RefCounted, catalogues: RefCounted, rows: Array, cursor: int=-1) -> bool:
 	var guns:=[];var sounds:=[]
 	for data in rows:
-		if cursor in [11,12,13,14,16,18] and data.get("unarmed",false):guns.append(null);sounds.append({});continue
+		if cursor in [11,12,13,14,16,18,19] and data.get("unarmed",false):guns.append(null);sounds.append({});continue
 		var weapon:=_resolve_weapon(bindings,catalogues,data,cursor)
 		if weapon.is_empty():return false
 		var gun:=Projectiles.new()
@@ -195,7 +195,7 @@ func _resolve_weapon(bindings: RefCounted, catalogues: RefCounted, data: Diction
 		var properties: Dictionary=items[int(data.item_id)].get("properties",{})
 		var extra: Variant=properties.get(int(policy.get("additional_damage_property",-1)),int(policy.get("missing_additional_damage",0)))
 		if extra!=int(policy.get("missing_additional_damage",0)) or policy.is_empty():return fail("NPC weapon requires unsupported additional damage")
-		if cursor not in [7,10,11,12,13,14,16,18]:return fail("NPC contacts require an explicit supported encounter")
+		if cursor not in [7,10,11,12,13,14,16,18,19]:return fail("NPC contacts require an explicit supported encounter")
 		weapon.campaign_cursor=cursor
 		weapon.nonplayer_source=bool(data.nonplayer_source)
 		weapon.ordinary_hit_policy={"additional_damage":int(extra),"additional_damage_required":false,"nonplayer_damage":weapon.damage}

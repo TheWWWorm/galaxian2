@@ -5,6 +5,7 @@ const Ordinary=preload("res://src/content/ordinary_generation_definitions.gd")
 const Navigation=preload("res://src/simulation/contract_navigation.gd")
 const Cache=preload("res://src/simulation/lounge_cache.gd")
 const Session=preload("res://src/simulation/contract_session.gd")
+const Campaign=preload("res://src/content/free_campaign_definitions.gd")
 
 func _initialize():
 	var args:=OS.get_cmdline_user_args()
@@ -28,6 +29,7 @@ func verify(args: PackedStringArray):
 	verify_ordinary_draws(bindings,cat,lib,context)
 	verify_ordinary_populations(bindings,cat,lib,context)
 	verify_ordinary_cache(bindings,cat,lib,context)
+	verify_campaign_locations(bindings,cat,lib,context)
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
 	for span in Ordinary.SPANS:
 		var bad: Dictionary=bindings.early_contracts.duplicate(true);bad.provenance.erase(span)
@@ -89,6 +91,8 @@ func verify_ordinary_quotes(bindings: RefCounted,cat: RefCounted,context: Dictio
 	var faction_choice:=choice.duplicate();faction_choice.kind=13
 	check(not quote.configure(bindings,cat,faction_career,faction_choice),"A faction-specific job used a destination belonging to another faction")
 	var invalid:=career.duplicate(true);invalid.campaign_cursor=19
+	check(quote.configure(bindings,cat,invalid,choice)==Campaign.supported(bindings.mido_travel,19),"Quotation crossed its explicit campaign capability")
+	invalid.campaign_cursor=20
 	check(not quote.configure(bindings,cat,invalid,choice),"Quotation exceeded its integrated campaign boundary")
 	invalid.campaign_cursor=18.5
 	check(not quote.configure(bindings,cat,invalid,choice),"A fractional campaign cursor entered the ordinary quotation scope")
@@ -194,4 +198,22 @@ func verify_ordinary_cache(bindings: RefCounted,cat: RefCounted,lib: RefCounted,
 	check(cache.snapshot().locations.map(func(row):return row.station_id)==[97,99,98],"Ordinary cache stopped using insertion order")
 	check(cache.location(98)!=original,"An evicted ordinary location retained its old generation")
 	var before:=cache.snapshot();career.station_id=56
-	check(not cache.select_location(bindings,cat,lib,career,settings,random.snapshot(),1000) and cache.snapshot()==before,"Unsupported story destination changed the cache")
+	if Campaign.Visit.available(bindings):
+		check(cache.select_location(bindings,cat,lib,career,settings,random.snapshot(),1000) and cache.snapshot().current_station_id==56,"The supported visit cannot retain its actual station contents")
+	else:check(not cache.select_location(bindings,cat,lib,career,settings,random.snapshot(),1000) and cache.snapshot()==before,"Unsupported story destination changed the cache")
+
+func verify_campaign_locations(bindings: RefCounted,cat: RefCounted,lib: RefCounted,context: Dictionary) -> void:
+	if not Campaign.Visit.available(bindings):return
+	var settings:={"difficulty":0.5,"valkyrie_owned":false,"supernova_owned":false,"energy_availability_percent":0,"missile_availability_percent":0,"ship_price_percent":0}
+	for cursor in [18,19]:
+		var cache:=Cache.new();check(cache.configure(bindings),cache.error)
+		var random:=Random.new();random.seed_from(4096)
+		for station in [55,56,57]:
+			var career:=context.duplicate(true);career.campaign_cursor=cursor;career.station_id=station;career.erase("system_availability")
+			if not cache.select_location(bindings,cat,lib,career,settings,random.snapshot(),1789100000):check(false,cache.error);return
+			var entry:=cache.location(station)
+			check(entry.population.context.campaign_cursor==cursor and entry.stock.context.station_id==station,"Union's three-station system lost its current generation context")
+			var contacts:=Contacts.new()
+			check(contacts.restore(bindings,cat,lib,entry.population) and contacts.snapshot()==entry.population,"Union's generated contacts cannot restore their original terms")
+			for id in entry.offers:check(Offer.new().restore(bindings,cat,entry.offers[id].offer),"Union's original offer cannot be restored")
+			check(random.restore(cache.snapshot().random),random.error)

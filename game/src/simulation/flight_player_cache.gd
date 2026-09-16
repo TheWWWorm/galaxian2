@@ -47,8 +47,8 @@ static func alioth_attack_cache(parameters: Dictionary,travel: Dictionary,seed: 
 	if entry.is_empty():return {}
 	return _departure_cache(parameters,entry,seed,hull,capacities,reset)
 
-static func free_flight_cache(parameters: Dictionary,travel: Dictionary,seed: Dictionary,hull: int,capacities: Dictionary,reset: bool=false) -> Dictionary:
-	var entry:=FreeFlight.player_entry(travel,int(seed.get("station_id",-1)),int(seed.get("ship_id",-1)))
+static func free_flight_cache(parameters: Dictionary,travel: Dictionary,seed: Dictionary,hull: int,capacities: Dictionary,reset: bool=false,cursor: int=18) -> Dictionary:
+	var entry:=FreeFlight.player_entry(travel,int(seed.get("station_id",-1)),int(seed.get("ship_id",-1)),cursor)
 	if entry.is_empty():return {}
 	return _departure_cache(parameters,entry,seed,hull,capacities,reset)
 
@@ -62,7 +62,7 @@ static func capture_local_arrival(travel: Dictionary, source: Dictionary, destin
 	return _capture_arrival(travel,source,destination,player)
 
 static func capture_gate_arrival(travel: Dictionary,source: Dictionary,destination: Dictionary,player: Dictionary) -> Dictionary:
-	if not Travel.parameters(travel) or not valid_seed(source) or not valid_seed(destination) or player.get("campaign_cursor")!=18:return {}
+	if not Travel.parameters(travel) or not valid_seed(source) or not valid_seed(destination) or not FreeFlight.Campaign.supported(travel,player.get("campaign_cursor")):return {}
 	var trip:=GateArrival.route(travel,source.station_id,destination.station_id)
 	if trip.is_empty() or source.system_id!=trip.from_system_id or destination.system_id!=trip.system_id:return {}
 	for key in IDENTITY_KEYS:

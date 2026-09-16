@@ -39,7 +39,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, equipment: RefCount
 	error=""
 	if bindings==null or catalogues==null or not equipment is Equipment or not Definitions.parameters(bindings.mido_travel):return reject("This pack has no supported local journey")
 	var content: Dictionary=bindings.mido_travel
-	if cursor==18 and not load("res://src/content/ordinary_generation_definitions.gd").available(bindings):return reject("Ordinary travel requires destination stock and contact generation")
+	if Definitions.free_local_navigation(content,cursor) and not load("res://src/content/ordinary_generation_definitions.gd").available(bindings):return reject("Ordinary travel requires destination stock and contact generation")
 	var rules: Dictionary=content.travel
 	var owned: Dictionary=equipment.snapshot()
 	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false):return reject("Finish the station equipment exchange before local travel")
@@ -50,6 +50,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, equipment: RefCount
 	if not Definitions.navigation_mission(content,cursor,mission):return reject("Local travel requires the retained source-defined story objective")
 	var stations:=[]
 	for id in destinations:
+		if Definitions.free_local_navigation(content,cursor) and id!=seed.station_id and not load("res://src/content/free_navigation_definitions.gd").ordinary_departure_at(bindings,cursor,mission,id):continue
 		if not Numbers.integer(id,0,catalogues.tables.stations.size()-1):return reject("Local destination is absent from the catalogue")
 		var row: Dictionary=catalogues.tables.stations[int(id)]
 		if not Definitions.location_supported(content,int(id),int(row.system_id),int(row.planet_type)):return reject("Local destination uses an unsupported environment")
@@ -75,6 +76,18 @@ func target_position(station_id: int) -> Variant:
 	if _layout.is_empty() or _state.phase!="flight" or not _stations.has(station_id) or station_id==_state.station_id or not _positions.has(station_id):
 		reject("This planet has no supported local destination flight");return null
 	return _positions[station_id]
+
+func rebase_campaign(bindings: RefCounted,cursor: int,mission: Dictionary) -> bool:
+	error=""
+	if _state.get("phase")!="flight" or not load("res://src/content/free_campaign_definitions.gd").visit_at(bindings.mido_travel,_state.get("campaign_cursor"),_state.get("station_id")) or cursor!=int(bindings.mido_travel.suttnar_visit.next_cursor) or not Definitions.navigation_mission(bindings.mido_travel,cursor,mission):return reject("Local navigation lost its acknowledged campaign visit")
+	_state.campaign_cursor=cursor
+	_stations=Definitions.navigation_stations(bindings.mido_travel,cursor,_state.station_id).filter(func(id):return id==_state.station_id or load("res://src/content/free_navigation_definitions.gd").ordinary_departure_at(bindings,cursor,mission,id))
+	if not _stations.has(_state.candidate_station_id):_state.candidate_station_id=-1;_state.acquisition_ms=0
+	if not _stations.has(_state.acquired_station_id):_state.acquired_station_id=-1
+	return true
+
+func supports_destination(station_id: int) -> bool:
+	return not _state.is_empty() and station_id!=_state.station_id and _stations.has(station_id)
 
 func sample_frame(camera: Transform3D, aim: Dictionary, milliseconds: int, autopilot_station_id: int, enabled: bool, mining_selected:=false) -> bool:
 	error=""

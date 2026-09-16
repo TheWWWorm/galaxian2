@@ -1,6 +1,7 @@
 extends RefCounted
 ## Shared population selection. Actor construction consumes the returned stream.
 ## This owner does not change missions, locations, equipment or career progress.
+const Campaign=preload("res://src/content/free_campaign_definitions.gd")
 const Free=preload("res://src/content/free_population_definitions.gd")
 const Delivery=preload("res://src/content/ordinary_contracts_definitions.gd")
 const Contracts=preload("res://src/content/early_contract_definitions.gd")
@@ -47,7 +48,7 @@ func configure_free(bindings: RefCounted,catalogues: RefCounted,context: Diction
 	if not unix_seconds is int or unix_seconds<0 or unix_seconds>2147483647:return reject("Ordinary traffic requires supported Unix seconds")
 	var data: Dictionary=bindings.mido_travel.free_population
 	var world: Dictionary=load("res://src/content/ordinary_world_definitions.gd").catalogue_location(bindings,catalogues,context.get("station_id"))
-	if world.is_empty() or context.get("system_id")!=world.system_id or context.get("campaign_cursor")!=int(data.campaign_cursor):return reject("This location and campaign context has no ordinary population support")
+	if world.is_empty() or context.get("system_id")!=world.system_id or not Campaign.supported(bindings.mido_travel,context.get("campaign_cursor")):return reject("This location and campaign context has no ordinary population support")
 	if not Delivery.mission_context_valid(bindings,context):return reject("Ordinary traffic requires its retained empty or supported delivery mission")
 	# These are explicit source inputs. Mission/session owners must produce them;
 	# construction never infers missing retained state or grants campaign progress.
@@ -71,7 +72,8 @@ func configure_free(bindings: RefCounted,catalogues: RefCounted,context: Diction
 	_groups=bindings.ambient_population.duplicate(true)
 	_ordinary=data.duplicate(true)
 	_ordinary.merge({"security":security,"faction":faction,"rank":int(context.rank),"difficulty":float(difficulty)})
-	if not context.side_missions_empty:
+	_ordinary.active_visit=Campaign.active_visit(bindings.mido_travel,context)
+	if _ordinary.active_visit or not context.side_missions_empty:
 		_ordinary.delivery_count=Delivery.extra_count(bindings,context)
 		_ordinary.active_courier=Delivery.active_courier(context)
 		_ordinary.encounter=bindings.early_contracts.encounter_construction.duplicate(true)
@@ -99,10 +101,10 @@ static func first_departure(data: Dictionary,random: RefCounted) -> Dictionary:
 	return result
 
 static func _sample(common: Dictionary,groups: Dictionary,seconds: int,random: RefCounted,ordinary: Dictionary={}) -> Dictionary:
-	if ordinary.get("active_courier",false):
+	if ordinary.get("active_courier",false) or ordinary.get("active_visit",false):
 		var incoming: Dictionary=random.snapshot()
 		var enemy:=Contracts.draw_enemy_faction(ordinary.encounter,random,int(ordinary.enemy_factions[int(ordinary.faction)]))
-		return {"mission_kind":0,"incoming_random_state":incoming,"system_faction":int(ordinary.faction),"security":int(ordinary.security),
+		return {"mission_kind":156 if ordinary.get("active_visit",false) else 0,"incoming_random_state":incoming,"system_faction":int(ordinary.faction),"security":int(ordinary.security),
 			"hostile_selected":false,"hostile_faction":enemy,"unused_route_origin":Vector3.ZERO,"spawn_center":Vector3.ZERO,
 			"groups":{"patrol":0,"travel":0,"freighter":0,"hostile":0,"delivery_pirate":0},"actor_count":0,"before_actors_random_state":random.snapshot()}
 	# Scenery has consumed the incoming stream, but a completed default mission

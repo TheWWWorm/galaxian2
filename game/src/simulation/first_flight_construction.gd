@@ -20,6 +20,7 @@ const Transit=preload("res://src/content/convoy_transit_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 const Convoy=preload("res://src/content/convoy_world_definitions.gd")
 const ContractWorld=preload("res://src/content/contract_world_definitions.gd")
+const Campaign=preload("res://src/content/free_campaign_definitions.gd")
 const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
 const FreeNavigation=preload("res://src/content/free_navigation_definitions.gd")
 const Gates=preload("res://src/simulation/gate_environment.gd")
@@ -131,7 +132,7 @@ func prepare_free(bindings: RefCounted,catalogues: RefCounted,station: RefCounte
 	error=""
 	if not FreeFlight.available(bindings) or not is_instance_of(station,load("res://src/simulation/station_entry.gd")):return reject("Ordinary departure requires its acknowledged native station")
 	var departure: Dictionary=station.prepare_departure(bindings,catalogues)
-	if departure.is_empty() or departure.get("campaign_cursor")!=18:return reject(station.error if departure.is_empty() else "Ordinary departure requires its acknowledged native station")
+	if departure.is_empty() or not Campaign.supported(bindings.mido_travel,departure.get("campaign_cursor")):return reject(station.error if departure.is_empty() else "Ordinary departure requires its acknowledged native station")
 	var contracts: RefCounted=station.contract_owner();var equipment: RefCounted=station.equipment_owner()
 	return _prepare_free_owned(bindings,catalogues,equipment,contracts,departure.mission,departure.station_response_flags,environment_seconds,unix_seconds,large_display,body_resources,effect_resources)
 
@@ -140,8 +141,11 @@ func _prepare_free_owned(bindings: RefCounted,catalogues: RefCounted,equipment: 
 	var station_id: int=owned.loadout.station_id
 	var accepted: Dictionary=contracts.free_flight_context(bindings,station_id)
 	if accepted.is_empty():return reject(contracts.error)
-	var data:=FreeFlight.flight(bindings,station_id)
-	var context:={"campaign_cursor":18,"station_id":station_id,"system_id":int(data.system_id),"rank":career.rank,"difficulty":career.difficulty,
+	var cursor: int=career.campaign_cursor
+	if not FreeNavigation.ordinary_departure_at(bindings,cursor,mission,station_id):return reject("This destination selects an unsupported story encounter")
+	var data:=FreeFlight.flight(bindings,station_id,cursor)
+	if data.is_empty():return reject("This destination has no supported ordinary world")
+	var context:={"campaign_cursor":cursor,"station_id":station_id,"system_id":int(data.system_id),"rank":career.rank,"difficulty":career.difficulty,
 		"mission_kind":-1,"mission_completed":true,"mission_story":false,"companions_empty":true,"side_missions_empty":true,
 		"station_response":flags.get(station_id,bool(bindings.mido_travel.traffic_combat.station_flag_initial))}
 	context.merge((bindings.mido_travel.free_arrival.arrival_flags if incoming!=null else bindings.mido_travel.free_flight.departure_flags).duplicate(true))
@@ -149,6 +153,8 @@ func _prepare_free_owned(bindings: RefCounted,catalogues: RefCounted,equipment: 
 		context.side_missions_empty=false;context.side_mission=accepted.side_mission.duplicate(true)
 		context.mission_kind=int(accepted.mission.get("kind",-1));context.mission_completed=accepted.mission.is_empty()
 		context.player_position=Vector3(data.player_position[0],data.player_position[1],data.player_position[2])
+	if Campaign.visit_at(bindings.mido_travel,cursor,station_id):
+		context.mission_kind=int(mission.kind);context.mission_completed=false;context.mission_story=true
 	if incoming!=null:context.player_position=incoming.snapshot().position
 	var conditions:={"companions_empty":true,"location_match":false,"special_placement":false}
 	var scenery:=Scenery.new()
@@ -157,7 +163,7 @@ func _prepare_free_owned(bindings: RefCounted,catalogues: RefCounted,equipment: 
 	if not player.configure_free(bindings,catalogues,equipment,scenery.world_initialization_owner().npc_construction_owner(),previous_cache):return reject(player.error)
 	var location:=Location.new();var place:=location.resolve_local_travel(bindings,catalogues,equipment,player.cache_snapshot())
 	if place.is_empty():return reject(location.error)
-	var packet:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":18,
+	var packet:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":cursor,
 		"loadout":owned.loadout.duplicate(true),"equipment":owned,"cargo":owned.cargo.duplicate(true),"cargo_used":int(owned.cargo.used),
 		"progress":career.progress.duplicate(true),"mission":mission.duplicate(true),"contracts":career,
 		"player":player.snapshot(),"player_cache":player.cache_snapshot(),"free_context":context,
@@ -176,7 +182,7 @@ func prepare_local_arrival(bindings: RefCounted, catalogues: RefCounted, travel:
 func prepare_gate_arrival(bindings: RefCounted,catalogues: RefCounted,travel: RefCounted,source_player: RefCounted,equipment: RefCounted,environment_seconds: Variant,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null,objective: Dictionary={},contracts: RefCounted=null) -> bool:
 	error=""
 	if not travel is GateTransit or not source_player is Player or not equipment is Equipment:return reject("Gate arrival requires its native transit, player and equipment owners")
-	var packet:=GateArrival.packet(bindings,catalogues,travel.arrival_request())
+	var packet:=GateArrival.packet(bindings,catalogues,travel.arrival_request(),int(objective.get("campaign_cursor",-1)))
 	if packet.is_empty():return reject("Finish the gate animation before constructing a supported destination")
 	return _prepare_arrival(bindings,catalogues,packet,source_player,equipment,environment_seconds,unix_seconds,large_display,body_resources,effect_resources,objective,contracts,true)
 
@@ -214,12 +220,13 @@ func _prepare_arrival(bindings: RefCounted,catalogues: RefCounted,packet: Dictio
 		if departing.get(key)!=original.get(key):return reject("Local arrival changed the departing equipped player")
 	var cached:=Cache.capture_gate_arrival(bindings.mido_travel,original,destination.snapshot().loadout,source_player.snapshot()) if gate_arrival else Cache.capture_local_arrival(bindings.mido_travel,original,destination.snapshot().loadout,source_player.snapshot())
 	if cached.is_empty():return reject("Local arrival requires the surviving player's current pools")
+	if free_arrival:cached.campaign_cursor=packet.campaign_cursor
 	if free_arrival:
 		contracts=contracts.fork()
 		var retained: bool=contracts.rebase_gate_arrival(bindings,catalogues,destination,packet) if gate_arrival else contracts.rebase_station(destination,bindings)
 		if not retained:return reject(contracts.error)
 		var incoming:=Incoming.new()
-		if not incoming.configure(bindings,catalogues,int(packet.station_id),contracts.location_owner()):return reject(incoming.error)
+		if not incoming.configure(bindings,catalogues,int(packet.station_id),contracts.location_owner(),packet.campaign_cursor):return reject(incoming.error)
 		var arrival_flags: Dictionary=flags.duplicate(true)
 		arrival_flags[int(packet.station_id)]=bool(bindings.mido_travel.traffic_combat.station_flag_initial)
 		return _prepare_free_owned(bindings,catalogues,destination,contracts,mission,arrival_flags,environment_seconds,unix_seconds,large_display,body_resources,effect_resources,cached,incoming,int(packet.from_station_id))
@@ -273,8 +280,8 @@ func _construct(bindings: RefCounted, catalogues: RefCounted, packet: Dictionary
 	var conditions:={"companions_empty":true,"location_match":false,"special_placement":false}
 	var scenery: RefCounted=prepared_scenery if prepared_scenery!=null else Scenery.new()
 	if prepared_scenery!=null:
-		if not prepared_scenery is Scenery or int(data.campaign_cursor) not in [14,16,18]:return reject("Unexpected prepared flight scenery")
-		if int(data.campaign_cursor)==18 and (not FreeFlight.available(bindings) or prepared_scenery.snapshot().world_initialization.npc_construction.free_context!=packet.get("free_context")):return reject("Ordinary flight scenery differs from the acknowledged entry")
+		if not prepared_scenery is Scenery or (int(data.campaign_cursor) not in [14,16] and not Campaign.supported(bindings.mido_travel,data.campaign_cursor)):return reject("Unexpected prepared flight scenery")
+		if Campaign.supported(bindings.mido_travel,int(data.campaign_cursor)) and (not FreeFlight.available(bindings) or prepared_scenery.snapshot().world_initialization.npc_construction.free_context!=packet.get("free_context")):return reject("Ordinary flight scenery differs from the acknowledged entry")
 	elif contracts!=null:
 		if not scenery.configure_contract(bindings,catalogues,equipment,contracts,player.cache_snapshot(),pose.origin,conditions,unix_seconds,large_display,body_resources,effect_resources):return reject(scenery.error)
 	elif training:
@@ -307,7 +314,7 @@ func _construct(bindings: RefCounted, catalogues: RefCounted, packet: Dictionary
 	var camera:=Rig.new()
 	if not camera.configure(bindings) or not camera.update(0,shot,scene,initial):return reject(camera.error)
 	var state:=identity.duplicate()
-	if int(data.campaign_cursor)==18 and Gates.Definitions.available(bindings):
+	if Campaign.supported(bindings.mido_travel,int(data.campaign_cursor)) and Gates.Definitions.available(bindings):
 		var gates:=Gates.new()
 		if not gates.configure(bindings,catalogues,int(context.station_id)):return reject(gates.error)
 		state.gate_environment=gates.snapshot()

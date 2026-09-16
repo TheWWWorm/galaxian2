@@ -1,6 +1,6 @@
 extends Node3D
-const LOCAL_CURSORS=[10,11,12,13,14,16,18]
-const FACTION_CURSORS=[13,14,16,18]
+const LOCAL_CURSORS=[10,11,12,13,14,16,18,19]
+const FACTION_CURSORS=[13,14,16,18,19]
 ## Audio side effects are committed only after the whole opening frame validates.
 const Resources=preload("res://src/content/audio_resources.gd")
 const Definitions=preload("res://src/content/audio_definitions.gd")
@@ -92,7 +92,7 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 		_npc_scan_sound=int(bindings.opening_staging.npc_scanner.acquisition_sound_id)
 		_local_radio_rules={} if convoy else bindings.mido_travel.traffic_combat.radio.duplicate(true)
 		if not convoy:_travel_sounds=[int(bindings.mido_travel.travel.acquisition_sound_id),int(bindings.mido_travel.travel.launch_sound_id)]
-	if campaign_cursor in [11,12,13,14,16,18]:
+	if campaign_cursor in [11,12,13,14,16,18,19]:
 		_freighter_actors=local_combat.actors.filter(func(actor):return actor.get("population_group") in ["freighter","capital"]).map(func(actor):return int(actor.actor_id))
 		if not _freighter_actors.is_empty():_freighter_audio=bindings.freighter_destruction.duplicate(true)
 	if campaign_cursor in FACTION_CURSORS and not convoy:
@@ -127,7 +127,7 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 		_voice_displayed=[false,false]
 		for id in _local_radio_rules.warning_voice_ids+_local_radio_rules.response_voice_ids:
 			if _resources.prepare(int(id)).is_empty():return reject(_resources.error)
-	_weapon_audio=bindings.weapon_parameters.get("audio",{}) if campaign_cursor in [0,4,7,10,11,12,13,14,16,18] else {}
+	_weapon_audio=bindings.weapon_parameters.get("audio",{}) if campaign_cursor in [0,4,7,10,11,12,13,14,16,18,19] else {}
 	if not _weapon_audio.is_empty():
 		if not WeaponAudio.parameters(_weapon_audio):return reject("Invalid weapon audio capability")
 		_weapon_audio=_weapon_audio.duplicate(true)
@@ -142,7 +142,7 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 			var sound:=int(_weapon_audio.npc_event_ids[actor_kind]) if actor_kind<_weapon_audio.npc_event_ids.size() else int(_weapon_audio.npc_default_event_id)
 			_npc_weapon_sounds.append(sound)
 			if _resources.prepare(sound).is_empty():return reject(_resources.error)
-	_death_audio=bindings.opening_actors.get("npc_initialization",{}).get("destruction_audio",{}) if campaign_cursor in [0,4,7,10,11,12,13,14,16,18] else {}
+	_death_audio=bindings.opening_actors.get("npc_initialization",{}).get("destruction_audio",{}) if campaign_cursor in [0,4,7,10,11,12,13,14,16,18,19] else {}
 	if not _death_audio.is_empty():
 		if not Death.audio_parameters(_death_audio):return reject("Invalid NPC destruction audio capability")
 		_death_audio=_death_audio.duplicate(true)
@@ -150,7 +150,7 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 		_death_audio.breakup_source_ids=[int(_death_audio.breakup_source_ids[0]),int(_death_audio.breakup_source_ids[1])]
 		for id in [_death_audio.initial_source_id]+_death_audio.breakup_source_ids:
 			if _resources.prepare(int(id)).is_empty():return reject(_resources.error)
-	if campaign_cursor in [4,7,10,11,12,13,14,16,18]:
+	if campaign_cursor in [4,7,10,11,12,13,14,16,18,19]:
 		if _weapon_audio.is_empty() or _death_audio.is_empty():return reject("Second-flight combat audio is unavailable")
 		for id in [int(_player_death_rules.breakup_sound_base),int(_player_death_rules.breakup_sound_base)+1,int(_player_death_rules.failure_sound),_npc_weapon_sound,int(_death_audio.initial_source_id)]:
 			var clip: Dictionary=_resources.prepare(id)
@@ -174,7 +174,7 @@ func configure_full_hold(library: RefCounted,bindings: RefCounted,world: RefCoun
 		if bindings==null or state.get(key)!=bindings.get(key):return reject("Second-flight audio belongs to another content identity")
 	if not state.get("flight_audio") is Dictionary or state.flight_audio.get("serial")!=0:return reject("Register second-flight audio before advancing its world")
 	var cursor: int=world.destruction_owner().snapshot().departure_cursor
-	if cursor not in [4,7,10,11,12,13,14,16,18] or state.campaign_cursor!=cursor:return reject("Register ordinary-flight sound in its initial mission")
+	if cursor not in [4,7,10,11,12,13,14,16,18,19] or state.campaign_cursor!=cursor:return reject("Register ordinary-flight sound in its initial mission")
 	var travel: Variant=state.get("local_travel",{})
 	if not travel is Dictionary or (not travel.is_empty() and (cursor not in LOCAL_CURSORS or travel.get("event_serial")!=0 or travel.get("events")!=[])):return reject("Register local travel audio before its first event")
 	if not configure(library,bindings,audio_seed,cursor,state.get("encounter",{}).get("combat",{}) if cursor in LOCAL_CURSORS else {}):return false

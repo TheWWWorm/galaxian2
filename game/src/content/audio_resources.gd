@@ -101,6 +101,13 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, campa
 		if event.voice_event_id>=0:_voice_ids[int(event.voice_event_id)]=true
 	return true
 
+func configure_campaign_visit(library: RefCounted,bindings: RefCounted,cursor: int,mission: Dictionary) -> bool:
+	if not configure(library,bindings):return false
+	if not load("res://src/content/suttnar_visit_definitions.gd").selected(bindings,cursor,mission):return reject("Campaign visit voices are unavailable")
+	_voice_ids.clear()
+	for event in bindings.mido_travel.suttnar_visit.events:_voice_ids[int(event.voice_event_id)]=true
+	return true
+
 func configure_training_completion(library: RefCounted, bindings: RefCounted) -> bool:
 	if not configure(library,bindings) or not TrainingStory.parameters(bindings.combat_training_story):return reject("Training completion voice is unavailable")
 	_voice_ids.clear()

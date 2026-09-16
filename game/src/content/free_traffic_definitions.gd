@@ -1,6 +1,7 @@
 extends RefCounted
 ## Ordinary ship setup; the session separately owns earned departure permission.
 const Equal=preload("res://src/content/opening_escape_definitions.gd")
+const Campaign=preload("res://src/content/free_campaign_definitions.gd")
 const Population=preload("res://src/content/free_population_definitions.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const Delivery=preload("res://src/content/ordinary_contracts_definitions.gd")
@@ -27,14 +28,17 @@ static func population(bindings: RefCounted,packet: Dictionary,rank: Variant,dif
 	var rules: Dictionary=bindings.mido_travel.free_population
 	if not context is Dictionary or not source is Dictionary or not actors is Array:return {}
 	if not context_valid(bindings,context) or context.rank!=rank or context.difficulty!=difficulty:return {}
-	if actors.is_empty() and not Delivery.active_courier(context):return {}
+	var visit:=Campaign.active_visit(bindings.mido_travel,context)
+	if actors.is_empty() and not Delivery.active_courier(context) and not visit:return {}
 	for key in ["campaign_cursor","station_id","system_id"]:
 		if source.get(key)!=context[key]:return {}
 	if packet.get("campaign_cursor")!=context.campaign_cursor or packet.get("station_id")!=context.station_id:return {}
-	if source.get("system_faction")!=0 or source.get("security")!=3 or not source.get("groups") is Dictionary:return {}
+	var world: Dictionary=load("res://src/content/ordinary_world_definitions.gd").location(bindings.mido_travel,context.station_id)
+	if source.get("system_faction")!=world.faction or source.get("security")!=world.security or not source.get("groups") is Dictionary:return {}
 	if actors.size()>Population.maximum_actor_count(bindings,rank,float(difficulty),context) or source.get("actor_count")!=actors.size():return {}
 	if not context.side_missions_empty and source.groups.get("delivery_pirate")!=Delivery.extra_count(bindings,context):return {}
 	if Delivery.active_courier(context) and source.get("mission_kind")!=0:return {}
+	if visit and (source.get("mission_kind")!=156 or not actors.is_empty()):return {}
 	if not source.get("hostile_selected") is bool or source.get("hostile_faction") not in [1,8]:return {}
 	if not source.hostile_selected and source.groups.get("hostile")!=0:return {}
 	var hulls: Dictionary=bindings.early_contracts.encounter_construction.hulls
@@ -62,7 +66,7 @@ static func context_valid(bindings: RefCounted,context: Variant) -> bool:
 	if not Population.parameters(rules):return false
 	var world: Dictionary=load("res://src/content/ordinary_world_definitions.gd").location(bindings.mido_travel,context.get("station_id"))
 	if world.is_empty() or context.get("system_id")!=world.system_id:return false
-	if context.get("campaign_cursor")!=rules.campaign_cursor or not Delivery.mission_context_valid(bindings,context):return false
+	if not Campaign.supported(bindings.mido_travel,context.get("campaign_cursor")) or not Delivery.mission_context_valid(bindings,context):return false
 	if context.get("companions_empty")!=true:return false
 	for key in ["station_response","void_encounter"]:
 		if context.get(key)!=false:return false

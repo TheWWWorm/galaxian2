@@ -43,7 +43,7 @@ static func supported(bindings: RefCounted,campaign_cursor: int=2) -> bool:
 	if bindings.source_architecture!="x86_64" or not PlayerDeath.parameters(bindings.player_destruction) or not GameOver.parameters(bindings.game_over_presentation) or not Particles.parameters(bindings.full_hold_particles) or bindings.audio.is_empty():return false
 	if campaign_cursor==7:return not Training.flight(bindings).is_empty() and not Training.station_return(bindings).is_empty() and not Training.navigation(bindings).is_empty()
 	if campaign_cursor==16:return load("res://src/content/alioth_return_definitions.gd").available(bindings)
-	if campaign_cursor==18:return FreeFlight.available(bindings) and StationGeneration.available(bindings)
+	if FreeFlight.Campaign.supported(bindings.mido_travel,campaign_cursor):return FreeFlight.available(bindings) and StationGeneration.available(bindings)
 	if campaign_cursor in [13,14]:return ContractWorld.supports(bindings,campaign_cursor) and StationGeneration.available(bindings)
 	if campaign_cursor in [10,11,12]:
 		var trip:=Travel.journey(bindings.mido_travel,campaign_cursor)
@@ -117,8 +117,9 @@ func _configure_construction(library: RefCounted, bindings: RefCounted, visuals:
 	scene.set_mobile_layout(mobile_layout);camera=scene.camera
 	briefing_audio=Speech.new();add_child(briefing_audio)
 	objective_audio=Speech.new();add_child(objective_audio)
+	if FreeFlight.Campaign.active_visit(bindings.mido_travel,construction.snapshot().departure.get("free_context",{})) and not objective_audio.configure_campaign_visit(library,bindings,cursor,construction.snapshot().departure.mission):return fail(objective_audio.error)
 	if not (ContractWorld.ordinary_entry(bindings,construction.snapshot()) or FreeFlight.ordinary_entry(bindings,construction.snapshot())) and (not briefing_audio.configure_mining_briefing(library,bindings,cursor) or not objective_audio.configure_mining_objective(library,bindings,cursor)):return fail(briefing_audio.error+objective_audio.error)
-	if cursor in [4,7,10,11,12,13,14,16,18]:
+	if cursor in [4,7,10,11,12,13,14,16,18,19]:
 		flight_audio=FlightAudio.new();add_child(flight_audio)
 		if not flight_audio.configure_full_hold(library,bindings,_world,int(field_seed)):return fail(flight_audio.error)
 		if scene.game_over==null:return fail("Flight continuation display is unavailable")
@@ -272,7 +273,7 @@ func _commit(world: RefCounted, advance_sun: bool, absolute_milliseconds: int=-1
 	var briefing_line:=-1;var objective_line:=-1
 	if state.dialogue.visible:
 		if state.phase=="briefing":briefing_line=int(state.dialogue.index)
-		elif state.phase=="return_instructions":objective_line=int(state.dialogue.index)
+		elif state.phase in ["return_instructions","campaign_visit"]:objective_line=int(state.dialogue.index)
 		else:return reject("Unsupported mining conversation")
 	if not briefing_audio.valid_line(briefing_line) or not objective_audio.valid_line(objective_line):return reject("Mining speech is unavailable")
 	var sound:={}
