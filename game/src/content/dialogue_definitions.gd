@@ -4,6 +4,7 @@ const Numbers = preload("res://src/content/opening_definitions.gd")
 const Training = preload("res://src/content/combat_training_story_definitions.gd")
 const Convoy = preload("res://src/content/convoy_capture_definitions.gd")
 const Alioth = preload("res://src/content/alioth_attack_definitions.gd")
+const Kappa = preload("res://src/content/kappa_rescue_definitions.gd")
 const Equal = preload("res://src/content/opening_escape_definitions.gd")
 
 static func select(bindings: RefCounted, campaign_cursor: int = 0) -> Dictionary:
@@ -13,9 +14,12 @@ static func select(bindings: RefCounted, campaign_cursor: int = 0) -> Dictionary
 		7: return Training.radio(bindings)
 		14: return Convoy.radio(bindings)
 		16: return Alioth.radio(bindings)
+		21: return Kappa.radio(bindings)
 	return {}
 
 static func valid_parameters(data: Dictionary, campaign_cursor: int = 0) -> bool:
+	if campaign_cursor==21:
+		return Numbers.integer(data.get("campaign_cursor"),21,21) and Equal.equal_value(data.get("events"),Kappa.VALUES.radio_events) and Equal.equal_value(data.get("timing"),Kappa.VALUES.radio_timing)
 	if campaign_cursor==16:
 		return Numbers.integer(data.get("campaign_cursor"),16,16) and Equal.equal_value(data.get("events"),Alioth.VALUES.radio_events) and Equal.equal_value(data.get("timing"),Alioth.VALUES.radio_timing)
 	if campaign_cursor==14:

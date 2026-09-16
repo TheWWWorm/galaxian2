@@ -22,6 +22,7 @@ var _visible := false
 var _activated_at := 0
 var _last_time := -1
 var _identity := {}
+var _waypoint_indices := {}
 
 func clear() -> void:
 	error = ""
@@ -35,6 +36,7 @@ func clear() -> void:
 	_activated_at = 0
 	_last_time = -1
 	_identity = {}
+	_waypoint_indices = {}
 
 func configure(bindings: RefCounted, library: RefCounted, source_line_counts: Array, campaign_cursor: int = 0) -> bool:
 	clear()
@@ -89,7 +91,7 @@ func configure_from_layout(bindings: RefCounted, library: RefCounted, layout: Re
 	return configure(bindings, library, counts, campaign_cursor)
 
 func step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int) -> Array:
-	if _identity.get("campaign_cursor") in [7,14,16]:
+	if _identity.get("campaign_cursor") in [7,14,16,21]:
 		fail("Encounter radio requires its verified target context")
 		return []
 	return _step(elapsed_ms,actor_hulls,cinematic_phase,false)
@@ -177,7 +179,41 @@ func step_alioth_attack(elapsed_ms: int, combat: Dictionary) -> Array:
 	# retirement and the player's lifetime kill count are unrelated.
 	return _step(elapsed_ms,hulls,0,false)
 
-func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hostile_active: bool, defeated_targets:=0) -> Array:
+func step_kappa_rescue(elapsed_ms: int, targets: Dictionary) -> Array:
+	error=""
+	if _identity.get("campaign_cursor")!=21:
+		fail("Kappa radio requires its original rescue declarations")
+		return []
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if targets.get(key)!=_identity[key]:
+			fail("Kappa targets belong to another encounter")
+			return []
+	var rows: Variant=targets.get("player_targets")
+	var route_index: Variant=targets.get("route_index")
+	if not rows is Array or rows.is_empty() or rows.size()>4096 or not Numbers.integer(route_index,-1,2):
+		fail("Kappa radio requires the player's current targets and two-waypoint route")
+		return []
+	var hostile_active:=false
+	var survivors:=0
+	for row in rows:
+		if not row is Dictionary:
+			fail("Invalid Kappa radio target")
+			return []
+		for key in ["scenery","active","friendly","systems_disabled"]:
+			if not row.get(key) is bool:
+				fail("Kappa radio target lacks its current activity, allegiance or systems state")
+				return []
+		if not Numbers.integer(row.get("current_hull"),-2147483648,2147483647):
+			fail("Kappa radio target lacks its current hull")
+			return []
+		if row.scenery:continue
+		hostile_active=hostile_active or (row.active and not row.friendly)
+		if row.current_hull>0:survivors+=1
+	# The flight supplies the actual target order and projected NPC stun flag.
+	# These predicates do not use lifetime kills or scanner selection.
+	return _step(elapsed_ms,{},0,hostile_active,0,{"targets":rows,"route_index":int(route_index),"survivors":survivors})
+
+func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hostile_active: bool, defeated_targets:=0, observations: Dictionary={}) -> Array:
 	error = ""
 	if _identity.is_empty() or elapsed_ms < 0 or elapsed_ms < _last_time or elapsed_ms > 2147483647:
 		fail("Invalid radio context or simulation time")
@@ -186,7 +222,7 @@ func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hosti
 	var changes := []
 	if _active < 0:
 		for i in _started.size():
-			if not _started[i] and eligible(_definition.events[i], elapsed_ms, actor_hulls, cinematic_phase,hostile_active,defeated_targets):
+			if not _started[i] and eligible(_definition.events[i], elapsed_ms, actor_hulls, cinematic_phase,hostile_active,defeated_targets,observations,i):
 				_active = i
 				_started[i] = true
 				_activated_at = elapsed_ms
@@ -208,7 +244,7 @@ func _step(elapsed_ms: int, actor_hulls: Dictionary, cinematic_phase: int, hosti
 		_visible = false
 	return changes
 
-func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int, hostile_active:=false, defeated_targets:=0) -> bool:
+func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int, hostile_active:=false, defeated_targets:=0, observations: Dictionary={}, event_index: int=-1) -> bool:
 	var value := int(row.values[0])
 	match int(row.condition):
 		5: return elapsed_ms >= value
@@ -221,12 +257,26 @@ func eligible(row: Dictionary, elapsed_ms: int, hulls: Dictionary, phase: int, h
 		27: return phase == value
 		16: return hostile_active
 		20: return defeated_targets>=value
+		8:
+			var targets: Array=observations.get("targets",[])
+			return value<targets.size() and not targets[value].scenery and targets[value].active
+		21:
+			var targets: Array=observations.get("targets",[])
+			return value<targets.size() and targets[value].systems_disabled
+		25:
+			var current:=int(observations.get("route_index",-1))
+			if current<0 or event_index<0:return false
+			var previous:=int(_waypoint_indices.get(event_index,0))
+			# An active or earlier eligible event defers this route observation.
+			_waypoint_indices[event_index]=current
+			return current>previous and previous==0 and int(observations.get("survivors",0))>=value
 	return false
 
 func snapshot() -> Dictionary:
 	if _identity.is_empty(): return {}
 	var result := _identity.duplicate(true)
 	result.merge({"started": _started.duplicate(), "finished": _finished.duplicate(), "active_event": _active, "visible": _visible})
+	if _identity.get("campaign_cursor")==21:result.waypoint_observations=_waypoint_indices.duplicate()
 	if _active >= 0:
 		var row: Dictionary = _definition.events[_active]
 		result["text_id"] = int(row.text_id)
@@ -246,6 +296,7 @@ func fork_for_frame() -> RefCounted:
 	copy._activated_at = _activated_at
 	copy._last_time = _last_time
 	copy._identity = _identity.duplicate(true)
+	copy._waypoint_indices = _waypoint_indices.duplicate()
 	return copy
 
 func fail(message: String) -> bool:

@@ -28,7 +28,7 @@ func configure(library: RefCounted, bindings: RefCounted, campaign_cursor: int =
 	error="";unsupported.clear();_banks.clear();_clips.clear();_sound_cache.clear();_channel_cache.clear();_decoded_bytes=0;_definitions={};_library=null
 	_language_index=0;_voice_ids.clear()
 	if library==null or bindings==null or bindings.base_content_id!=library.manifest.get("content_id"):return reject("Audio requires matching base content and bindings")
-	if campaign_cursor not in [0,1,7,14,16]:return reject("Unsupported radio scene")
+	if campaign_cursor not in [0,1,7,14,16,21]:return reject("Unsupported radio scene")
 	var message:=Definitions.validate(bindings.audio,library.manifest.files)
 	if not message.is_empty():return reject(message)
 	if bindings.audio.is_empty():return reject("This binding pack has no audio declarations")
