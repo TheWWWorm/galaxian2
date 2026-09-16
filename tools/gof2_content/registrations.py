@@ -127,7 +127,7 @@ from .camera_follow import extract_camera_follow
 MAX_EXECUTABLE = 64 * 1024 * 1024
 MAX_SECTIONS = 256
 MAX_RECORDS = 20000
-READER = 'resource-registration-v170'
+READER = 'resource-registration-v171'
 
 
 class MachO:

@@ -1,0 +1,15 @@
+extends RefCounted
+## Original Suttnar flight conversation and acknowledged next objective.
+const Equal=preload("res://src/content/opening_escape_definitions.gd")
+const VALUES = {"scope":"suttnar_flight_visit","campaign_cursor":18,"system_id":11,"mission":{"kind":156,"station_id":56,"reward":0,"bonus":0,"source_parameter":0},"world_elapsed_after_ms":10000,"world_elapsed_strict":true,"hud_poll_minimum_ms":5001,"flight_only":true,"acknowledgement_required":true,"events":[{"speaker_id":0,"text_id":1838,"voice_event_id":254},{"speaker_id":13,"text_id":1839,"voice_event_id":255},{"speaker_id":0,"text_id":1840,"voice_event_id":256},{"speaker_id":13,"text_id":1841,"voice_event_id":257},{"speaker_id":0,"text_id":1842,"voice_event_id":258},{"speaker_id":1,"text_id":1843,"voice_event_id":259},{"speaker_id":0,"text_id":1844,"voice_event_id":260},{"speaker_id":1,"text_id":1845,"voice_event_id":261}],"next_cursor":19,"next_mission":{"kind":156,"station_id":55,"reward":0,"bonus":0,"source_parameter":0},"reward_credits":0}
+const SPANS = {"suttnar_factory_dispatch":[871474,8],"suttnar_initial_factory":[861557,52],"suttnar_next_factory":[861614,43],"suttnar_predicate_dispatch":[874940,27],"suttnar_predicate_case":[875258,4],"suttnar_predicate":[875062,58],"suttnar_destination_getter":[400888,10],"suttnar_station_getter":[851352,10],"suttnar_flight_poll":[385853,89],"suttnar_dialogue_poll":[386979,88],"suttnar_result_widget":[387265,72],"suttnar_result_counts":[1555258,76],"suttnar_count_predicate":[-692498,34],"suttnar_dialogue_offsets":[-694459,60],"suttnar_dialogue_speaker":[-692188,33],"suttnar_dialogue_text":[-691916,45],"suttnar_dialogue_pairs":[1547378,64],"suttnar_voice_lookup":[-215198,41],"suttnar_voices":[1560882,64],"suttnar_dialogue_next":[-686464,48],"suttnar_dialogue_count":[-686416,162],"suttnar_dialogue_click":[-685001,56],"suttnar_flight_ack":[351489,52],"suttnar_completed_result":[352180,231]}
+
+# Native composition.
+static func parameters(data: Variant) -> bool:
+	return Equal.equal_value(data,VALUES)
+
+static func available(bindings: RefCounted) -> bool:
+	return bindings!=null and parameters(bindings.mido_travel.get("suttnar_visit"))
+
+static func selected(bindings: RefCounted,cursor: Variant,mission: Variant) -> bool:
+	return available(bindings) and cursor is int and cursor==int(VALUES.campaign_cursor) and Equal.equal_value(mission,VALUES.mission)
