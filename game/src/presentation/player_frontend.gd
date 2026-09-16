@@ -5,6 +5,7 @@ const Library=preload("res://src/content/library.gd")
 const Bindings=preload("res://src/content/resource_bindings.gd")
 const Visuals=preload("res://src/content/visual_library.gd")
 const Preferences=preload("res://src/content/player_preferences.gd")
+const DisplaySettings=preload("res://src/presentation/display_settings.gd")
 const DmgImport=preload("res://src/content/dmg_import.gd")
 const SaveFile=preload("res://src/simulation/station_save_file.gd")
 const Menu=preload("res://src/presentation/main_menu_panel.gd")
@@ -21,6 +22,7 @@ var game: Control
 var menu: Control
 var music: Node
 var preferences:=Preferences.new()
+var _display:=DisplaySettings.new()
 var _preferences_path:=""
 var _save_directory:=""
 var _data_directory:=""
@@ -65,6 +67,7 @@ func boot(args: PackedStringArray=PackedStringArray(),directory: String="user://
 	preferences.read_file(_preferences_path);var message:=preferences.error
 	_selection=preferences.values.duplicate(true)
 	apply_preferences()
+	_display.apply(get_window(),preferences.values,_mobile)
 	var image_index:=args.find("--dmg")
 	if image_index>=0 and image_index+1<args.size():return begin_import(args[image_index+1])
 	if not preferences.values.import_record.is_empty():
@@ -203,21 +206,47 @@ func _import_finished(success: bool,receipt: String,message: String) -> void:
 
 func show_options() -> void:
 	_show_details("options",library.strings[31]);_settings_controls={}
+	if not _mobile:
+		_choice("window_mode","Display mode",["windowed","fullscreen"],["Windowed","Fullscreen (native resolution)"])
+		var native:=DisplaySettings.native_size(get_window())
+		var resolution_labels: Array=[]
+		for value in Preferences.RESOLUTIONS:resolution_labels.append("Native (%d × %d)"%[native.x,native.y] if value=="native" else value.replace("x"," × "))
+		_choice("resolution","Window resolution",Preferences.RESOLUTIONS,resolution_labels)
+		_settings_controls.resolution.disabled=preferences.values.window_mode=="fullscreen"
+		_choice("aspect_ratio","Aspect ratio",Preferences.ASPECTS,["Automatic (match window)","Native display","4:3","16:9","16:10","21:9","32:9"])
+	_choice("frame_rate","Frame rate",Preferences.FRAME_RATES,["Display refresh (V-Sync)","Unlimited (V-Sync off)","30 FPS","60 FPS","90 FPS","120 FPS","144 FPS","165 FPS","240 FPS","360 FPS"])
 	for pair in [["music",34],["fx",35],["voice",36]]:
 		_label(library.strings[pair[1]])
 		var slider:=HSlider.new();slider.min_value=0;slider.max_value=1;slider.step=0.05;slider.value=preferences.values[pair[0]];slider.custom_minimum_size.y=44 if _mobile else 30
 		slider.value_changed.connect(func(value):change_preference(pair[0],value));_body.add_child(slider);_settings_controls[pair[0]]=slider
-	for pair in [["invert_pitch",library.strings[489]],["touch_controls","Touch controls"]]:
+	for pair in [["invert_pitch",library.strings[489]],["touch_controls","Touch controls"],["mouse_steering","Mouse steering"]]:
+		if pair[0]=="mouse_steering" and _mobile:continue
 		var toggle:=CheckButton.new();toggle.text=pair[1];toggle.button_pressed=preferences.values[pair[0]];toggle.custom_minimum_size.y=44 if _mobile else 30
 		toggle.toggled.connect(func(value):change_preference(pair[0],value));_body.add_child(toggle);_settings_controls[pair[0]]=toggle
-	_label("WASD / arrows: steer · Space: fire\nEsc / controller Start: menu\nF5: save station · F9: load station")
+	if not _mobile:
+		_label("Mouse sensitivity")
+		var slider:=HSlider.new();slider.min_value=0.1;slider.max_value=3.0;slider.step=0.1;slider.value=preferences.values.mouse_sensitivity;slider.custom_minimum_size.y=30
+		slider.value_changed.connect(func(value):change_preference("mouse_sensitivity",value));_body.add_child(slider);_settings_controls.mouse_sensitivity=slider
+	_label("Mouse / WASD / arrows: steer · Left click / Space: fire\nEsc / controller Start: menu · M: navigation\nF5: save station · F9: load station\nMouse steering releases the cursor in menus and maps.")
+
+func _choice(key: String,title: String,values: Array,labels: Array) -> void:
+	_label(title)
+	var choice:=OptionButton.new();choice.custom_minimum_size.y=44 if _mobile else 30
+	for i in values.size():choice.add_item(labels[i])
+	choice.select(values.find(int(preferences.values[key]) if key=="frame_rate" else preferences.values[key]))
+	choice.item_selected.connect(func(index):change_preference(key,values[index]))
+	_body.add_child(choice);_settings_controls[key]=choice
 
 func change_preference(key: String,value: Variant) -> bool:
-	if key not in ["music","fx","voice","invert_pitch","touch_controls"]:return false
+	if key not in ["music","fx","voice","invert_pitch","touch_controls","mouse_steering","mouse_sensitivity"]+Preferences.DISPLAY_KEYS:return false
 	var candidate:=preferences.values.duplicate(true);candidate[key]=value
-	if not Preferences.valid(candidate):return reject("Invalid control or sound preference")
+	if not Preferences.valid(candidate):return reject("Invalid game preference")
 	if not preferences.save_file(_preferences_path,candidate):return reject(preferences.error)
-	apply_preferences();return true
+	if key in Preferences.DISPLAY_KEYS:
+		_display.apply(get_window(),candidate,_mobile)
+		if _settings_controls.has("resolution"):_settings_controls.resolution.disabled=candidate.window_mode=="fullscreen"
+	else:apply_preferences()
+	return true
 
 func show_languages() -> void:
 	_show_details("language",library.strings[0])

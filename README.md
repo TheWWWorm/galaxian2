@@ -44,7 +44,7 @@ other layouts may report that they are unsupported.
 - Station docking, item buying and selling, supported equipment fitting, and
   courier/passenger contracts to implemented destinations.
 - Station saves, autosaves, loading and retrying from a saved station after death.
-- Main menu, sound settings, language selection, controller input and optional
+- Main menu, display and sound settings, language selection, mouse/controller input and optional
   larger touch controls. Play is landscape only.
 
 ![Portal and freighters](screenshots/02-portal-and-freighters.png)
@@ -53,14 +53,20 @@ other layouts may report that they are unsupported.
 
 Follow the tutorial prompts for flying, targeting, firing and mining.
 
-| Action | Keyboard |
+| Action | Controls |
 | --- | --- |
+| Steer | **Mouse**, **WASD** or **arrow keys** |
+| Fire / mine | **Left click** or **Space** |
 | Main menu / pause | **Esc** |
 | Navigation map in flight | **M** |
 | Hangar at a station | **H** |
 | Space Lounge at a station | **L** |
 | Save / load at a supported station | **F5 / F9** |
 | Confirm / back | **Enter / Esc** |
+
+Mouse steering is enabled by default on desktop. Move the mouse to turn your ship;
+the cursor is released in menus, maps and station screens. **Options** lets you
+adjust mouse sensitivity, invert pitch or turn mouse steering off.
 
 After free travel unlocks, use **M** to plot a course. Travel to Gome C or Dis to
 reach its system's jumpgate, select the other system and a destination, and
@@ -74,6 +80,18 @@ before departing. Some replacements need confirmation.
 space; passengers need installed cabin berths. Accept a supported job, travel to
 its marker and dock. **Close** the delivery result to receive payment. Finish
 fitting before accepting a job.
+
+## Display settings
+
+Open **Options** to choose your display mode, window resolution, aspect ratio and
+frame rate. **Fullscreen** uses your display's native resolution, including Retina
+and ultrawide displays. Windowed mode offers common resolutions and **Native**,
+fitting the window within your desktop when necessary.
+
+**Automatic** aspect ratio fills the window without stretching the scene.
+**Native display** matches your monitor's ratio; fixed ratios add bars as needed.
+**Unlimited (V-Sync off)** removes the frame cap. You can also choose a fixed FPS
+limit or **Display refresh (V-Sync)**. These settings are remembered between launches.
 
 ## Saves
 

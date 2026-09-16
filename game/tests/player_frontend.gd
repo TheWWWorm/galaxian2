@@ -135,16 +135,33 @@ func verify_map_input() -> void:
 		now+=100000
 		if not app.game.session.step(now):check(false,app.game.session.error);return
 	app.game.present_session()
+	app.game.set_mobile_layout(false);app.game.refresh_render_mode()
+	check(app.game._mouse_captured,"Controllable desktop flight did not capture mouse steering")
+	for code in [KEY_A,KEY_D]:
+		var steer:=InputEventKey.new();steer.physical_keycode=code;steer.pressed=true
+		Input.parse_input_event(steer);Input.flush_buffered_events()
+		check(app.game._controls.snapshot().command.y==(1 if code==KEY_A else -1),"Normal keyboard routing reversed horizontal flight")
+		var released:=InputEventKey.new();released.physical_keycode=code
+		Input.parse_input_event(released);Input.flush_buffered_events()
+	var motion:=InputEventMouseMotion.new();motion.screen_relative=Vector2(10,0)
+	Input.parse_input_event(motion);Input.flush_buffered_events();app.game._controls.advance_mouse(1.0/60.0)
+	check(app.game._controls.snapshot().command.y<0,"Mouse look was swallowed by the flight viewport")
+	app.game._notification(MainLoop.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(not app.game._mouse_captured and app.game._controls.snapshot().command==Vector2.ZERO,"Focus loss kept the cursor or steering")
+	app.game._notification(MainLoop.NOTIFICATION_APPLICATION_FOCUS_IN)
 	if not app.game.open_map(now):check(false,app.game.status.text);return
+	check(not app.game._mouse_captured,"Navigation retained mouse capture")
 	var escape:=InputEventKey.new();escape.physical_keycode=KEY_ESCAPE;escape.pressed=true
 	Input.parse_input_event(escape);Input.flush_buffered_events()
 	check(app.phase=="game" and not app.game.session.map_open(),"Map Escape opened the main menu or failed to close navigation")
+	check(app.game._mouse_captured,"Closing navigation did not restore mouse steering")
 	var release:=InputEventKey.new();release.physical_keycode=KEY_ESCAPE
 	Input.parse_input_event(release);Input.flush_buffered_events()
 	check(app.game.open_map(),"Navigation did not reopen after keyboard closure")
 	var start:=InputEventJoypadButton.new();start.button_index=JOY_BUTTON_START;start.pressed=true
 	Input.parse_input_event(start);Input.flush_buffered_events()
 	check(app.phase=="menu" and app.game.session.map_open() and app.game.session.is_paused(),"Controller Start did not preserve and pause the open map")
+	check(not app.game._mouse_captured,"Returning to the menu retained the cursor")
 
 func preferences_unchanged() -> bool:
 	var prefs:=Preferences.new();return prefs.read_file(directory.path_join("player.json")) and is_equal_approx(prefs.values.fx,0.35)

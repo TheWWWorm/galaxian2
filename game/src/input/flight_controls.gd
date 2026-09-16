@@ -16,6 +16,11 @@ var deadzone := 0.18
 var invert_pitch := false
 var touch_controls := OS.has_feature("mobile")
 var enabled := true
+var mouse_sensitivity := 1.0
+var _mouse_active := false
+var _mouse_delta := Vector2.ZERO
+var _mouse_command := Vector2.ZERO
+var _mouse_fire := false
 var _keys := {}
 var _axes := {}
 var _buttons := {}
@@ -35,6 +40,7 @@ func clear() -> void:
 	_pressed.clear()
 	_touch_pressed.clear()
 	device = -1
+	_mouse_delta=Vector2.ZERO;_mouse_command=Vector2.ZERO;_mouse_fire=false
 
 func set_enabled(value: bool) -> void:
 	enabled = value
@@ -66,6 +72,15 @@ func disconnect_controller(identifier: int) -> void:
 
 func accept(event: InputEvent) -> bool:
 	if not enabled: return false
+	if event is InputEventMouseMotion:
+		if not _mouse_active or not event.screen_relative.is_finite():return false
+		_mouse_delta+=event.screen_relative
+		return true
+	if event is InputEventMouseButton:
+		if not _mouse_active or event.button_index!=MOUSE_BUTTON_LEFT:return false
+		if event.pressed and not _mouse_fire:_edge("fire")
+		_mouse_fire=event.pressed
+		return true
 	if event is InputEventKey:
 		var key: int = event.physical_keycode if event.physical_keycode else event.keycode
 		if key not in DIRECTIONS and not KEY_ACTIONS.has(key): return false
@@ -98,6 +113,20 @@ func accept(event: InputEvent) -> bool:
 		if event.pressed and not previous: _edge(BUTTON_ACTIONS[event.button_index])
 	return true
 
+func set_mouse_active(active: bool) -> void:
+	if _mouse_active==active:return
+	_mouse_active=active
+	_mouse_delta=Vector2.ZERO;_mouse_command=Vector2.ZERO;_mouse_fire=false
+
+func advance_mouse(seconds: float) -> void:
+	# Convert physical mouse speed to the existing bounded ship controls. A
+	# fixed distance over a fixed time has the same response at 60 or 240 FPS.
+	_mouse_command=Vector2.ZERO
+	if _mouse_active and is_finite(seconds) and seconds>0:
+		var velocity:=_mouse_delta*mouse_sensitivity/(600.0*seconds)
+		_mouse_command=Vector2(clampf(velocity.y,-1,1),clampf(velocity.x,-1,1))
+	_mouse_delta=Vector2.ZERO
+
 func set_touch_command(command: Vector2, active: bool) -> bool:
 	if not enabled or not touch_controls: return false
 	if not command.is_finite() or absf(command.x) > 1.0 or absf(command.y) > 1.0: return false
@@ -119,7 +148,11 @@ func snapshot() -> Dictionary:
 	var pitch := float(_key(KEY_S, KEY_DOWN)) - float(_key(KEY_W, KEY_UP))
 	var yaw := float(_key(KEY_D, KEY_RIGHT)) - float(_key(KEY_A, KEY_LEFT))
 	var command := Vector2(pitch if pitch != 0 else _axis(JOY_AXIS_LEFT_Y), yaw if yaw != 0 else _axis(JOY_AXIS_LEFT_X))
+	if command.x==0:command.x=_mouse_command.x
+	if command.y==0:command.y=_mouse_command.y
 	if _touch_active: command = _touch_command
+	# The ship flies along +Z; the following camera's screen-right is local -X.
+	command.y=-command.y
 	if invert_pitch: command.x = -command.x
 	for key in KEY_ACTIONS:
 		if _keys.get(key, false): held[KEY_ACTIONS[key]] = true
@@ -129,6 +162,7 @@ func snapshot() -> Dictionary:
 		if float(_axes.get(axis, 0.0)) > 0.25: held[AXIS_ACTIONS[axis]] = true
 	for action in _touch:
 		if _touch[action]: held[action] = true
+	if _mouse_fire:held.fire=true
 	return {"command": command, "held": held, "pressed": pressed_actions()}
 
 func take_pressed() -> Array[String]:
@@ -136,6 +170,10 @@ func take_pressed() -> Array[String]:
 	_pressed.clear()
 	_touch_pressed.clear()
 	return result
+
+static func pointer_command(flight_command: Vector2) -> Vector2:
+	# Drilling uses screen X/Y; flight uses local pitch/yaw.
+	return Vector2(-flight_command.y,flight_command.x)
 
 func pressed_actions() -> Array[String]:
 	var result := _pressed.duplicate()

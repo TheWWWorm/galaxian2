@@ -75,6 +75,8 @@ var _load_button: Button
 var _save_notice: Label
 var _mobile_layout:=false
 var _player_mode:=false
+var _mouse_steering:=false
+var _mouse_captured:=false
 var _preview_controls: Array[Control]=[]
 var _menu_button: Button
 const BOUNDARIES = Session.BOUNDARIES + ArrivalSession.BOUNDARIES + FirstFlightSession.BOUNDARIES + StationSession.BOUNDARIES
@@ -295,6 +297,7 @@ func _notification(what: int) -> void:
 	refresh_render_mode()
 
 func refresh_render_mode() -> void:
+	_sync_mouse_capture()
 	if _menu_button!=null:_menu_button.visible=_player_mode and (session is StationSession or _controls.touch_controls)
 	if _save_button!=null:
 		_save_button.visible=not _save_directory.is_empty() and session is StationSession
@@ -338,6 +341,24 @@ func refresh_render_mode() -> void:
 	if not is_visible_in_tree():viewport.render_target_update_mode=SubViewport.UPDATE_DISABLED
 	elif session!=null and session.status=="running" and not session.is_paused():viewport.render_target_update_mode=SubViewport.UPDATE_ALWAYS
 	else:viewport.render_target_update_mode=SubViewport.UPDATE_ONCE
+
+func _sync_mouse_capture() -> void:
+	var active: bool=_player_mode and _mouse_steering and not _mobile_layout and _focused and is_visible_in_tree() and session!=null and (session.can_control() or (session is FirstFlightSession and session.can_stop_mining()))
+	_controls.set_mouse_active(active)
+	if active==_mouse_captured:return
+	_mouse_captured=active
+	if DisplayServer.get_name()!="headless":Input.mouse_mode=Input.MOUSE_MODE_CAPTURED if active else Input.MOUSE_MODE_VISIBLE
+
+func _exit_tree() -> void:
+	if _mouse_captured and Input.mouse_mode==Input.MOUSE_MODE_CAPTURED:Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
+
+func _input(event: InputEvent) -> void:
+	# Own captured mouse input before the flight SubViewport can consume it.
+	if not _mouse_captured or not _focused or not is_visible_in_tree():return
+	if event is InputEventMouseMotion or event is InputEventMouseButton:
+		if _controls.accept(event):
+			handle_actions(_controls.take_pressed())
+			get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_visible_in_tree() or not _focused:return
@@ -441,10 +462,13 @@ func set_player_mode(enabled: bool) -> void:
 func apply_preferences(preferences: Dictionary) -> void:
 	clear_input()
 	_controls.configure_preferences(_controls.deadzone,preferences.invert_pitch,preferences.touch_controls)
+	_mouse_steering=preferences.get("mouse_steering",false)
+	_controls.mouse_sensitivity=preferences.get("mouse_sensitivity",1.0)
 	set_touch_controls(preferences.touch_controls)
 
 func set_mobile_layout(value: bool) -> void:
 	_mobile_layout=value
+	_sync_mouse_capture()
 	for panel in [station_panel,equipment_panel,lounge_panel,radio_panel,target_frame,aim_reticle,npc_markers,map_panel,gate_panel]:
 		if panel!=null:panel.set_mobile_layout(value)
 	if touch_overlay!=null:touch_overlay.mobile=value;touch_overlay.queue_redraw()
@@ -471,10 +495,12 @@ func _controller_connection(device: int, connected: bool) -> void:
 	if not connected:_controls.disconnect_controller(device)
 
 func _process(_delta: float) -> void:
+	_controls.advance_mouse(_delta)
 	if session==null or session.status not in ["running","arrival_transition_required","station_transition_required","station_reload_required","local_arrival_transition_required","gate_confirmation_required","gate_map_required","gate_arrival_transition_required","game_over_transition_required","convoy_arrival_transition_required"] or _transition_failed:return
 	if session.status=="running":
 		handle_actions(_controls.take_pressed())
 		var input: Dictionary=_controls.snapshot() if session.can_control() else {"command":Vector2.ZERO,"held":{"fire":false}}
+		if session is FirstFlightSession and session.can_stop_mining():input.command=Controls.pointer_command(input.command)
 		if not session.step(Time.get_ticks_usec(),input.command,input.held.fire):
 			if session is FirstFlightSession:transition_error(session.error)
 			else:show_error(session.error)

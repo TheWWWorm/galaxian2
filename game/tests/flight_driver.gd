@@ -5,6 +5,7 @@ const Driver = preload("res://src/simulation/flight_driver.gd")
 const Bindings = preload("res://src/content/resource_bindings.gd")
 const Catalogues = preload("res://src/content/catalogues.gd")
 const Library = preload("res://src/content/library.gd")
+const CameraView = preload("res://src/simulation/camera_view.gd")
 var failures := 0
 
 func _initialize() -> void:
@@ -48,11 +49,12 @@ func check_controls() -> void:
 	check(c.configure_preferences(0.2, false, false), c.error)
 	check(not c.set_touch_action("pause", true), "Hidden desktop touch action accepted")
 	c.accept(key(KEY_W, true)); c.accept(key(KEY_D, true))
-	check(c.snapshot().command == Vector2(-1, 1), "Keyboard pitch/yaw directions incorrect")
+	check(c.snapshot().command == Vector2(-1, -1), "Keyboard pitch/yaw directions incorrect")
+	check(Controls.pointer_command(c.snapshot().command)==Vector2(1,-1),"W/D did not move the drilling cursor up/right")
 	c.accept(key(KEY_W, false)); c.accept(key(KEY_D, false))
 	check(not c.accept(axis(1, JOY_AXIS_LEFT_X, 0.1)) and c.device == -1, "Idle controller stole ownership")
 	check(c.accept(axis(1, JOY_AXIS_LEFT_X, 0.6)) and c.device == 1, "Active controller did not acquire input")
-	near(c.snapshot().command.y, 0.5, "Controller deadzone remapping")
+	near(c.snapshot().command.y, -0.5, "Controller deadzone remapping")
 	check(not c.accept(axis(2, JOY_AXIS_TRIGGER_RIGHT, -1)) and c.device == 1, "Resting trigger stole ownership")
 	c.accept(axis(2, JOY_AXIS_LEFT_Y, -1))
 	check(c.device == 2 and c.snapshot().command == Vector2(-1, 0), "Controller switch retained old axes")
@@ -68,7 +70,7 @@ func check_controls() -> void:
 	c.set_touch_controls(true)
 	check(c.set_touch_command(Vector2(-0.5, 0.25), true), "Touch look rejected")
 	c.configure_preferences(0.2, true, true)
-	check(c.snapshot().command == Vector2(0.5, 0.25), "Pitch inversion or touch order failed")
+	check(c.snapshot().command == Vector2(0.5, -0.25), "Pitch inversion or touch order failed")
 	for action in Controls.ACTIONS:
 		check(c.set_touch_action(action, true) and c.snapshot().held[action], "Missing touch action: " + action)
 	c.accept(key(KEY_P, true))
@@ -94,6 +96,29 @@ func check_controls() -> void:
 		event.pressed = false
 		c.accept(event)
 		check(not c.snapshot().held[mapping[1]] and c.take_pressed().is_empty(), "Controller release emitted an action")
+	check_mouse()
+
+func check_mouse() -> void:
+	var c:=Controls.new()
+	var motion:=InputEventMouseMotion.new();motion.screen_relative=Vector2(5,-5);motion.relative=Vector2(500,-500)
+	check(not c.accept(motion),"Menu pointer motion steered the ship")
+	c.set_mouse_active(true)
+	c.accept(motion);c.advance_mouse(1.0/60.0)
+	check(c.snapshot().command==Vector2(-0.5,-0.5),"Physical mouse motion did not steer up/right independently of UI scaling")
+	check(Controls.pointer_command(c.snapshot().command)==Vector2(0.5,-0.5),"Mouse drilling cursor did not follow screen direction")
+	var slow: Vector2=c.snapshot().command
+	motion.screen_relative=Vector2(1.25,-1.25);c.accept(motion);c.advance_mouse(1.0/240.0)
+	check(c.snapshot().command==slow,"Higher frame rate changed mouse sensitivity")
+	c.advance_mouse(1.0/240.0)
+	check(c.snapshot().command==Vector2.ZERO,"Stopped mouse retained a turn command")
+	c.invert_pitch=true;c.mouse_sensitivity=2.0;c.accept(motion);c.advance_mouse(1.0/240.0)
+	check(c.snapshot().command==Vector2(1,-1),"Mouse sensitivity or pitch inversion failed")
+	var click:=InputEventMouseButton.new();click.button_index=MOUSE_BUTTON_LEFT;click.pressed=true
+	c.accept(click);check(c.snapshot().held.fire and c.take_pressed()==["fire"],"Mouse click did not fire")
+	c.accept(key(KEY_SPACE,true));click.pressed=false;c.accept(click)
+	check(c.snapshot().held.fire,"Mouse release cancelled keyboard fire")
+	c.clear();c.set_mouse_active(false)
+	check(c.snapshot().command==Vector2.ZERO and not c.snapshot().held.fire and not c.accept(motion),"Releasing the cursor retained flight input")
 
 
 func check_clock(bindings: RefCounted) -> void:
@@ -119,9 +144,16 @@ func check_driver(bindings: RefCounted, catalogues: RefCounted) -> void:
 	check(d.step(0, 1).get("seconds") == 0.0, "Driver first tick advanced")
 	d.accept(key(KEY_D, true))
 	var first := d.step(100000, 1)
-	check(first.pose.origin == Vector3(0, 0, 200) and d.angular_units().y > 0, "Keyboard command failed to reach staged flight response")
+	check(first.pose.origin == Vector3(0, 0, 200) and d.angular_units().y < 0, "Keyboard command failed to reach staged flight response")
 	var second := d.step(200000, 1)
-	check(second.pose.origin.x > 0 and second.seconds == 0.1, "Established input failed to turn flight")
+	var camera: Transform3D=CameraView.fixed_eye(Vector3(0,0,-100),Transform3D.IDENTITY,true).pose
+	check(second.pose.origin.dot(camera.basis.x)>0 and second.seconds==0.1,"D turned left in the following camera")
+	for code in [KEY_A,KEY_LEFT,KEY_D,KEY_RIGHT]:
+		var turn:=Driver.new();turn.configure(bindings,catalogues,catalogues.content_id,0,[],[],0.5,Transform3D.IDENTITY)
+		turn.step(0,1);turn.accept(key(code,true));turn.step(100000,1)
+		var moved: Transform3D=turn.step(200000,1).pose
+		var direction: int=1 if code in [KEY_D,KEY_RIGHT] else -1
+		check(moved.origin.dot(camera.basis.x)*direction>0,"Keyboard steering disagrees with camera screen direction: "+str(code))
 	d.accept(key(KEY_T, true)); d.accept(key(KEY_E, true))
 	var requests := d.step(216000, 1)
 	check("time" in requests.requested_actions and "dock" in requests.requested_actions, "Unsupported actions were lost rather than returned as requests")
