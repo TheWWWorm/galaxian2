@@ -9,6 +9,7 @@ const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const Flight=preload("res://src/simulation/npc_flight.gd")
 const Weapons=preload("res://src/content/contract_ship_combat_definitions.gd")
+const KappaLife=preload("res://src/content/kappa_lifecycle_definitions.gd")
 const Life=preload("res://src/content/contract_ship_lifecycle_definitions.gd")
 
 static func available(bindings: RefCounted) -> bool:
@@ -71,5 +72,35 @@ static func guidance(bindings: RefCounted,packet: Dictionary) -> Dictionary:
 	data.kappa_rescue=true
 	data.selection_skipped_modes=bindings.early_contracts.ship_lifecycle.selection_skipped_modes.map(func(mode):return int(mode))
 	return data
+
+static func lifecycle(bindings: RefCounted,packet: Dictionary) -> Dictionary:
+	if not KappaLife.available(bindings):return {}
+	var data:=guidance(bindings,packet)
+	if data.is_empty():return {}
+	data.kappa_lifecycle=bindings.mido_travel.kappa_lifecycle.duplicate(true)
+	data.lifecycle=bindings.early_contracts.ship_lifecycle.duplicate(true)
+	data.lifecycle.reactions.primary_faction=int(data.kappa_lifecycle.primary_faction)
+	data.lifecycle.reactions.eligible_factions=data.kappa_lifecycle.reaction_factions.duplicate()
+	data.cargo=bindings.combat_training_destruction.cargo.duplicate(true)
+	data.nonhostile_remaining_delta=int(bindings.combat_training_destruction.nonhostile_remaining_delta)
+	data.actors=[]
+	for actor in packet.actors:
+		var row: Dictionary={}
+		for key in ["actor_id","actor_kind","hull_catalogue_id","subtype","population_group"]:row[key]=actor[key]
+		for model in data.lifecycle.cargo_models:
+			if int(model.actor_kind)==actor.actor_kind:
+				row.cargo_model_id=int(model.cargo_model_id);row.cargo_model_resource=model.cargo_model_resource
+		if not row.has("cargo_model_id"):return {}
+		data.actors.append(row)
+	return data
+
+static func npc_hit(data: Dictionary,weapon: Dictionary) -> bool:
+	if not data.has("kappa_lifecycle"):return false
+	for row in data.npc_weapons:
+		var matches:=true
+		for key in ["item_id","category","kind","damage","nonplayer_source"]:
+			if weapon.get(key)!=row.get(key):matches=false;break
+		if matches:return true
+	return false
 
 static func vec(value: Array) -> Vector3:return Vector3(value[0],value[1],value[2])

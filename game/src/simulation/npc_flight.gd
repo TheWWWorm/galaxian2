@@ -142,6 +142,8 @@ func bank_basis() -> Basis:
 	var radians := Vitals.single(Vitals.single(_bank*float(_definition.bank_angle_scale))*float(_definition.pi))
 	return Basis.from_euler(Vector3(0,0,radians),EULER_ORDER_XYZ)
 
+func systems_statistics_pose() -> Transform3D:return _systems_statistics_pose
+
 func snapshot() -> Dictionary:
 	if _definition.is_empty(): return {}
 	var state := _identity.duplicate()

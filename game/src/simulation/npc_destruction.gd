@@ -1,5 +1,6 @@
 extends RefCounted
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
+const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 const AliothSequence=preload("res://src/simulation/alioth_attack.gd")
 ## Native NPC death motion and retained animation clocks. The encounter owner must
@@ -136,15 +137,23 @@ func configure_alioth_attack(bindings: RefCounted,resources: RefCounted,construc
 	clear()
 	if not construction is Construction or not resources is Resources:return reject("Alioth death requires its generated population and resources")
 	var packet: Dictionary=construction.snapshot()
-	var data:=Alioth.lifecycle(bindings,packet)
+	return _configure_fighter(bindings,resources,packet,actor,Alioth.lifecycle(bindings,packet),"alioth_context")
+
+func configure_kappa_rescue(bindings: RefCounted,resources: RefCounted,construction: RefCounted,actor: Dictionary) -> bool:
+	clear()
+	if not construction is Construction or not resources is Resources:return reject("Kappa death requires its generated population and resources")
+	var packet: Dictionary=construction.snapshot()
+	return _configure_fighter(bindings,resources,packet,actor,Kappa.lifecycle(bindings,packet),"kappa_context")
+
+func _configure_fighter(bindings: RefCounted,resources: RefCounted,packet: Dictionary,actor: Dictionary,data: Dictionary,context_key: String) -> bool:
 	var id: Variant=actor.get("actor_id")
-	if data.is_empty() or not Vitals.integer(id) or id>=int(data.actor_count) or actor.get("population_group")!="fighter":return reject("Unsupported Alioth small-ship death")
+	if data.is_empty() or not Vitals.integer(id) or id>=int(data.actor_count) or actor.get("population_group")!="fighter":return reject("Unsupported fighter destruction")
 	for key in ["actor_kind","hull_catalogue_id","subtype","population_group","cargo","fragments"]:
-		if actor.get(key)!=packet.actors[id].get(key):return reject("Alioth death changed its retained construction")
+		if actor.get(key)!=packet.actors[id].get(key):return reject("Fighter death changed its retained construction")
 	var pack: Dictionary=resources.snapshot()
 	for key in ["base_content_id","binding_id","campaign_cursor"]:
-		if actor.get(key)!=packet.get(key) or pack.get(key)!=packet.get(key):return reject("Alioth death belongs to another encounter")
-	if pack.get("alioth_context")!=packet.alioth_context or not pack.get("cargo_models") is Array or pack.cargo_models.size()!=int(data.actor_count):return reject("Alioth death lacks its cargo models")
+		if actor.get(key)!=packet.get(key) or pack.get(key)!=packet.get(key):return reject("Fighter death belongs to another encounter")
+	if pack.get(context_key)!=packet.get(context_key) or not pack.get("cargo_models") is Array or pack.cargo_models.size()!=int(data.actor_count):return reject("Fighter death lacks its cargo models")
 	var rules: Dictionary=data.cargo.duplicate(true)
 	rules.merge(data.actors[id]);rules.campaign_cursor=int(data.campaign_cursor)
 	return _configure_cargo(bindings,resources,actor,rules,pack.cargo_models[id])

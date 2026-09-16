@@ -267,12 +267,30 @@ func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construc
 	_systems=systems
 	_state.merge({"campaign_cursor":int(data.campaign_cursor),"station_id":int(data.station_id),"rank":int(data.rank),"kappa_rescue":true,
 		"population_group":"fighter","subtype":row.subtype,"friendly":false,"permanent_friendly":row.permanent_friendly,"scenery":false,
-		"script_hostile":row.script_hostile,"systems_disabled":false,"actor_mode":row.mode,"active":row.active,
+		"script_hostile":row.script_hostile,"systems_disabled":false,"systems_hit_serial":0,"actor_mode":row.mode,"active":row.active,
 		"targeting_blocked":bool(data.initial_actor_targeting_blocked),"statistics_targeting_blocked":bool(data.npc_statistics_targeting_blocked),
 		"spatial_half_extent":int(data.engagement_half_extent),"model_draw_enabled":bool(data.initial_model_draw_enabled),
 		"node_draw_requested":bool(data.initial_node_draw_requested),"engine_draw_enabled":bool(data.initial_engine_draw_enabled)},true)
 	if row.has("name_text_id"):_state.name_text_id=row.name_text_id
 	return set_pose(row.statistics_pose,row.body_pose)
+
+func enable_kappa_combat() -> bool:
+	if not _state.get("kappa_rescue",false):return reject("Kappa combat requires its generated body")
+	_state.local_combat=true;_state.forced_hostile=_state.script_hostile
+	return true
+
+func retain_kappa_force(forced: bool,persistent: bool) -> bool:
+	if not _state.get("kappa_rescue",false) or not _state.get("local_combat",false) or (_state.script_hostile and not persistent):return reject("Kappa reactions lost persistent mission hostility")
+	_state.forced_hostile=forced;_state.script_hostile=persistent
+	if persistent:_state.hostile=true;_state.friendly=false
+	return true
+
+func refresh_kappa_hostility(reputation: Dictionary,forced: bool,persistent: bool,rules: Dictionary) -> bool:
+	if not retain_kappa_force(forced,persistent):return false
+	var standing: int=reputation.axes[int(rules.axis)]
+	_state.hostile=persistent or forced or standing<int(rules.hostile_below)
+	_state.friendly=not persistent and not forced and standing>int(rules.friendly_above)
+	return true
 
 func apply_kappa_guidance(decision: Dictionary) -> bool:
 	if not _state.get("kappa_rescue",false):return reject("Kappa guidance requires its generated fighter")
@@ -293,8 +311,10 @@ func systems_hit(amount: Variant) -> Dictionary:
 	# separately before committing a frame, just as for ordinary hull hits.
 	error=""
 	if _systems==null:return fail_hit("This actor has no supported systems pool")
+	if _state.systems_hit_serial>=Vitals.MAX_INTEGER:return fail_hit("Systems hit serial limit reached")
 	var result: Dictionary=_systems.hit(amount,_vitals.snapshot().hull,_state.active,_state.damage_allowed)
 	if result.is_empty():return fail_hit(_systems.error)
+	if result.accepted:_state.systems_hit_serial+=1
 	return result
 
 func advance_systems(delta_ms: Variant) -> bool:
@@ -764,7 +784,7 @@ func normal_hit(amount: Variant, nonplayer_source: Variant=false) -> Dictionary:
 	error = ""
 	# A body prepared for patrol cannot take damage until the group also owns
 	# reputation, warning requests and faction retaliation.
-	if (_state.get("local_patrol",false) or _state.get("ambient_traffic",false)) and not _state.get("local_combat",false):return fail_hit("Local traffic damage and retaliation are not connected")
+	if (_state.get("local_patrol",false) or _state.get("ambient_traffic",false) or _state.get("kappa_rescue",false)) and not _state.get("local_combat",false):return fail_hit("Local traffic damage and retaliation are not connected")
 	if (_state.get("contract_ship",false) or _state.get("contract_debris",false)) and not _state.get("contract_combat",false):return fail_hit("Contract damage and lifecycle are not connected")
 	if _state.is_empty():
 		reject("Configure an actor before applying a normal hit")

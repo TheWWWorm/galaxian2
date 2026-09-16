@@ -277,6 +277,7 @@ func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,seed: Di
 		if bindings.resolve_ship_model(int(row.hull_catalogue_id)).is_empty():return reject(bindings.error)
 	data.context=context.duplicate(true)
 	data.permanent_friendly=bool(bindings.mido_travel.kappa_fighters.initial_permanent_friendly)
+	data.loadout=seed.duplicate(true)
 	return _configure(bindings,catalogues,seed,{},{},{},{},{},{},{},data)
 
 func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, arrival: Dictionary, full_hold: Dictionary={}, training: Dictionary={}, traffic: Dictionary={}, contract: Dictionary={}, convoy: Dictionary={}, alioth: Dictionary={}, kappa: Dictionary={}) -> bool:
@@ -786,7 +787,8 @@ func snapshot() -> Dictionary:
 	if not _contract_layout.is_empty():value.contract_encounter=_contract_layout.duplicate(true)
 	if not _convoy.is_empty():value.convoy_context=_convoy.context.duplicate(true)
 	if not _alioth.is_empty():value.alioth_context=_alioth.context.duplicate(true)
-	if not _kappa.is_empty():value.kappa_context=_kappa.context.duplicate(true)
+	if not _kappa.is_empty():
+		value.kappa_context=_kappa.context.duplicate(true);value.kappa_loadout=_kappa.loadout.duplicate(true)
 	if _traffic.has("free_context"):
 		value.free_context=_traffic.free_context.duplicate(true);value.player_ship_id=int(_traffic.free_player_ship_id)
 		value.station_id=int(_traffic.station_id)

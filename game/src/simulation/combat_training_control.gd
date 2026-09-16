@@ -1,4 +1,5 @@
 extends RefCounted
+const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 const AliothSequence=preload("res://src/simulation/alioth_attack.gd")
 ## Shared population guidance, motion and prepared cargo destruction. Local
@@ -46,6 +47,7 @@ var _scene_clocked:=false
 var _contract:=false
 var _convoy:=false
 var _alioth:=false
+var _kappa:=false
 var _alioth_sequence:={}
 var _bindings: RefCounted
 var _construction: RefCounted
@@ -245,6 +247,47 @@ func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,constru
 	_bindings=bindings;_construction=construction;_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
 	return true
 
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,reputation: Dictionary) -> bool:
+	clear()
+	if not construction is Construction:return reject("Kappa control requires its generated encounter")
+	var rules:=Kappa.lifecycle(bindings,construction.snapshot())
+	if rules.is_empty():return reject("Unsupported Kappa control lifecycle")
+	var combat:=Combat.new()
+	if not combat.configure_kappa_rescue(bindings,catalogues,construction,reputation):return reject(combat.error)
+	var guidance:=[];var flight:=[]
+	for id in int(rules.actor_count):
+		var controller:=Guidance.new();var motion:=Flight.new()
+		if not controller.configure_kappa_rescue(bindings,catalogues,construction,id) or not motion.configure(bindings,combat.snapshot().actors[id].body_pose):return reject(controller.error+motion.error)
+		guidance.append(controller);flight.append(motion)
+	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(rules.campaign_cursor),"rank":int(rules.rank)}
+	_flight_identity=RefCounted.new();_rules=rules;_death_rules=rules;_kappa=true
+	_combat=combat;_guidance=guidance;_flight=flight;_random=construction.snapshot().random_state.duplicate(true)
+	_initial_actors=construction.snapshot().actors.duplicate(true)
+	_bindings=bindings;_construction=construction;_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	return true
+
+func _set_kappa_destruction(bindings: RefCounted,resources: RefCounted) -> bool:
+	if _started or _accounting!=null or bindings!=_bindings or not resources is DeathResources:return reject("Prepare Kappa destruction once before flight starts")
+	var owners:=[]
+	for id in _initial_actors.size():
+		var owner:=Death.new()
+		var seed: Dictionary=_initial_actors[id].duplicate(true);seed.merge(_identity,true)
+		if not owner.configure_kappa_rescue(bindings,resources,_construction,seed):return reject(owner.error)
+		owners.append(owner)
+	var accounting:=Accounting.new()
+	if not accounting.configure_kappa_rescue(bindings,_construction):return reject(accounting.error)
+	_destruction=owners;_accounting=accounting;_death_resources=resources
+	return true
+
+func _validate_kappa_combat(body: Dictionary) -> bool:
+	if body.get("provocation",{}).get("station_id")!=int(_rules.station_id):return reject("Kappa combat belongs to another station")
+	var prior: Array=_combat.snapshot().actors
+	for id in prior.size():
+		for key in ["actor_id","actor_kind","hull_catalogue_id","rank","difficulty","kappa_rescue","permanent_friendly","scenery"]:
+			if body.actors[id].get(key)!=prior[id].get(key):return reject("Kappa combat changed its constructed cast")
+		if body.actors[id].systems_hit_serial<prior[id].systems_hit_serial or (prior[id].script_hostile and not body.actors[id].script_hostile):return reject("Kappa combat lost retained hits or mission hostility")
+	return true
+
 func evaluate_alioth_sequence(owner: RefCounted,weapons: RefCounted,shared_random_state: Variant=null) -> Dictionary:
 	error=""
 	if not _alioth or _accounting==null or not owner is AliothSequence or not weapons is Weapons:return fail("Alioth sequence requires its complete retained combat owners")
@@ -331,6 +374,7 @@ func _validate_alioth_combat(body: Dictionary) -> bool:
 
 func set_destruction(bindings: RefCounted, resources: RefCounted,freighter_resources: RefCounted=null) -> bool:
 	error=""
+	if _kappa:return _set_kappa_destruction(bindings,resources)
 	if _alioth:return _set_alioth_destruction(bindings,resources,freighter_resources)
 	if _convoy:return _set_convoy_destruction(bindings,resources,freighter_resources)
 	if _contract:return _set_contract_destruction(bindings,resources)
@@ -414,8 +458,8 @@ func advance(delta_ms: Variant, player: Dictionary, combat: RefCounted=null, ran
 	error=""
 	if not _contract_result.is_empty() and _contract_result.mode!=0:return fail("Acknowledge the contract result before advancing flight")
 	if _identity.is_empty() or (combat!=null and not combat is Combat):return fail("Configure combat-training control before advancing")
-	if (_ambient or _contract or _convoy or _alioth) and _accounting==null:return fail("Actor control requires its prepared destruction and accounting")
-	if (not _destruction.is_empty() or _local_patrol or _contract or _convoy or _alioth) and (not Vitals.integer(delta_ms) or delta_ms>_max_ms):return fail("Invalid ordinary actor frame duration")
+	if (_ambient or _contract or _convoy or _alioth or _kappa) and _accounting==null:return fail("Actor control requires its prepared destruction and accounting")
+	if (not _destruction.is_empty() or _local_patrol or _contract or _convoy or _alioth or _kappa) and (not Vitals.integer(delta_ms) or delta_ms>_max_ms):return fail("Invalid ordinary actor frame duration")
 	if _local_patrol and combat!=null and (not _combat.has_local_reactions() or not combat.has_local_reactions()):return fail("Local traffic damage and retaliation are not connected")
 	var staged: RefCounted=fork_for_frame()
 	if combat!=null:staged._combat=combat.fork_for_frame()
@@ -430,6 +474,7 @@ func advance(delta_ms: Variant, player: Dictionary, combat: RefCounted=null, ran
 	if not body.get("actors") is Array or body.actors.size()!=int(_rules.actor_count):return fail("Incoming combat population changed")
 	if _convoy and not _validate_convoy_combat(body):return {}
 	if _alioth and not _validate_alioth_combat(body):return {}
+	if _kappa and not _validate_kappa_combat(body):return {}
 	if _contract and body.get("contract_encounter")!=_construction.snapshot().contract_encounter:return fail("Incoming combat belongs to another accepted contract")
 	if _contract and body.get("contract_settlement",{})!=_combat.snapshot().get("contract_settlement",{}):return fail("Incoming combat lost its acknowledged result standing")
 	if _local_patrol and _combat.has_local_reactions() and body.get("provocation",{}).get("station_id")!=int(_rules.station_id):return fail("Incoming local combat belongs to another station")
@@ -460,7 +505,7 @@ func advance(delta_ms: Variant, player: Dictionary, combat: RefCounted=null, ran
 			if life.phase=="ready":
 				var departing: bool=_ambient and old.get("travel_cycle",-1)>=0 and old.actor_mode in [4,6]
 				var placed: bool=(_ambient or _alioth) and staged._launch_pending[id]
-				if old.body_pose!=motion.root_pose or (not departing and not (_alioth and placed) and old.pose!=(motion.root_pose if placed else motion.pose)):return fail("Combat pose disagrees with retained flight")
+				if old.body_pose!=motion.root_pose or (not departing and not (_alioth and placed) and old.pose!=(motion.root_pose if placed else staged._flight[id].systems_statistics_pose() if _kappa else motion.pose)):return fail("Combat pose disagrees with retained flight")
 				if placed:
 					if not staged._combat.set_pose(id,motion.pose,motion.root_pose):return fail(staged._combat.error)
 					staged._launch_pending[id]=false
@@ -474,6 +519,7 @@ func advance(delta_ms: Variant, player: Dictionary, combat: RefCounted=null, ran
 				continue
 			if life.phase!="ready":
 				if not staged._combat.set_pose(id,life.pose*Transform3D(life.bank_basis,Vector3.ZERO),life.pose):return fail(staged._combat.error)
+		if _kappa and not staged._combat.advance_systems(id,delta_ms):return fail(staged._combat.error)
 		if not staged._combat.refresh_hostility(id):return fail(staged._combat.error)
 		body=staged._combat.snapshot()
 		var actor: Dictionary=body.actors[id]
@@ -492,7 +538,7 @@ func advance(delta_ms: Variant, player: Dictionary, combat: RefCounted=null, ran
 			death.accounting_event=accounting_event;death_events.append(death)
 			staged._random=death.random_state.duplicate(true);decisions.append(decision)
 			continue
-		var applied: bool=staged._combat.apply_alioth_guidance(decision) if _alioth else staged._combat.apply_convoy_guidance(decision) if _convoy else (staged._combat.apply_contract_guidance(decision) if _contract else (staged._combat.apply_ambient_guidance(decision) if _ambient else (staged._combat.apply_local_patrol_guidance(decision) if _local_patrol else staged._combat.apply_combat_training_guidance(_rules,decision))))
+		var applied: bool=staged._combat.apply_kappa_guidance(decision) if _kappa else staged._combat.apply_alioth_guidance(decision) if _alioth else staged._combat.apply_convoy_guidance(decision) if _convoy else (staged._combat.apply_contract_guidance(decision) if _contract else (staged._combat.apply_ambient_guidance(decision) if _ambient else (staged._combat.apply_local_patrol_guidance(decision) if _local_patrol else staged._combat.apply_combat_training_guidance(_rules,decision))))
 		if not applied:return fail(staged._combat.error)
 		if _local_patrol and not staged._combat.has_local_reactions() and decision.fire_requested:return fail("Local traffic weapon control is not connected")
 		if decision.fire_requested:firing.append({"actor_id":id,"target_actor_id":int(decision.target_actor_id),"pose":actor.pose})
@@ -502,9 +548,9 @@ func advance(delta_ms: Variant, player: Dictionary, combat: RefCounted=null, ran
 			if moved.is_empty() or not staged._combat.apply_ambient_departure_pose(id,moved.root_pose):return fail(staged._flight[id].error+staged._combat.error)
 		elif decision.get("traffic_waiting",false):pass
 		elif decision.travel_enabled or decision.steering_enabled:
-			moved=staged._flight[id].advance(delta_ms,decision.direction,decision.speed,decision.steering_enabled,decision.travel_enabled)
+			moved=staged._flight[id].advance_with_systems(delta_ms,decision.direction,decision.speed,decision.steering_enabled,decision.travel_enabled,staged._combat.systems_for_frame(id)) if _kappa else staged._flight[id].advance(delta_ms,decision.direction,decision.speed,decision.steering_enabled,decision.travel_enabled)
 			if moved.is_empty():return fail(staged._flight[id].error)
-		if not decision.get("traffic_departure",false) and not decision.get("traffic_waiting",false) and not staged._combat.set_pose(id,moved.pose,moved.root_pose):return fail(staged._combat.error)
+		if not decision.get("traffic_departure",false) and not decision.get("traffic_waiting",false) and not staged._combat.set_pose(id,staged._flight[id].systems_statistics_pose() if _kappa else moved.pose,moved.root_pose):return fail(staged._combat.error)
 		staged._random=decision.random_state.duplicate(true);decisions.append(decision)
 	_combat=staged._combat;_guidance=staged._guidance;_flight=staged._flight;_random=staged._random
 	_destruction=staged._destruction;_accounting=staged._accounting;_started=true
@@ -558,7 +604,7 @@ func _advance_freighter(id: int,delta_ms: int) -> Dictionary:
 	return {"decision":decision,"death":death}
 
 func defeat_status() -> Dictionary:
-	if _convoy or _alioth:return {}
+	if _convoy or _alioth or _kappa:return {}
 	if _contract:return _contract_defeat_status()
 	if _death_rules.is_empty() or _local_patrol:return {}
 	var rule: Dictionary=_death_rules.defeat_condition
@@ -665,6 +711,7 @@ func snapshot() -> Dictionary:
 	if _local_patrol:result.support_state="ordinary_combat" if _combat.has_local_reactions() else "patrol_only"
 	if _contract:result.support_state="contract_combat"
 	if _convoy:result.support_state="convoy_combat"
+	if _kappa:result.support_state="kappa_combat"
 	if _alioth:result.support_state="alioth_combat";result.alioth_sequence=_alioth_sequence.duplicate(true)
 	if not _contract_result.is_empty():result.contract_result=_contract_result.duplicate(true)
 	if _ambient:result.traffic_clock=_launch_clock.snapshot();result.cargo=_cargo.duplicate(true)
@@ -684,7 +731,7 @@ func fork_for_frame() -> RefCounted:
 	copy._accounting=null if _accounting==null else _accounting.fork_for_frame()
 	copy._started=_started;copy._max_ms=_max_ms
 	copy._local_patrol=_local_patrol;copy._contract=_contract
-	copy._convoy=_convoy;copy._alioth=_alioth
+	copy._convoy=_convoy;copy._alioth=_alioth;copy._kappa=_kappa
 	copy._alioth_sequence=_alioth_sequence.duplicate(true)
 	copy._ambient=_ambient;copy._bindings=_bindings;copy._construction=_construction;copy._death_resources=_death_resources
 	copy._launch_clock=null if _launch_clock==null else _launch_clock.fork_for_frame()
@@ -698,7 +745,7 @@ func clear() -> void:
 	error="";_identity={};_rules={};_combat=null;_guidance=[];_flight=[];_random={}
 	_initial_actors=[];_destruction=[];_death_rules={};_accounting=null;_started=false;_max_ms=0;_local_patrol=false
 	_ambient=false;_contract=false;_bindings=null;_construction=null;_death_resources=null;_launch_clock=null;_cargo=[];_launch_pending=[]
-	_convoy=false;_alioth=false
+	_convoy=false;_alioth=false;_kappa=false
 	_alioth_sequence={}
 	_contract_result={}
 	_flight_identity=null

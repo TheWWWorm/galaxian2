@@ -1,6 +1,7 @@
 extends RefCounted
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
+const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 ## Ordinary NPC ownership; Opening alone uses the radio activation cue. AI and weapon
 ## target-list selection remain distinct from this canonical actor-ID inventory.
 const EscapeCamera=preload("res://src/content/opening_escape_camera_definitions.gd")
@@ -202,6 +203,81 @@ func apply_alioth_guidance(decision: Dictionary) -> bool:
 	if not _actors[id].apply_alioth_guidance(decision):return reject(_actors[id].error)
 	_activated=_activated or bool(_actors[id].snapshot().active)
 	return true
+
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,reputation: Dictionary) -> bool:
+	clear()
+	if not construction is NPCConstruction:return reject("Kappa combat requires its generated encounter")
+	var data:=Kappa.lifecycle(bindings,construction.snapshot())
+	if data.is_empty():return reject("Unsupported Kappa combat lifecycle")
+	var reaction:=Provocation.new()
+	if not reaction.configure_kappa_rescue(bindings,catalogues,construction,reputation):return reject(reaction.error)
+	var policy: Variant=bindings.weapon_parameters.get("ordinary_hit_policy",{})
+	if not HitDefinitions.parameters(policy):return reject("Kappa combat lacks the ordinary hit policy")
+	var actors:=[]
+	for id in int(data.actor_count):
+		var actor:=Actor.new()
+		if not actor.configure_kappa_rescue(bindings,catalogues,construction,id) or not actor.enable_kappa_combat():return reject(actor.error)
+		actors.append(actor)
+	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(data.campaign_cursor)}
+	_actors=actors;_hit_policy=policy.duplicate(true);_provocation=reaction;_training_weapons=data
+	_reputation_rules=data.kappa_lifecycle.terran_hostility.duplicate(true)
+	if not _configure_reputation(bindings,int(data.campaign_cursor),data.difficulty):
+		var reason:=error;clear();return reject(reason)
+	return true
+
+func apply_kappa_guidance(decision: Dictionary) -> bool:
+	var id: Variant=decision.get("actor_id")
+	if not _training_weapons.has("kappa_lifecycle") or not id is int or id<0 or id>=_actors.size():return reject("Kappa guidance names an unavailable actor")
+	if not _actors[id].apply_kappa_guidance(decision):return reject(_actors[id].error)
+	_activated=_activated or bool(_actors[id].snapshot().active)
+	return true
+
+func advance_systems(actor_id: int,delta_ms: Variant) -> bool:
+	if not _training_weapons.has("kappa_lifecycle") or actor_id<0 or actor_id>=_actors.size():return reject("Systems update names an unavailable fighter")
+	if not _actors[actor_id].advance_systems(delta_ms):return reject(_actors[actor_id].error)
+	return true
+
+func systems_for_frame(actor_id: int) -> RefCounted:
+	if not _training_weapons.has("kappa_lifecycle") or actor_id<0 or actor_id>=_actors.size():reject("Systems update names an unavailable fighter");return null
+	return _actors[actor_id].systems_for_frame()
+
+func apply_kappa_sequence(owner: RefCounted) -> bool:
+	if not _training_weapons.has("kappa_lifecycle"):return reject("This group has no Kappa sequence")
+	var next: RefCounted=_provocation.fork_for_frame()
+	if not next.apply_kappa_sequence(owner):return reject(next.error)
+	var actors:=_reaction_actors(next,_actors)
+	if actors.is_empty():return false
+	_actors=actors;_provocation=next
+	return true
+
+func systems_hit(actor_id: Variant,amount: Variant,nonplayer_source: Variant=false) -> Dictionary:
+	error=""
+	if not _training_weapons.has("kappa_lifecycle") or not actor_id is int or actor_id<0 or actor_id>=_actors.size():reject("Systems hit names an unavailable fighter");return {}
+	var actor: RefCounted=_actors[actor_id].fork_for_frame()
+	var reaction: Dictionary=_provocation.evaluate_systems(actor.snapshot(),amount,nonplayer_source,_contact_random,_display_available)
+	if reaction.is_empty():reject(_provocation.error);return {}
+	var result: Dictionary=actor.systems_hit(amount)
+	if result.is_empty():reject(actor.error);return {}
+	var history: RefCounted=_reputation.fork_for_frame()
+	if reaction.depleted_by_player and not history.record_systems_depletion(actor.snapshot(),result):reject(history.error);return {}
+	var staged:=_actors.duplicate();staged[actor_id]=actor
+	var actors:=_reaction_actors(reaction.owner,staged)
+	if actors.is_empty():return {}
+	_actors=actors;_provocation=reaction.owner;_reputation=history;_contact_random=reaction.random_state
+	result.reactions=reaction.events.duplicate(true)
+	result.first_disable_by_player=reaction.first_disable_by_player
+	return result
+
+func _reaction_actors(reaction: RefCounted,actors: Array) -> Array:
+	var state: Dictionary=reaction.snapshot();var result:=[]
+	for id in actors.size():
+		var actor: RefCounted=actors[id].fork_for_frame()
+		if _training_weapons.has("kappa_lifecycle"):
+			if not actor.retain_kappa_force(state.forced_hostile[id],state.permanent_hostile[id]):reject(actor.error);return []
+		else:
+			if not actor.retain_local_force(state.forced_hostile[id]):reject(actor.error);return []
+		result.append(actor)
+	return result
 
 func alioth_actor_context() -> Dictionary:
 	if not _training_weapons.has("alioth_lifecycle"):return {}
@@ -460,16 +536,17 @@ func normal_hit(actor_id: Variant, amount: Variant, nonplayer_source: Variant=fa
 		if reaction.is_empty():reject(_provocation.error);return {}
 	var result: Dictionary = actor.normal_hit(amount,nonplayer_source)
 	if result.is_empty():reject(actor.error);return {}
+	var history: RefCounted=_reputation
 	if result.destroyed_now and _reputation!=null:
-		var history: RefCounted=_reputation.fork_for_frame()
+		history=_reputation.fork_for_frame()
 		if not history.record_lethal(actor.snapshot()):reject(history.error);return {}
-		_reputation=history
-	_actors[actor_id]=actor
+	var staged:=_actors.duplicate();staged[actor_id]=actor
 	if not reaction.is_empty():
+		staged=_reaction_actors(reaction.owner,staged)
+		if staged.is_empty():return {}
 		_provocation=reaction.owner;_contact_random=reaction.random_state
-		var state: Dictionary=_provocation.snapshot()
-		for id in _actors.size():_actors[id].retain_local_force(state.forced_hostile[id])
 		result.reactions=reaction.events.duplicate(true)
+	_actors=staged;_reputation=history
 	return result
 
 func set_pose(actor_id: Variant, pose: Variant, physical_pose: Variant=null) -> bool:
@@ -482,6 +559,10 @@ func refresh_hostility(actor_id: Variant) -> bool:
 	error=""
 	if not actor_id is int or actor_id<0 or actor_id>=_actors.size(): return reject("Hostility names an unavailable opening actor")
 	if _provocation!=null:
+		if _training_weapons.has("kappa_lifecycle"):
+			var state: Dictionary=_provocation.snapshot()
+			if not _actors[actor_id].refresh_kappa_hostility(current_reputation(),state.forced_hostile[actor_id],state.permanent_hostile[actor_id],_reputation_rules):return reject(_actors[actor_id].error)
+			return true
 		if _training_weapons.has("free_lifecycle"):
 			if not _actors[actor_id].apply_free_hostility(current_reputation(),_provocation.snapshot().forced_hostile[actor_id],_reputation_rules):return reject(_actors[actor_id].error)
 			return true
@@ -536,7 +617,7 @@ func supports_weapon_hit(weapon: Variant) -> bool:
 	var kinds: Array=[0]
 	if not _training_weapons.is_empty() and weapon is Dictionary:
 		if weapon.get("nonplayer_source",false)==true:
-			var valid: bool=FreeLife.npc_hit(_training_weapons,weapon) if _training_weapons.has("free_lifecycle") else Alioth.npc_hit(_training_weapons,weapon) if _training_weapons.has("alioth_lifecycle") else Convoy.npc_hit(_training_weapons,weapon) if _training_weapons.has("capital_death") else (ContractLife.npc_hit(_training_weapons,weapon) if not _contract_encounter.is_empty() else (Travel.npc_hit(_training_weapons,weapon) if _provocation!=null else TrainingWeapons.npc_hit(_training_weapons,weapon)))
+			var valid: bool=Kappa.npc_hit(_training_weapons,weapon) if _training_weapons.has("kappa_lifecycle") else FreeLife.npc_hit(_training_weapons,weapon) if _training_weapons.has("free_lifecycle") else Alioth.npc_hit(_training_weapons,weapon) if _training_weapons.has("alioth_lifecycle") else Convoy.npc_hit(_training_weapons,weapon) if _training_weapons.has("capital_death") else (ContractLife.npc_hit(_training_weapons,weapon) if not _contract_encounter.is_empty() else (Travel.npc_hit(_training_weapons,weapon) if _provocation!=null else TrainingWeapons.npc_hit(_training_weapons,weapon)))
 			if not valid:return reject("NPC damage differs from this encounter's weapon declaration")
 			kinds=[0,1]
 		elif weapon.get("campaign_cursor") in [18,19] and preload("res://src/content/ordinary_fitting_definitions.gd").ordinary(weapon):kinds=[0,1,2]

@@ -1,6 +1,7 @@
 extends RefCounted
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 const OrdinaryContracts=preload("res://src/content/ordinary_contracts_definitions.gd")
+const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 ## Actual lethal-hit history for the supported early Mido encounters. Death
 ## animation/accounting may restart; that does not repeat the lethal hit.
@@ -36,11 +37,12 @@ func configure(bindings: RefCounted, cursor: Variant, kinds: Variant, difficulty
 	var contract: bool=load("res://src/content/convoy_transit_definitions.gd").supports(bindings.mido_travel,cursor) and ContractLife.available(bindings) and ContractLife.supported_kinds(kinds)
 	var convoy: bool=cursor==14 and Convoy.available(bindings) and ContractLife.available(bindings) and kinds==[8,8,8,0,0,0,0]
 	var alioth: bool=cursor==16 and Alioth.Life.available(bindings) and kinds==bindings.mido_travel.alioth_lifecycle.actor_kinds.map(func(kind):return int(kind))
+	var kappa: bool=cursor==21 and Kappa.KappaLife.available(bindings) and kinds==[0,0,0,0]
 	# The world validates the mission/population pair before supplying this
 	# faction ledger. A selected courier supplies an empty list; delivery pirates
 	# can extend the ordinary list beyond the no-job population bound.
 	var free: bool=load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor) and FreeLife.available(bindings) and (not kinds.is_empty() or OrdinaryContracts.available(bindings)) and kinds.size()<=FreeLife.Traffic.Population.maximum_actor_count(bindings,20,float(difficulty))+OrdinaryContracts.maximum_extra_count(bindings) and kinds.all(func(kind):return kind is int and kind in [0,1,2,8])
-	if contract or convoy or alioth or free:
+	if contract or convoy or alioth or free or kappa:
 		if float(difficulty) not in [0.5,1.0]:return reject("Reputation requires the supported contract ship population")
 		expected=kinds.duplicate()
 		var contracts: Dictionary=bindings.early_contracts.ship_lifecycle.reputation
@@ -48,6 +50,9 @@ func configure(bindings: RefCounted, cursor: Variant, kinds: Variant, difficulty
 		for index in contracts.factions.size():
 			var kind:=str(int(contracts.factions[index]))
 			rules.lethal_changes[kind]=int(contracts.lethal_changes[index]);rules.faction_axes[kind]=int(contracts.axes[index])
+		if kappa:
+			rules.system_id=int(bindings.mido_travel.kappa_lifecycle.system_id)
+			rules.systems_reputation=bindings.mido_travel.kappa_lifecycle.systems.duplicate(true)
 		if free:rules.system_id=int(bindings.mido_travel.free_lifecycle.system_id)
 		if alioth:
 			rules.system_id=int(bindings.mido_travel.alioth_lifecycle.system_id)
@@ -65,6 +70,8 @@ func configure(bindings: RefCounted, cursor: Variant, kinds: Variant, difficulty
 	_rules=rules.duplicate(true)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":cursor,
 		"system_id":int(rules.system_id),"actor_kinds":kinds.duplicate(),"difficulty":Vitals.single(float(difficulty)),"events":[]}
+	if kappa:
+		_state.systems_hit_serials=[];_state.systems_hit_serials.resize(kinds.size());_state.systems_hit_serials.fill(0)
 	if (free or (cursor in [11,12,13,14] and not contract and not convoy)) and Lifecycle.recycling_parameters(bindings.ambient_lifecycle):
 		_state.spawn_generations=[];_state.spawn_generations.resize(kinds.size());_state.spawn_generations.fill(0)
 	return true
@@ -85,6 +92,7 @@ func record_lethal(actor: Dictionary) -> bool:
 	if _state.is_empty():return reject("Configure reputation before recording a lethal hit")
 	for key in ["base_content_id","binding_id"]:
 		if actor.get(key)!=_state[key]:return reject("Reputation hit belongs to another content identity")
+	if _rules.has("systems_reputation") and actor.get("campaign_cursor")!=_state.campaign_cursor:return reject("Kappa lethal hit belongs to another encounter")
 	var id: Variant=actor.get("actor_id")
 	if not Numbers.integer(id,0,_state.actor_kinds.size()-1) or actor.get("actor_kind")!=_state.actor_kinds[id] or actor.get("vitals",{}).get("hull")!=0 or not actor.get("nonplayer_kill") is bool:return reject("Reputation requires the actual exhausted actor and hit attribution")
 	var generation:=0
@@ -94,12 +102,33 @@ func record_lethal(actor: Dictionary) -> bool:
 	return _append_event(id,actor.nonplayer_kill,generation)
 
 func _append_event(id: int, nonplayer: bool, generation: int=0) -> bool:
-	if _state.events.any(func(event):return event.actor_id==id and int(event.get("spawn_generation",0))>=generation):return reject("This traffic instance has already received its lethal hit")
+	if _state.events.any(func(event):return event.get("event_kind","")!="systems_disabled" and event.actor_id==id and int(event.get("spawn_generation",0))>=generation):return reject("This traffic instance has already received its lethal hit")
 	var change:=0 if nonplayer else int(_rules.lethal_changes[str(_state.actor_kinds[id])])
 	if _state.difficulty==float(_rules.hardest_difficulty):change*=int(_rules.hardest_multiplier)
 	var axis:=int(_rules.get("faction_axes",{}).get(str(_state.actor_kinds[id]),_rules.axis))
 	_state.events.append({"actor_id":id,"actor_kind":_state.actor_kinds[id],"nonplayer_kill":nonplayer,"axis":axis,"change":change})
 	if _state.has("spawn_generations"):_state.events[-1].spawn_generation=generation
+	return true
+
+func record_systems_depletion(actor: Dictionary,hit: Dictionary) -> bool:
+	error=""
+	if not _rules.has("systems_reputation"):return reject("This reputation history has no systems damage support")
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if actor.get(key)!=_state[key]:return reject("Systems damage belongs to another reputation history")
+	var id: Variant=actor.get("actor_id")
+	if not Numbers.integer(id,0,_state.actor_kinds.size()-1) or actor.get("actor_kind")!=_state.actor_kinds[id] or actor.get("vitals",{}).get("hull",0)<=0:return reject("Systems reputation requires the actual living fighter")
+	var after: Variant=actor.get("systems")
+	if not after is Dictionary or not after.get("disabled",false) or after.get("integrity")!=0 or not hit.get("accepted",false) or hit.get("after")!=after or hit.get("before",{}).get("integrity",0)<=0:return reject("Systems reputation requires an accepted depletion transaction")
+	return _append_systems_event(id,actor.get("systems_hit_serial"))
+
+func _append_systems_event(id: int,serial: Variant) -> bool:
+	if not _rules.has("systems_reputation") or not Numbers.integer(serial,1,2147483647) or serial<=_state.systems_hit_serials[id]:return reject("Systems depletion has already been recorded or lacks its hit serial")
+	if _state.events.any(func(event):return event.actor_id==id and event.get("event_kind","")!="systems_disabled"):return reject("Systems depletion cannot follow this fighter's lethal hit")
+	var change:=int(_rules.systems_reputation.reputation_change)
+	if _state.difficulty==float(_rules.hardest_difficulty):change*=int(_rules.hardest_multiplier)
+	_state.events.append({"actor_id":id,"actor_kind":_state.actor_kinds[id],"event_kind":"systems_disabled","hit_serial":serial,
+		"axis":int(_rules.systems_reputation.reputation_axis),"change":change})
+	_state.systems_hit_serials[id]=serial
 	return true
 
 func restore(bindings: RefCounted, data: Variant) -> bool:
@@ -112,6 +141,9 @@ func restore(bindings: RefCounted, data: Variant) -> bool:
 		if not generations is Array or generations.size()!=next._state.actor_kinds.size() or not generations.all(func(value):return Numbers.integer(value,0,2147483647)):return reject("Invalid retained traffic generations")
 		next._state.spawn_generations=generations.duplicate()
 	for event in data.events:
+		if event is Dictionary and event.get("event_kind")=="systems_disabled":
+			if not Numbers.integer(event.get("actor_id"),0,next._state.actor_kinds.size()-1) or not next._append_systems_event(event.actor_id,event.get("hit_serial")):return reject("Invalid retained systems depletion")
+			continue
 		if not event is Dictionary or not Numbers.integer(event.get("actor_id"),0,next._state.actor_kinds.size()-1) or not event.get("nonplayer_kill") is bool:return reject("Invalid retained reputation hit")
 		var generation:=0
 		if next._state.has("spawn_generations"):

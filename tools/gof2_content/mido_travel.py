@@ -31,6 +31,7 @@ from .kappa_preparation import extract_kappa_preparation
 from .emp_bombs import extract_emp_bombs
 from .kappa_rescue import extract_kappa_rescue
 from .kappa_fighters import extract_kappa_fighters
+from .kappa_lifecycle import extract_kappa_lifecycle
 
 def extract_mido_travel(mach, arrival, station, training):
     if station.get('scope') != 'first_station_entry' or training.get('scope') != 'combat_training_encounter_construction':
@@ -79,6 +80,7 @@ def extract_mido_travel(mach, arrival, station, training):
             ('emp_bombs', extract_emp_bombs),
             ('kappa_rescue', extract_kappa_rescue),
             ('kappa_fighters', extract_kappa_fighters),
+            ('kappa_lifecycle', extract_kappa_lifecycle),
         )
         for name, extract in extensions:
             values, evidence = extract(mach, arrival)
