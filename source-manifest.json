@@ -1606,6 +1606,7 @@
     "tests/test_gate_transit.py",
     "tests/test_hangars.py",
     "tests/test_image_regions.py",
+    "tests/test_import_worker.py",
     "tests/test_kappa_fighters.py",
     "tests/test_kappa_lifecycle.py",
     "tests/test_kappa_preparation.py",

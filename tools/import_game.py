@@ -17,7 +17,16 @@ def write_status(path, record):
     path.parent.mkdir(parents=True, exist_ok=True)
     staged = path.with_suffix('.tmp')
     staged.write_text(json.dumps(record) + '\n', encoding='utf-8')
-    os.replace(staged, path)
+    # The game polls this file every frame, and Windows refuses to replace a file
+    # while any process holds it open. Each hold lasts microseconds, so retry briefly.
+    for attempt in range(100):
+        try:
+            os.replace(staged, path)
+            return
+        except PermissionError:
+            if attempt == 99:
+                raise
+            time.sleep(0.02)
 
 
 def main():
@@ -40,8 +49,11 @@ def main():
             raise InterruptedError('Import cancelled; the previous game and saves are unchanged')
         now = time.monotonic()
         if now - last > 0.2:
-            write_status(args.status, {'state': 'working', 'message': message, 'progress': ratio})
             last = now
+            try:
+                write_status(args.status, {'state': 'working', 'message': message, 'progress': ratio})
+            except PermissionError:
+                pass  # A progress update is never worth aborting the import; the next one retries.
 
     signal.signal(signal.SIGINT, cancel)
     signal.signal(signal.SIGTERM, cancel)
