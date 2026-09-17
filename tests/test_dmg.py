@@ -1,5 +1,6 @@
 """Disk-image selection rules; real image extraction is an external-content check."""
 from pathlib import Path
+import ntpath
 import tempfile
 import sys
 import unittest
@@ -43,6 +44,12 @@ class DiskImageTests(unittest.TestCase):
                       'Path = x\nPath = y\n\n', 'unrecognized output\n\n']:
             with self.subTest(extra=extra), self.assertRaises(ContentError):
                 app_files(self.listing() + extra)
+
+    def test_windows_listings_report_native_separators(self):
+        with patch('gof2_content.dmg.os.sep', ntpath.sep):
+            app, files = app_files(self.listing().replace('/', ntpath.sep))
+        self.assertEqual(app, 'Volume/Renamed.app')
+        self.assertIn('Volume/Renamed.app/Contents/MacOS/Game', files)
 
     def test_missing_or_invalid_disk_image_does_not_extract(self):
         with tempfile.TemporaryDirectory() as directory:

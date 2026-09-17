@@ -30,7 +30,7 @@ def app_files(listing):
             key, value = line.split(' = ', 1)
             if key in row:
                 raise ContentError('Ambiguous DMG archive metadata')
-            row[key] = value
+            row[key] = value.replace(os.sep, '/') if key == 'Path' else value
         name = safe_name(row.get('Path', ''))
         if name.casefold() in seen:
             raise ContentError('Duplicate or ambiguous DMG path: ' + name)
