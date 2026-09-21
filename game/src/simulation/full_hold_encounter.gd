@@ -199,14 +199,17 @@ func bind_contract_session(session: RefCounted,bindings: RefCounted=null) -> boo
 func sample_contract_clock(world_ms: int,poll_ms: int) -> bool:
 	error=""
 	if _contract_context.is_empty():return reject("This encounter has no ordinary contract scene clock")
-	return true if _control.sample_scene_clock(world_ms,poll_ms) else reject(_control.error)
+	var control: RefCounted=_control.fork_for_frame(false)
+	if not control.sample_scene_clock(world_ms,poll_ms):return reject(control.error)
+	_control=control
+	return true
 
 func evaluate_contract_session(session: RefCounted,radio_active: bool=false,poll_results: bool=true,periodic_poll_allowed: bool=true) -> Dictionary:
 	error=""
 	if _contract_context.is_empty() or not is_instance_of(session,load("res://src/simulation/contract_session.gd")):return fail("The encounter has no retained contract career")
 	# Contacts have already changed the encounter bodies. Retain that exact
 	# body state without inserting an extra actor/guidance update before polling.
-	var control: RefCounted=_control.fork_for_frame();control._combat=_combat.fork_for_frame()
+	var control: RefCounted=_control.fork_for_frame(false);control._combat=_combat.fork_for_frame()
 	var result: Dictionary=session.evaluate_flight(control,radio_active,poll_results,periodic_poll_allowed)
 	if result.is_empty():return fail(session.error)
 	_control=result.controller;_combat=_control.combat_owner()
@@ -241,6 +244,7 @@ func evaluate_weapons(player: RefCounted, pose: Transform3D, milliseconds: int, 
 	if _control==null or not Numbers.integer(milliseconds,0,150) or target(player,pose).is_empty():return fail("Invalid encounter weapon frame")
 	if _primaries!=null and (not scenery is Scenery or scenery.presentation_identity()!=_scenery_identity):return fail("Equipped contacts require the retained complete scenery")
 	var prior:=snapshot();var next:=fork_for_frame()
+	next._projectiles=_projectiles.fork_for_frame();next._impacts=_impacts.fork_for_frame()
 	if not next._projectiles.advance(milliseconds):return fail(next._projectiles.error)
 	if not next._impacts.advance(milliseconds):return fail(next._impacts.error)
 	var field: RefCounted=scenery
@@ -281,7 +285,9 @@ func evaluate_world_logic(milliseconds: int, random_state: Dictionary) -> Dictio
 func reset_primary_fire_intervals() -> bool:
 	error=""
 	if _primaries==null:return reject("This encounter has no equipped primary owner")
-	if not _primaries.reset_fire_intervals():return reject(_primaries.error)
+	var primaries: RefCounted=_primaries.fork_state()
+	if not primaries.reset_fire_intervals():return reject(primaries.error)
+	_primaries=primaries
 	return true
 
 func evaluate_primary_fire(player: RefCounted, pose: Transform3D, requested: bool, input_enabled: bool, random_state: Dictionary) -> Dictionary:
@@ -292,6 +298,7 @@ func evaluate_primary_fire(player: RefCounted, pose: Transform3D, requested: boo
 	var next:=fork_for_frame();var result:=random.snapshot()
 	next._primary_fire={}
 	if requested and input_enabled and input.active and input.hull>0:
+		next._primaries=_primaries.fork_state()
 		next._primary_fire=next._primaries.fire(pose,true,result)
 		if next._primary_fire.is_empty():return fail(next._primaries.error)
 		result=next._primary_fire.random_state
@@ -341,6 +348,10 @@ func snapshot() -> Dictionary:
 		result.primaries=_primaries.snapshot();result.primary_contacts=_primary_contacts.duplicate(true);result.primary_fire=_primary_fire.duplicate(true)
 	return result
 
+func combat_snapshot() -> Dictionary:return {} if _combat==null else _combat.snapshot()
+func primary_contacts() -> Array:return _primary_contacts.duplicate(true)
+func actor_events() -> Array:return _actor_events.duplicate(true)
+
 func projectile_visual_owner() -> RefCounted:return null if _projectiles==null else _projectiles.fork_for_frame()
 func combat_owner() -> RefCounted:return null if _combat==null else _combat.fork_for_frame()
 func impact_visual_owner() -> RefCounted:return null if _impacts==null else _impacts.fork_for_frame()
@@ -352,10 +363,13 @@ func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy._contract_context=_contract_context.duplicate(true)
 	if _control==null:return copy
-	copy._identity=_identity;copy._control=_control.fork_for_frame();copy._combat=_combat.fork_for_frame()
-	copy._weapons=_weapons.fork_for_frame();copy._projectiles=_projectiles.fork_for_frame();copy._impacts=_impacts.fork_for_frame()
+	# Each phase replaces its changed owners with detached candidates. Sharing
+	# the others avoids copying every NPC's motion and effects for weapon input,
+	# scene observation, and clock updates that never change them.
+	copy._identity=_identity;copy._control=_control;copy._combat=_combat
+	copy._weapons=_weapons;copy._projectiles=_projectiles;copy._impacts=_impacts
 	copy._resources=_resources;copy._freighter_resources=_freighter_resources;copy._freighter_assemblies=_freighter_assemblies
-	copy._primaries=null if _primaries==null else _primaries.fork_state()
+	copy._primaries=_primaries
 	copy._inventory=_inventory;copy._scenery_identity=_scenery_identity
 	copy._primary_contacts=_primary_contacts.duplicate(true);copy._primary_fire=_primary_fire.duplicate(true)
 	copy._elapsed_ms=_elapsed_ms;copy._world_elapsed_ms=_world_elapsed_ms

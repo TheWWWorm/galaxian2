@@ -132,8 +132,9 @@ func set_update_existing(value: Variant) -> bool:
 func reset() -> bool:
 	error=""
 	if _preset.is_empty():return reject("Configure damage particles before resetting")
-	for slot in _slots:
-		slot.appearance.age_ms=-1;slot.appearance.size=0;slot.position=RESET_POSITION
+	for index in _slots.size():
+		var slot: Dictionary=_slots[index]
+		_slots[index]={"appearance":{"slot":slot.appearance.slot,"age_ms":-1,"size":0},"position":RESET_POSITION,"velocity":slot.velocity}
 	_remainder_ms=0;_dirty=true
 	return true
 
@@ -150,7 +151,8 @@ func snapshot() -> Dictionary:
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy.binding_id=binding_id;copy.base_content_id=base_content_id
-	copy._preset=_preset.duplicate(true);copy._slots=_slots.duplicate(true);copy._random=_random.fork()
+	# Slots are replaced before mutation; inactive sprites can stay shared.
+	copy._preset=_preset;copy._slots=_slots.duplicate();copy._random=_random.fork()
 	copy._cursor=_cursor;copy._remainder_ms=_remainder_ms
 	copy._enabled=_enabled;copy._visible=_visible;copy._update_existing=_update_existing
 	copy._dirty=_dirty;copy._force_velocity=_force_velocity;copy._baseline=_baseline;copy._velocity=_velocity
@@ -257,11 +259,12 @@ func move_particle(index: int,delta_ms: float) -> bool:
 	if slot.appearance.age_ms<0:return true
 	var appearance:=Appearance.advance(_preset,slot.appearance,delta_ms)
 	if appearance.has("error"):return reject(appearance.error)
-	slot.appearance=appearance
+	slot=slot.duplicate();slot.appearance=appearance
 	if appearance.age_ms<0:slot.position=RESET_POSITION
 	else:
 		slot.position=Vectors.added(slot.position,Vectors.scaled(Vectors.scaled(slot.velocity,delta_ms),single(0.001)))
 		if not slot.position.is_finite():return reject("Damage particle movement exceeds finite source bounds")
+	_slots[index]=slot
 	return true
 
 static func single(value: float) -> float:return Appearance.single(value)

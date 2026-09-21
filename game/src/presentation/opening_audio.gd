@@ -183,10 +183,10 @@ func configure_full_hold(library: RefCounted,bindings: RefCounted,world: RefCoun
 	_flight_identity=world.destruction_owner().presentation_identity()
 	return true
 
-func prepare_full_hold(world: RefCounted) -> Dictionary:
+func prepare_full_hold(world: RefCounted, state: Dictionary={}) -> Dictionary:
 	error=""
 	if not world is MiningFlight or _flight_identity==null or world.destruction_owner()==null or world.destruction_owner().presentation_identity()!=_flight_identity:return fail("Second-flight audio follows one configured native world")
-	var state: Dictionary=world.snapshot()
+	if state.is_empty():state=world.snapshot()
 	for key in _content_identity:
 		if state.get(key)!=_content_identity[key]:return fail("Second-flight audio frame changed content identity")
 	var cues: Variant=state.get("flight_audio")

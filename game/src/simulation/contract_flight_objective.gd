@@ -35,7 +35,7 @@ func configure(bindings: RefCounted,construction: RefCounted,encounter: RefCount
 func poll_visit(world_ms: int,hud_ms: int,blocked: bool) -> bool:
 	error=""
 	if _visit==null:return true
-	return true if _visit.poll(_contracts.snapshot().station_id,world_ms,hud_ms,false,blocked) else reject(_visit.error)
+	return true if _visit.poll(_contracts.station_id(),world_ms,hud_ms,false,blocked) else reject(_visit.error)
 
 func navigate(action: String,encounter: RefCounted) -> bool:
 	error=""
@@ -52,7 +52,7 @@ func navigate(action: String,encounter: RefCounted) -> bool:
 
 func poll_contract(cargo: RefCounted,scenery: RefCounted,encounter: RefCounted,alive: bool,radio_active: bool,periodic_due: bool) -> bool:
 	error=""
-	if _contracts==null or not encounter is Encounter or cargo.field_identity()!=_field_identity or scenery.presentation_identity()!=_field_identity or not cargo.matches_mined_field(scenery.snapshot()):return reject("The contract objective lost its actual flight field and cargo")
+	if _contracts==null or not encounter is Encounter or cargo.field_identity()!=_field_identity or scenery.presentation_identity()!=_field_identity or not cargo.matches_mined_field(scenery.mining_snapshot()):return reject("The contract objective lost its actual flight field and cargo")
 	var result: Dictionary=encounter.evaluate_contract_session(_contracts,radio_active,alive,periodic_due)
 	if result.is_empty():return reject(encounter.error)
 	_contracts=result.session
@@ -82,6 +82,9 @@ func retained_for_arrival(encounter: RefCounted) -> RefCounted:
 	return result
 
 func contract_owner() -> RefCounted:return null if _contracts==null else _contracts.fork()
+
+func result_pending() -> bool:return _contracts!=null and _contracts.result_pending()
+func dialogue_visible() -> bool:return _visit!=null and _visit.snapshot().dialogue.visible
 
 func snapshot() -> Dictionary:
 	if _contracts==null:return {}

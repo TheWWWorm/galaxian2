@@ -674,7 +674,7 @@ func evaluate(combat: RefCounted, weapons: RefCounted, milliseconds: int, player
 	error=""
 	if _local_patrol and not _combat.has_local_reactions():return fail("Local traffic weapon control is not connected")
 	if not weapons is Weapons:return fail("Training actor updates require their retained weapon pools")
-	var staged:=fork_for_frame();var next_weapons: RefCounted=weapons.fork_for_frame()
+	var staged:=fork_for_frame(false);var next_weapons: RefCounted=weapons.fork_for_frame()
 	var operation: Dictionary=staged.advance(milliseconds,player,combat,random_state)
 	if operation.is_empty():return fail(staged.error)
 	# These ordinary NPC shots consume no random values and cannot contact
@@ -720,14 +720,17 @@ func snapshot() -> Dictionary:
 		result.accounting=_accounting.snapshot();result.defeat_status=defeat_status()
 	return result
 
-func fork_for_frame() -> RefCounted:
+func fork_for_frame(copy_motion:=true) -> RefCounted:
 	var copy: RefCounted=get_script().new()
-	copy._identity=_identity.duplicate();copy._rules=_rules.duplicate(true);copy._random=_random.duplicate(true)
+	# Configuration is immutable after setup; only live state needs a private copy.
+	copy._identity=_identity.duplicate();copy._rules=_rules;copy._random=_random.duplicate(true)
 	copy._combat=null if _combat==null else _combat.fork_for_frame()
-	copy._guidance=_guidance.map(func(owner):return null if owner==null else owner.fork_for_frame())
-	copy._flight=_flight.map(func(owner):return null if owner==null else owner.fork_for_frame())
-	copy._initial_actors=_initial_actors.duplicate(true);copy._death_rules=_death_rules.duplicate(true)
-	copy._destruction=_destruction.map(func(owner):return owner.fork_for_frame())
+	# Clock/result observations retain motion. advance() always takes a full
+	# private motion copy before changing guidance, flight or destruction.
+	copy._guidance=_guidance.map(func(owner):return null if owner==null else owner.fork_for_frame()) if copy_motion else _guidance
+	copy._flight=_flight.map(func(owner):return null if owner==null else owner.fork_for_frame()) if copy_motion else _flight
+	copy._initial_actors=_initial_actors;copy._death_rules=_death_rules
+	copy._destruction=_destruction.map(func(owner):return owner.fork_for_frame()) if copy_motion else _destruction
 	copy._accounting=null if _accounting==null else _accounting.fork_for_frame()
 	copy._started=_started;copy._max_ms=_max_ms
 	copy._local_patrol=_local_patrol;copy._contract=_contract

@@ -6,7 +6,7 @@ config/name="GoF2 Remake"
 run/main_scene="res://scenes/main.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="gof2-remake"
-config/features=PackedStringArray("4.4", "GL Compatibility")
+config/features=PackedStringArray("4.4", "Mobile")
 
 [display]
 window/size/viewport_width=1120
@@ -19,6 +19,11 @@ window/dpi/allow_hidpi=true
 window/handheld/orientation=0
 
 [rendering]
-renderer/rendering_method="gl_compatibility"
+renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method.web="gl_compatibility"
+rendering_device/driver.windows="vulkan"
+rendering_device/driver.linuxbsd="vulkan"
+rendering_device/driver.macos="metal"
+rendering_device/fallback_to_opengl3=true
 environment/defaults/default_clear_color=Color(0.025, 0.04, 0.065, 1)

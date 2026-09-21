@@ -13,6 +13,7 @@ const Conversations=preload("res://src/content/ordinary_flight_definitions.gd")
 const Locations=preload("res://src/simulation/lounge_cache.gd")
 const LoungeScene=preload("res://src/presentation/lounge_scene.gd")
 const BOUNDARIES=["launch_required","station_reload_required","station_followup_required"]
+var _polled_world: RefCounted
 var error:=""
 var status:="idle"
 var camera: Camera3D
@@ -149,14 +150,18 @@ func activate() -> bool:
 func step(now_microseconds: int, commands:=Vector2.ZERO, fire_primary:=false) -> bool:
 	if status!="running" or not _active or commands!=Vector2.ZERO or fire_primary:return reject("Station scene cannot accept flight input")
 	var clock: RefCounted=_clock.fork_for_frame()
-	var result_open: bool=not _world.snapshot().get("contracts",{}).get("pending_result",{}).is_empty()
+	var world_state: Dictionary=_world.snapshot()
+	var result_open: bool=not world_state.get("contracts",{}).get("pending_result",{}).is_empty()
 	var milliseconds:=roundi(clock.sample(now_microseconds,is_paused() or result_open)*1000)
 	if not clock.error.is_empty():return reject(clock.error)
 	if is_paused() or result_open:_clock=clock;return true
-	if _world.contract_owner()!=null and (_world.snapshot().phase in ["contracts_required","convoy_departure_required"] or (_world.snapshot().phase=="free_play_required" and preload("res://src/content/ordinary_contracts_definitions.gd").available(_bindings))):
+	if _polled_world!=_world and _world.has_contracts() and (world_state.phase in ["contracts_required","convoy_departure_required"] or (world_state.phase=="free_play_required" and preload("res://src/content/ordinary_contracts_definitions.gd").available(_bindings))):
 		var candidate: RefCounted=_world.fork()
 		if not candidate.poll_contract_result(_bindings):return reject(candidate.error)
 		_world=candidate
+	# Station delivery results depend on the accepted inventory/career, which
+	# user actions replace atomically. Camera animation does not change them.
+	_polled_world=_world
 	if _lounge_open:
 		if not lounge_scene.advance(milliseconds):return reject(lounge_scene.error)
 		_clock=clock;_generation+=1;return true
@@ -259,6 +264,7 @@ func _contract_previews(owner: RefCounted,opened: bool) -> Dictionary:
 	return result
 
 func contract_owner() -> RefCounted:return null if _world==null else _world.contract_owner()
+func has_contracts() -> bool:return _world!=null and _world.has_contracts()
 
 func location_owner() -> RefCounted:
 	var contracts: RefCounted=contract_owner()
@@ -328,9 +334,9 @@ func snapshot() -> Dictionary:
 	state.camera=_motion.snapshot();state.generation=_generation
 	state.conversation_started=_dialogue_started
 	state.dialogue.visible=state.dialogue.visible and _dialogue_started
-	var locations: RefCounted=location_owner()
-	if locations!=null:state.locations=locations.snapshot()
-	if _world.contract_owner()!=null:
+	var locations: Dictionary=_world.contract_locations_snapshot() if _world.has_contracts() else ({} if _locations==null else _locations.snapshot())
+	if not locations.is_empty():state.locations=locations
+	if _world.has_contracts():
 		state.lounge_open=_lounge_open
 		state.contract_previews=_contract_previews(_world,_lounge_open)
 		if _lounge_open and lounge_scene!=null:state.lounge_scene=lounge_scene.snapshot()
@@ -338,7 +344,7 @@ func snapshot() -> Dictionary:
 func clear() -> void:
 	for child in get_children():child.free()
 	error="";status="idle";station_name="";camera=null;geometry=null;audio=null
-	_world=null;_motion=null;_clock=null;_pauses={};_active=false;_generation=0
+	_world=null;_polled_world=null;_motion=null;_clock=null;_pauses={};_active=false;_generation=0
 	_dialogue_started=false;_dialogue_delay_ms=0
 	_locations=null;_bindings=null;_catalogues=null;_library=null;_lounge_open=false
 	_visuals=null;lounge_scene=null;_environment=null;_hangar_environment=null;_hangar_lights=[]

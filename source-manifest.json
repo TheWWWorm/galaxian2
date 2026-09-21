@@ -1875,6 +1875,14 @@
     "tools/requirements-bindings.txt",
     "tools/requirements-visuals.txt",
     "tools/run_checks.py",
-    "tools/source_checks.py"
+    "tools/source_checks.py",
+    "game/src/presentation/native_scene_view.gd",
+    "game/src/presentation/native_scene_view.gd.uid",
+    "game/src/simulation/readonly_state.gd",
+    "game/src/simulation/readonly_state.gd.uid",
+    "game/tests/desktop_performance.gd",
+    "game/tests/desktop_performance.gd.uid",
+    "game/tests/dmg_import.gd",
+    "game/tests/dmg_import.gd.uid"
   ]
 }

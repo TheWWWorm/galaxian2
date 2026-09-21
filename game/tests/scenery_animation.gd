@@ -43,6 +43,9 @@ func check_synthetic() -> void:
 	var state := animation.snapshot()
 	result.surfaces[0].pose.origin=Vector3.ZERO
 	check(animation.snapshot()==state,"Returned poses alias animation state")
+	check(animation.sample(0,parent).surfaces[0].pose.is_equal_approx(expected),"Returned poses changed a reused sample")
+	var branch: RefCounted=animation.fork_for_frame()
+	check(not branch.sample(10,Transform3D.IDENTITY).is_empty() and animation.sample(0,parent).surfaces[0].pose.is_equal_approx(expected),"A sampler branch changed its retained parent pose")
 	for bad in [null,true,"10",10.0,-1,NAN,INF]:
 		check(animation.sample(bad,parent).is_empty() and animation.snapshot()==state,"Invalid time changed animation state")
 	check(animation.sample(10,Transform3D(Basis.IDENTITY,Vector3(NAN,0,0))).is_empty() and animation.snapshot()==state,"Nonfinite parent changed state")

@@ -9,6 +9,7 @@ var _status_path:=""
 var _cancel_path:=""
 var _last_message:=""
 var _cancelled:=false
+var _poll_elapsed:=0.0
 
 static func read_receipt(path: String) -> Dictionary:
 	if not path.is_absolute_path() or path.get_file()!="installation.json":return {}
@@ -44,7 +45,7 @@ func start(source: String,directory: String) -> bool:
 	if python==bundled_python:arguments=PackedStringArray(["-E","-s","-B"])+arguments
 	_pid=OS.create_process(python,arguments)
 	if _pid<0:return reject("Could not start the DMG importer. Extract the complete download, including its importer folder.")
-	_cancelled=false;_last_message="Reading your Mac disk image";progress.emit(_last_message);set_process(true);return true
+	_cancelled=false;_poll_elapsed=0.2;_last_message="Reading your Mac disk image";progress.emit(_last_message);set_process(true);return true
 
 func cancel() -> void:
 	if not busy() or _cancelled:return
@@ -52,17 +53,30 @@ func cancel() -> void:
 	if file==null:reject("Could not request import cancellation");return
 	file.store_string("cancel\n");file.close();_cancelled=true;progress.emit("Cancelling import…")
 
-func _process(_delta: float) -> void:
-	if not busy():return
+func _worker_running() -> bool:return OS.is_process_running(_pid)
+
+func _read_status() -> Dictionary:
 	var state:={};var file:=FileAccess.open(_status_path,FileAccess.READ)
 	if file!=null:
 		if file.get_length()<=32768:
 			var decoded: Variant=JSON.parse_string(file.get_as_text())
 			if decoded is Dictionary:state=decoded
 		file.close()
+	return state
+
+func _process(delta: float) -> void:
+	if not busy():return
+	_poll_elapsed+=delta
+	if _poll_elapsed<0.2:return
+	_poll_elapsed=0.0
+	# Observe process exit before reading its final, atomically replaced status.
+	# Reading first could retain "working" when the helper finishes between the
+	# read and the process check, misreporting a successful import as a failure.
+	var running:=_worker_running()
+	var state:=_read_status()
 	var message: String=str(state.get("message",""))
 	if not _cancelled and not message.is_empty() and message!=_last_message:_last_message=message;progress.emit(message)
-	if OS.is_process_running(_pid):return
+	if running:return
 	_pid=-1;set_process(false)
 	var receipt: String=str(state.get("receipt",""))
 	var accepted: bool=not _cancelled and state.get("state")=="ready" and not read_receipt(receipt).is_empty()

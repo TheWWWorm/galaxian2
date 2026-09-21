@@ -27,7 +27,13 @@ static func advance(preset: Dictionary,state: Dictionary,delta_ms: Variant) -> D
 	return result
 
 static func sample(preset: Dictionary,state: Dictionary,fade_in_rgb:=false) -> Dictionary:
-	if not valid_state(preset,state):return {"error":"Invalid damage particle appearance state"}
+	if not Definitions.sprite_preset(preset):return {"error":"Invalid damage particle appearance preset"}
+	return sample_prepared(preset,state,fade_in_rgb)
+
+## Geometry validates and retains its immutable preset when building surfaces.
+## Per-frame sampling still validates the changing slot, including inactive ones.
+static func sample_prepared(preset: Dictionary,state: Dictionary,fade_in_rgb:=false) -> Dictionary:
+	if not valid_slot(preset,state):return {"error":"Invalid damage particle appearance state"}
 	if int(state.age_ms)==-1:return {"active":false}
 	var fraction:=minf(1.0,single(single(state.age_ms)/single(preset.lifetime_ms)))
 	var remaining:=single(1.0-fraction);var color:=[]
@@ -61,7 +67,10 @@ static func sample(preset: Dictionary,state: Dictionary,fade_in_rgb:=false) -> D
 		"uv_rect":uv}
 
 static func valid_state(preset: Dictionary,state: Dictionary) -> bool:
-	return Definitions.sprite_preset(preset) and state.size()==3 and Numbers.integer(state.get("slot"),0,int(preset.capacity)-1) and Numbers.integer(state.get("age_ms"),-1,int(preset.lifetime_ms)) and Numbers.integer(state.get("size"),-32768,32767) and (state.age_ms!=-1 or state.size==0)
+	return Definitions.sprite_preset(preset) and valid_slot(preset,state)
+
+static func valid_slot(preset: Dictionary,state: Dictionary) -> bool:
+	return state.size()==3 and Numbers.integer(state.get("slot"),0,int(preset.capacity)-1) and Numbers.integer(state.get("age_ms"),-1,int(preset.lifetime_ms)) and Numbers.integer(state.get("size"),-32768,32767) and (state.age_ms!=-1 or state.size==0)
 
 static func single(value: float) -> float:
 	var bytes:=PackedByteArray();bytes.resize(4);bytes.encode_float(0,value);return bytes.decode_float(0)

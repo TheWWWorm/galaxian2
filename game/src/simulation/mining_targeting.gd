@@ -70,7 +70,7 @@ func advance(scenery: RefCounted, player: Transform3D, camera: Transform3D, aim:
 	for value in [lower.x,lower.y,lower.x+radius*2,lower.y+radius*2]:
 		if not TargetProjection.safe_pixel(value):return reject("Asteroid selection window exceeds source pixel coordinates")
 	var low:=Vector2i(int(lower.x),int(lower.y));var high:=low+Vector2i(radius*2,radius*2)
-	var field: Dictionary=scenery.snapshot()
+	var field: Dictionary=scenery.read_snapshot()
 	for key in _identity:
 		if field.get(key)!=_identity[key] or field.get("bodies",{}).get(key)!=_identity[key]:return reject("Asteroid bodies belong to another content identity")
 	var bodies: Variant=field.get("bodies",{}).get("objects")

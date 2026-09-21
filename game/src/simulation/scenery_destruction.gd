@@ -16,6 +16,7 @@ var _cargo_models := []
 var _effect: RefCounted
 var _max_ms := 0
 var _item_count := 0
+var _read_snapshot:={}
 
 func configure(bindings: RefCounted, catalogues: RefCounted, body_state: Dictionary, object_index: Variant, descriptor: Dictionary) -> bool:
 	clear()
@@ -47,6 +48,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, body_state: Diction
 	return true
 
 func update(delta_ms: Variant, body_state: Dictionary, pose: Transform3D, random_state: Variant) -> Dictionary:
+	_read_snapshot={}
 	error=""
 	if _effect==null:return fail("Configure scenery destruction before updating it")
 	if not Numbers.integer(delta_ms,0,_max_ms):return fail("Invalid scenery destruction frame duration")
@@ -102,6 +104,7 @@ func candidate(allowed: bool, random: RefCounted) -> Dictionary:
 	return result
 
 func retire_without_destruction() -> bool:
+	_read_snapshot={}
 	error=""
 	if _effect==null:return reject("Configure scenery before retiring its lifecycle")
 	# Scripted removal bypasses damage and the state-0 destruction trigger. Cargo
@@ -110,6 +113,7 @@ func retire_without_destruction() -> bool:
 	return true
 
 func disable_drop() -> void:
+	_read_snapshot={}
 	# A future mining owner must separately own earned quantity and accounting.
 	# This eligibility change alone never means mining succeeded.
 	if not _state.is_empty():_state.drop_allowed=false
@@ -121,6 +125,10 @@ func snapshot() -> Dictionary:
 	result.effect=_effect.snapshot()
 	return result
 
+func read_snapshot() -> Dictionary:
+	if _read_snapshot.is_empty():_read_snapshot=preload("res://src/simulation/readonly_state.gd").freeze(snapshot())
+	return _read_snapshot
+
 func presentation_clock() -> RefCounted:
 	return null if _effect==null else _effect.fork_for_frame()
 
@@ -129,6 +137,7 @@ func actor_state() -> int:
 
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
+	copy._read_snapshot=_read_snapshot
 	copy._state=_state.duplicate(true);copy._body=_body.duplicate();copy._identity=_identity.duplicate()
 	copy._cargo_models=_cargo_models;copy._max_ms=_max_ms;copy._item_count=_item_count
 	copy._effect=null if _effect==null else _effect.fork_for_frame()
@@ -149,6 +158,7 @@ func current_body(body_state: Dictionary) -> Dictionary:
 	return row
 
 func clear() -> void:
+	_read_snapshot={}
 	error="";_state={};_body={};_identity={};_cargo_models=[];_effect=null;_max_ms=0;_item_count=0
 
 func reject(message: String) -> bool:

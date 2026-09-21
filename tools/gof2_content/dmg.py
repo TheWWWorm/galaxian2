@@ -129,14 +129,16 @@ class DmgApp:
             raise ContentError('The DMG importer needs 7-Zip (7zz or 7z). Install the importer dependencies before playing.')
         self.stage = tempfile.TemporaryDirectory(prefix='gof2-dmg-', dir=self.work)
         root = Path(self.stage.name)
-        listing = self.run_tool(tool, ['l', '-slt', '-ba', '-sccUTF-8', '-p-', '--', str(self.source)],
+        listing = self.run_tool(tool, ['l', '-slt', '-ba', '-sns-', '-sccUTF-8', '-p-', '--', str(self.source)],
                                 root / 'listing.txt', 'Reading the Mac disk image')
         app, files = app_files(listing)
         names = root / 'files.txt'
         names.write_text('\n'.join(files) + '\n', encoding='utf-8')
         destination = root / 'app'
         destination.mkdir()
-        self.run_tool(tool, ['x', '-y', '-spd', '-scsUTF-8', '-sccUTF-8', '-p-', '-bd', '-bb0',
+        # HFS extended attributes are not content. Without this explicit switch,
+        # 7-Zip may extract unlisted :com.apple.quarantine streams alongside files.
+        self.run_tool(tool, ['x', '-y', '-spd', '-sns-', '-scsUTF-8', '-sccUTF-8', '-p-', '-bd', '-bb0',
                              '-o' + str(destination), '-i@' + str(names), '--', str(self.source)],
                       root / 'extraction.txt', 'Unpacking the original Mac content')
         after = self.source.stat()

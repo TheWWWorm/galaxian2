@@ -38,6 +38,12 @@ func check_world(bindings: RefCounted, catalogues: RefCounted, bodies: RefCounte
 	var world := World.new()
 	if not world.configure(bindings,catalogues,1789100000,true,bodies,effects):check(false,world.error);return
 	var initial := world.snapshot()
+	var observed: Dictionary=world.read_snapshot()
+	check(observed.is_read_only() and observed.objects.is_read_only() and observed.objects[0].is_read_only() and observed.bodies.objects[0].vitals.is_read_only(),"Shared scenery observations must be immutable at every depth")
+	var branch: RefCounted=world.fork_for_frame()
+	check(branch.update(100,Vector3.ZERO) and world.read_snapshot()==observed and branch.read_snapshot()!=observed,"A branch changed or reused an old scenery observation")
+	var editable:=world.snapshot();editable.objects[0].position=Vector3.ZERO
+	check(world.read_snapshot()==observed,"An editable snapshot changed the shared frame")
 	check(world.update(0,Vector3.ZERO),world.error)
 	var frozen := world.snapshot()
 	check(frozen.objects==initial.objects and frozen.destruction==initial.destruction and frozen.random_state==initial.random_state,"Zero-time field advanced motion, lifecycle or RNG")

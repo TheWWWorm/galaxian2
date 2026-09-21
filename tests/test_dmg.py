@@ -69,3 +69,26 @@ class DiskImageTests(unittest.TestCase):
                 with self.assertRaises(InterruptedError), DmgApp(image, work=work):
                     self.fail('Cancelled extraction was accepted')
             self.assertEqual(list(work.iterdir()), [])
+
+    def test_hfs_metadata_streams_are_disabled_for_listing_and_extraction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'Game.dmg'
+            image.write_bytes(b'koly' + b'\0' * 508)
+            calls = []
+
+            def run(tool, arguments, report, message):
+                calls.append(arguments)
+                self.assertIn('-sns-', arguments)
+                if arguments[0] == 'l':
+                    return self.listing()
+                output = Path(next(v[2:] for v in arguments if v.startswith('-o')))
+                for name in ('Contents/Info.plist', 'Contents/MacOS/Game'):
+                    path = output / 'Volume/Renamed.app' / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b'x' * 10)
+                return ''
+
+            with patch.dict('os.environ', {'GOF2_7ZIP': '/test/tool'}), patch.object(DmgApp, 'run_tool', side_effect=run):
+                with DmgApp(image) as app:
+                    self.assertTrue((app / 'Contents/Info.plist').is_file())
+            self.assertEqual([row[0] for row in calls], ['l', 'x'])

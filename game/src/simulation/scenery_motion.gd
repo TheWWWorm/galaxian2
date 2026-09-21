@@ -23,6 +23,8 @@ func configure(bindings: RefCounted, field: Dictionary) -> bool:
 		if not row.get("basis") is Basis or not row.basis.is_equal_approx(Basis.from_euler(row.angles,EULER_ORDER_XYZ)):return reject("Scenery orientation does not match its angles")
 		if maxf(absf(row.spin.x),maxf(absf(row.spin.y),absf(row.spin.z)))>1.0:return reject("Unsupported scenery spin")
 	_field=field.duplicate(true);_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	for row in _field.objects:
+		if row.has("ore_draws"):preload("res://src/simulation/readonly_state.gd").freeze(row.ore_draws)
 	return true
 
 func update(presentation_delta_ms: Variant, skip_motion: Array = []) -> bool:
@@ -44,9 +46,17 @@ func update(presentation_delta_ms: Variant, skip_motion: Array = []) -> bool:
 func snapshot() -> Dictionary:
 	return _field.duplicate(true)
 
+func frame_snapshot() -> Dictionary:
+	var result:=_field.duplicate()
+	if not result.is_empty():result.objects=_field.objects.map(func(row):return row.duplicate())
+	return result
+
+func identity() -> Dictionary:
+	return {} if _field.is_empty() else {"base_content_id":_field.base_content_id,"binding_id":_field.binding_id}
+
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted = get_script().new()
-	copy._field=_field.duplicate(true);copy._max_ms=_max_ms
+	copy._field=frame_snapshot();copy._max_ms=_max_ms
 	return copy
 
 func clear() -> void:

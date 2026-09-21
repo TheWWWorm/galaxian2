@@ -210,6 +210,8 @@ func rebase_station(equipment: RefCounted,bindings: RefCounted=null) -> bool:
 func location_owner() -> RefCounted:
 	return null if _lounges==null else _lounges.fork()
 
+func locations_snapshot() -> Dictionary:return {} if _lounges==null else _lounges.snapshot()
+
 func open_shopping(bindings: RefCounted,cat: RefCounted,equipment: RefCounted,unix_seconds: Array,library: RefCounted=null) -> RefCounted:
 	error=""
 	var owned:=_shopping_inventory(bindings,cat,equipment)
@@ -543,7 +545,7 @@ func evaluate_flight(controller: RefCounted,radio_active: bool=false,poll_result
 	# cannot pay, change career, discard actors or partially freeze a live flight.
 	error=""
 	if not _valid_flight(controller):return {}
-	var next:=fork();var flight: RefCounted=controller.fork_for_frame()
+	var next:=fork();var flight: RefCounted=controller.fork_for_frame(false)
 	if not _pending_flight.is_empty():
 		if controller.snapshot()!=_pending_flight:return fail("The pending result must retain its frozen flight")
 		return {"session":next,"controller":flight,"opened":false}
@@ -691,6 +693,9 @@ func _station_inventory(equipment: RefCounted,bindings: RefCounted=null) -> Dict
 	if not candidate.retain_flight_cargo(owned.cargo):reject(candidate.error);return {}
 	return owned
 
+func result_pending() -> bool:return not _state.get("pending_result",{}).is_empty()
+func station_id() -> int:return int(_state.get("station_id",-1))
+
 func snapshot() -> Dictionary:
 	var result:=_state.duplicate(true)
 	if not _flight.is_empty():result.flight=_flight.duplicate(true)
@@ -699,8 +704,9 @@ func snapshot() -> Dictionary:
 
 func fork() -> RefCounted:
 	var result: RefCounted=get_script().new()
-	result._state=_state.duplicate(true);result._rules=_rules.duplicate(true);result._cabins=_cabins.duplicate()
-	result._progress_rules=_progress_rules.duplicate(true);result._stations=_stations.duplicate();result._result_inventory=_result_inventory.duplicate(true)
+	# Configuration is immutable after setup; only live state needs a private copy.
+	result._state=_state.duplicate(true);result._rules=_rules;result._cabins=_cabins
+	result._progress_rules=_progress_rules;result._stations=_stations;result._result_inventory=_result_inventory.duplicate(true)
 	result._flight=_flight.duplicate(true);result._pending_flight=_pending_flight.duplicate(true)
 	result._flight_identity=_flight_identity
 	result._lounges=_lounges.fork() if _lounges!=null else null

@@ -31,8 +31,8 @@ Android and Web builds are not included in this preview.
 3. Choose **Start new game**. Follow the opening instructions.
 
 Later launches reuse your local import. Cancelling an import preserves an existing
-installation and its saves. The supported reference edition is Mac Full HD 1.0.6;
-other layouts may report that they are unsupported.
+installation and its saves. Mac Full HD 1.0.6 and the supplied 1.0.7 layout are
+supported; other layouts may report that they are unsupported.
 
 ## What's playable
 
@@ -47,10 +47,10 @@ other layouts may report that they are unsupported.
 - Main menu, display and sound settings, language selection, mouse/controller input and optional
   larger touch controls. Play is landscape only.
 
-The development branch also includes the trip through Magnetar to Union, the
+This preview also includes the trip through Magnetar to Union, the
 Suttnar conversation, and saving, shopping and travel to Tornard afterward.
 **Kappa is still unfinished:** after completing Suttnar, you cannot yet return
-through Union's jumpgate. This extension is not included in preview 3.
+through Union's jumpgate.
 
 ![Portal and freighters](screenshots/02-portal-and-freighters.png)
 
@@ -98,6 +98,16 @@ fitting the window within your desktop when necessary.
 **Native display** matches your monitor's ratio; fixed ratios add bars as needed.
 **Unlimited (V-Sync off)** removes the frame cap. You can also choose a fixed FPS
 limit or **Display refresh (V-Sync)**. These settings are remembered between launches.
+
+**UI scale** automatically enlarges menus and flight controls on high-resolution
+displays. Choose **75%–300%** for a fixed size, or return to **Automatic**. Smaller
+windows limit the scale so controls remain reachable. The 3D view keeps its full
+resolution.
+
+Windows and Linux use Vulkan by default; Apple Silicon uses Metal. Older GPUs
+can fall back to OpenGL. If a graphics driver cannot start the game, try launching
+with `--rendering-method gl_compatibility --rendering-driver opengl3`. On Windows,
+`--rendering-method mobile --rendering-driver vulkan` explicitly selects Vulkan.
 
 ## Saves
 

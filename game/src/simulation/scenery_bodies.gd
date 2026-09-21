@@ -17,6 +17,7 @@ var _hit_policy := {}
 var _rows := []
 var _vitals := []
 var _primary_cursors:=[]
+var _read_snapshot:={}
 
 func configure(bindings: RefCounted, field: Dictionary, resources: RefCounted) -> bool:
 	clear()
@@ -84,6 +85,14 @@ func configure(bindings: RefCounted, field: Dictionary, resources: RefCounted) -
 	return true
 
 func snapshot() -> Dictionary:
+	_read_snapshot={}
+	return _build_snapshot()
+
+func read_snapshot() -> Dictionary:
+	if _read_snapshot.is_empty():_read_snapshot=preload("res://src/simulation/readonly_state.gd").freeze(_build_snapshot())
+	return _read_snapshot
+
+func _build_snapshot() -> Dictionary:
 	if _identity.is_empty(): return {}
 	var result := _identity.duplicate()
 	result.objects=[]
@@ -110,11 +119,13 @@ func supports_weapon_hit(weapon: Variant) -> bool:
 	return error.is_empty()
 
 func weapon_hit(object_index: Variant, weapon: Variant) -> Dictionary:
+	_read_snapshot={}
 	if not supports_weapon_hit(weapon): return {}
 	if not valid_index(object_index): return fail("Weapon hit names an unavailable scenery body")
 	var before: float = _rows[object_index].motion_scalar
 	# The ordinary scenery prelude runs even if a previous projectile slot has
 	# already exhausted hull, or the damage permission rejects this hit.
+	_rows[object_index]=_rows[object_index].duplicate(true)
 	_rows[object_index].motion_scalar=0.0
 	var result := normal_hit(object_index,weapon.ordinary_hit_policy.nonplayer_damage)
 	if result.is_empty(): return {}
@@ -123,8 +134,13 @@ func weapon_hit(object_index: Variant, weapon: Variant) -> Dictionary:
 	return result
 
 func normal_hit(object_index: Variant, amount: Variant) -> Dictionary:
+	_read_snapshot={}
 	error=""
 	if not valid_index(object_index): return fail("Normal hit names an unavailable scenery body")
+	_rows[object_index]=_rows[object_index].duplicate(true)
+	var prior: Dictionary=_vitals[object_index].snapshot()
+	var pool:=Vitals.new();pool.configure(prior.hull,prior.armor,prior.shield)
+	_vitals[object_index]=pool
 	var row: Dictionary = _rows[object_index]
 	var result: Dictionary = _vitals[object_index].normal_hit(amount,row.active and row.damage_allowed)
 	if result.is_empty(): return fail(_vitals[object_index].error)
@@ -137,27 +153,33 @@ func normal_hit(object_index: Variant, amount: Variant) -> Dictionary:
 	return result
 
 func record_contact(object_index: Variant, incoming_velocity: Variant) -> bool:
+	_read_snapshot={}
 	error=""
 	if not valid_index(object_index) or not incoming_velocity is Vector3 or not incoming_velocity.is_finite():
 		return reject("Scenery contact requires an existing body and finite incoming velocity")
 	var impact := Vector3.ZERO
 	for axis in 3: impact[axis]=Vitals.single(-incoming_velocity[axis])
 	if not impact.is_finite(): return reject("Scenery contact exceeds source precision")
+	_rows[object_index]=_rows[object_index].duplicate(true)
 	_rows[object_index].contact=true
 	_rows[object_index].impact_vector=impact
 	return true
 
 func set_permissions(object_index: Variant, active: Variant, damage_allowed: Variant) -> bool:
+	_read_snapshot={}
 	error=""
 	if not valid_index(object_index) or not active is bool or not damage_allowed is bool:
 		return reject("Scenery permissions require an existing body and explicit booleans")
 	if _rows[object_index].get("mined",false) and (active or damage_allowed):return reject("A mined asteroid cannot be reactivated")
+	_rows[object_index]=_rows[object_index].duplicate(true)
 	_rows[object_index].active=active;_rows[object_index].damage_allowed=damage_allowed
 	return true
 
 func retire_mined(object_index: int) -> bool:
+	_read_snapshot={}
 	error=""
 	if not valid_index(object_index):return reject("Mining names an unavailable asteroid")
+	_rows[object_index]=_rows[object_index].duplicate(true)
 	var row: Dictionary=_rows[object_index]
 	if not row.active or row.get("mined",false) or _vitals[object_index].snapshot().hull<=0:return reject("The asteroid is already exhausted")
 	# Represent the source negative-hull sentinel explicitly. Combat pools stay
@@ -172,17 +194,21 @@ func has_pending_destruction() -> bool:
 
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted = get_script().new()
-	copy._identity=_identity.duplicate();copy._hit_policy=_hit_policy.duplicate(true)
+	copy._identity=_identity;copy._hit_policy=_hit_policy
 	copy._primary_cursors=_primary_cursors.duplicate()
-	copy._rows=_rows.duplicate(true)
-	for pool in _vitals:
-		var values: Dictionary = pool.snapshot()
-		var duplicate := Vitals.new()
-		duplicate.configure(values.hull,values.armor,values.shield)
-		copy._vitals.append(duplicate)
+	# Each mutation above detaches only the touched row/pool. Empty projectile
+	# passes no longer reconstruct every asteroid's unchanged combat state.
+	copy._rows=_rows.duplicate();copy._vitals=_vitals.duplicate();copy._read_snapshot=_read_snapshot
 	return copy
 
+func mining_snapshot() -> Dictionary:
+	var result:=_identity.duplicate();result.objects=[]
+	for row in _rows:
+		if row.get("mined",false):result.objects.append({"index":row.index,"mined":true})
+	return result
+
 func clear() -> void:
+	_read_snapshot={}
 	error="";_identity={};_hit_policy={};_rows=[];_vitals=[]
 	_primary_cursors=[]
 

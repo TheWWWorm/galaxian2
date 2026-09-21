@@ -648,18 +648,19 @@ func collision_context(actor_id: Variant) -> Dictionary:
 
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted = get_script().new()
+	# Configuration is immutable after setup; only live state needs a private copy.
 	copy._identity = _identity.duplicate()
-	copy._activation = _activation.duplicate(true)
-	copy._hit_policy = _hit_policy.duplicate(true)
-	copy._training_weapons = _training_weapons.duplicate(true)
+	copy._activation = _activation
+	copy._hit_policy = _hit_policy
+	copy._training_weapons = _training_weapons
 	copy._activated = _activated
 	copy._phase = _phase
 	copy._event_count = _event_count
 	copy._escape_enabled=_escape_enabled
 	if _reputation!=null:copy._reputation=_reputation.fork_for_frame()
 	if _provocation!=null:copy._provocation=_provocation.fork_for_frame()
-	copy._reputation_rules=_reputation_rules.duplicate(true);copy._contact_random=_contact_random.duplicate(true);copy._display_available=_display_available
-	copy._contract_encounter=_contract_encounter.duplicate(true)
+	copy._reputation_rules=_reputation_rules;copy._contact_random=_contact_random.duplicate(true);copy._display_available=_display_available
+	copy._contract_encounter=_contract_encounter
 	copy._contract_settlement=_contract_settlement.duplicate(true)
 	for actor in _actors: copy._actors.append(actor.fork_for_frame())
 	return copy

@@ -60,7 +60,7 @@ func poll(cargo: RefCounted, scenery: RefCounted, player_alive:=true, encounter:
 	error=""
 	if _state.is_empty() or cargo==null or cargo.get_script()!=Cargo or scenery==null or scenery.get_script()!=Scenery:return reject("Mining objective needs its owned cargo and field")
 	var held: Dictionary=cargo.snapshot()
-	if held.get("base_content_id")!=_state.base_content_id or held.get("binding_id")!=_state.binding_id or cargo.field_identity()!=_field_identity or scenery.presentation_identity()!=_field_identity or not cargo.matches_mined_field(scenery.snapshot()):return reject("Mining objective cargo and field history do not match")
+	if held.get("base_content_id")!=_state.base_content_id or held.get("binding_id")!=_state.binding_id or cargo.field_identity()!=_field_identity or scenery.presentation_identity()!=_field_identity or not cargo.matches_mined_field(scenery.mining_snapshot()):return reject("Mining objective cargo and field history do not match")
 	if _rules.get("alioth_attack",false):
 		if not is_instance_of(radio,load("res://src/simulation/radio_sequence.gd")):return reject("Alioth completion requires its live radio sequence")
 		var transmission: Dictionary=radio.snapshot()

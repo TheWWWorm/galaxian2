@@ -216,6 +216,9 @@ func _import_finished(success: bool,receipt: String,message: String) -> void:
 
 func show_options() -> void:
 	_show_details("options",library.strings[31]);_settings_controls={}
+	var scale_labels: Array=[]
+	for value in Preferences.UI_SCALES:scale_labels.append("Automatic (match resolution)" if value==0 else "%d%%"%value)
+	_choice("ui_scale","UI scale",Preferences.UI_SCALES,scale_labels)
 	if not _mobile:
 		_choice("window_mode","Display mode",["windowed","fullscreen"],["Windowed","Fullscreen (native resolution)"])
 		var native:=DisplaySettings.native_size(get_window())
@@ -243,7 +246,7 @@ func _choice(key: String,title: String,values: Array,labels: Array) -> void:
 	_label(title)
 	var choice:=OptionButton.new();choice.custom_minimum_size.y=44 if _mobile else 30
 	for i in values.size():choice.add_item(labels[i])
-	choice.select(values.find(int(preferences.values[key]) if key=="frame_rate" else preferences.values[key]))
+	choice.select(values.find(int(preferences.values[key]) if key in ["frame_rate","ui_scale"] else preferences.values[key]))
 	choice.item_selected.connect(func(index):change_preference(key,values[index]))
 	_body.add_child(choice);_settings_controls[key]=choice
 

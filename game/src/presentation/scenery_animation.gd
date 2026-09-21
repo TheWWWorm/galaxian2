@@ -9,9 +9,12 @@ var _tables: Array = []
 var _pivots: Array[Vector3] = []
 var _state: Array = []
 var _range := {}
+var _sample_time:=-1
+var _sample_parent:=Transform3D.IDENTITY
+var _sample_result:={}
 
 func configure(surfaces: Variant, allow_static:=false) -> bool:
-	error="";_tables=[];_pivots=[];_state=[];_range={}
+	error="";_tables=[];_pivots=[];_state=[];_range={};_sample_time=-1;_sample_result={}
 	var timing := Resources.playback_range(surfaces,allow_static)
 	if timing.is_empty():error="Unsupported scenery animation channels or timing";return false
 	for surface in surfaces:
@@ -34,6 +37,9 @@ func sample(time_ms: Variant, parent: Transform3D) -> Dictionary:
 	if _tables.is_empty():return reject("Scenery animation is not configured")
 	if not time_ms is int or time_ms<0:return reject("Scenery animation time must be a nonnegative integer in milliseconds")
 	if not parent.is_finite():return reject("Scenery animation parent must be finite")
+	# Inactive effect slots keep the same retained time for many frames. Reuse
+	# that exact sample, including its first-key/rewind state, until inputs change.
+	if time_ms==_sample_time and parent==_sample_parent:return _sample_result.duplicate(true)
 	var next := _state.duplicate(true)
 	var output := []
 	for surface in _tables.size():
@@ -49,6 +55,11 @@ func sample(time_ms: Variant, parent: Transform3D) -> Dictionary:
 		if index>0 and not update_row(next[surface],table.values,index,Keys.ratio(at-times[index-1],times[index]-times[index-1])):
 			return {}
 		var row: Dictionary=next[surface]
+		# Many authored layers animate only color, or retain their pose between
+		# keys. Reuse the already rounded matrix while still sampling color/time.
+		if parent==_sample_parent and not _sample_result.is_empty() and row.basis==_state[surface].basis and row.translation==_state[surface].translation:
+			output.append({"animated":true,"pose":_sample_result.surfaces[surface].pose,"color_byte":row.color_byte})
+			continue
 		var world := multiply(parent,Transform3D(Basis.IDENTITY,row.translation))
 		world=multiply(world,Transform3D(Basis.IDENTITY,_pivots[surface]))
 		world=multiply(world,Transform3D(row.basis,Vector3.ZERO))
@@ -56,7 +67,8 @@ func sample(time_ms: Variant, parent: Transform3D) -> Dictionary:
 		if not world.is_finite():return reject("Scenery animation world transform exceeds source precision")
 		output.append({"animated":true,"pose":world,"color_byte":row.color_byte})
 	_state=next
-	return {"surfaces":output}
+	_sample_time=time_ms;_sample_parent=parent;_sample_result={"surfaces":output}
+	return _sample_result.duplicate(true)
 
 func update_row(row: Dictionary, values: PackedFloat32Array, index: int, weight: float) -> bool:
 	var a := (index-1)*Keys.WIDTH
@@ -89,6 +101,7 @@ func fork_for_frame() -> RefCounted:
 	# Compiled tables and pivots are private and immutable after configuration.
 	copy._tables=_tables;copy._pivots=_pivots
 	copy._state=_state.duplicate(true);copy._range=_range.duplicate()
+	copy._sample_time=_sample_time;copy._sample_parent=_sample_parent;copy._sample_result=_sample_result
 	return copy
 
 static func lower_bound(times: PackedInt32Array, value: int) -> int:

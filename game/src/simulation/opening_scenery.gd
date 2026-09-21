@@ -39,6 +39,8 @@ var _departure_cache:={}
 var _departure_conditions:={}
 var _departure_population:={}
 var _spin_disabled:={}
+var _read_snapshot:={}
+var _initialization_snapshot:={}
 
 func configure(bindings: RefCounted, catalogues: RefCounted, unix_seconds: Variant, large_display := true, body_resources: RefCounted = null, effect_resources: RefCounted = null) -> bool:
 	clear()
@@ -85,6 +87,7 @@ func configure_departure(bindings: RefCounted, catalogues: RefCounted, cache: Va
 	return true
 
 func _configure_field(bindings: RefCounted, catalogues: RefCounted, unix_seconds: Variant, station_id: int, campaign_cursor: int, center: Vector3, large_display: bool, body_resources: RefCounted, effect_resources: RefCounted) -> bool:
+	_read_snapshot={}
 	if not unix_seconds is int or unix_seconds<0 or unix_seconds>2147483647:
 		return reject("Scenery requires explicit supported Unix seconds")
 	var field:=Field.new()
@@ -241,9 +244,11 @@ func complete_world_initialization(bindings: RefCounted, catalogues: RefCounted)
 	return _finish_world_initialization(owner)
 
 func _finish_world_initialization(owner: RefCounted) -> bool:
+	_read_snapshot={}
 	var result: Dictionary=owner.generate(_random_state)
 	if result.is_empty(): return reject(owner.error)
 	_world_initialization=owner;_random_state=result.random_state.duplicate(true)
+	_initialization_snapshot=preload("res://src/simulation/readonly_state.gd").freeze(owner.snapshot())
 	_initialization_open=false
 	return true
 
@@ -269,27 +274,51 @@ func arrival_motion_construction() -> Dictionary:
 	return result
 
 func snapshot() -> Dictionary:
+	_read_snapshot={}
+	return _build_snapshot()
+
+## Borrowed immutable state for simulation queries and presentation. A branch
+## invalidates this cache before changing its private owners.
+func read_snapshot() -> Dictionary:
+	if _read_snapshot.is_empty():_read_snapshot=preload("res://src/simulation/readonly_state.gd").freeze(_build_snapshot(true))
+	return _read_snapshot
+
+func _build_snapshot(shared:=false) -> Dictionary:
 	if _motion==null:return {}
-	var field: Dictionary = _motion.snapshot()
+	var field: Dictionary = _motion.frame_snapshot() if shared else _motion.snapshot()
 	field.detail=_detail.snapshot()
 	if _escape_relocated:field.escape_relocated=true
-	if _bodies!=null:field.bodies=_bodies.snapshot()
+	if _bodies!=null:field.bodies=_bodies.read_snapshot() if shared else _bodies.snapshot()
 	field.random_state=_random_state.duplicate(true)
-	field.world_initialization={} if _world_initialization==null else _world_initialization.snapshot()
+	field.world_initialization=_initialization_snapshot if shared else ({} if _world_initialization==null else _world_initialization.snapshot())
 	if not _arrival_population.is_empty():field.arrival_population=_arrival_population.duplicate(true)
 	if not _departure_population.is_empty():field.departure_population=_departure_population.duplicate(true)
 	if not _spin_disabled.is_empty():field.spin_disabled_indices=_spin_disabled.keys()
 	if not _destruction.is_empty():
 		field.destruction=[]
-		for actor in _destruction:field.destruction.append(actor.snapshot())
+		for actor in _destruction:field.destruction.append(actor.read_snapshot() if shared else actor.snapshot())
 		field.remaining_count=_remaining_count;field.destroyed_count=_destroyed_count
 		field.mined_count=_mined_count
 	return field
 
+func random_state() -> Dictionary:return _random_state.duplicate(true)
+
+func clock_snapshot() -> Dictionary:
+	var state: Dictionary={} if _motion==null else _motion.identity()
+	state.random_state=random_state()
+	return state
+
+func mining_snapshot() -> Dictionary:
+	var state: Dictionary={} if _motion==null else _motion.identity()
+	if _bodies!=null:state.bodies=_bodies.mining_snapshot()
+	if not _destruction.is_empty():state.mined_count=_mined_count
+	return state
+
 func _consume_mined(drill: Dictionary) -> bool:
+	_read_snapshot={}
 	error=""
 	if _bodies==null or _destruction.is_empty() or _remaining_count<=0:return reject("Mining retirement requires live bodies and scenery lifecycles")
-	var state: Dictionary=_bodies.snapshot()
+	var state: Dictionary=_bodies.read_snapshot()
 	for key in ["base_content_id","binding_id"]:
 		if drill.get(key)!=state.get(key):return reject("Mined asteroid belongs to another content identity")
 	var index: Variant=drill.get("object_index")
@@ -308,9 +337,10 @@ func _consume_mined(drill: Dictionary) -> bool:
 	return true
 
 func set_spin_enabled(object_index: int, enabled: bool) -> bool:
+	_read_snapshot={}
 	error=""
 	if _motion==null or _bodies==null:return reject("Scenery spin requires an owned field with bodies")
-	var rows: Array=_bodies.snapshot().objects
+	var rows: Array=_bodies.read_snapshot().objects
 	if object_index<0 or object_index>=rows.size():return reject("Scenery spin target is outside this field")
 	# Spin is independent of lifecycle updates. Disabling it must not freeze
 	# destruction, effects, detail selection, or any other asteroid's rotation.
@@ -319,6 +349,7 @@ func set_spin_enabled(object_index: int, enabled: bool) -> bool:
 	return true
 
 func update(presentation_delta_ms: Variant, previous_reference: Variant, detail_value: Variant = 1.0, immediate_reference: Variant = null, shared_random_state: Variant = null) -> bool:
+	_read_snapshot={}
 	error=""
 	if _motion==null:return reject("Configure opening scenery before updating")
 	if _destruction.is_empty() and has_pending_destruction():return reject("Scenery destruction requires its verified effect and lifecycle owner")
@@ -335,7 +366,7 @@ func update(presentation_delta_ms: Variant, previous_reference: Variant, detail_
 		random_state=random.snapshot()
 	var events := [];var mask := [];var bodies: RefCounted=_bodies
 	if not destruction.is_empty():
-		var body_state: Dictionary=_bodies.snapshot()
+		var body_state: Dictionary=_bodies.read_snapshot()
 		var field: Dictionary=_motion.snapshot()
 		for index in destruction.size():
 			var body: Dictionary=body_state.objects[index]
@@ -366,6 +397,7 @@ func update(presentation_delta_ms: Variant, previous_reference: Variant, detail_
 	return true
 
 func apply_escape_environment(escape: Dictionary) -> bool:
+	_read_snapshot={}
 	error=""
 	if not _escape_available or _motion==null or _bodies==null or _destruction.is_empty():return reject("Escape environment requires configured scenery bodies and lifecycles")
 	var field: Dictionary=_motion.snapshot()
@@ -403,6 +435,7 @@ func evaluate_primary_contacts(primaries: RefCounted, combat: RefCounted, invent
 	var result: Dictionary=primaries.evaluate_opening_update(candidate,_bodies,inventory,delta_ms)
 	if result.is_empty(): reject(primaries.error);return {}
 	var next: RefCounted=fork_for_frame()
+	next._read_snapshot={}
 	next._bodies=result.bodies
 	var operation:={"scenery":next,"primaries":result.primaries,"combat":result.combat,"weapons":result.weapons}
 	if result.combat!=null and result.combat.has_local_reactions():
@@ -416,6 +449,7 @@ func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	# update() copies each private owner before any mutation. Share unchanged
 	# state here; copy the consumable queue and containers owned by this layer.
+	copy._read_snapshot=_read_snapshot;copy._initialization_snapshot=_initialization_snapshot
 	copy._motion=_motion;copy._detail=_detail;copy._bodies=_bodies
 	copy._destruction=_destruction.duplicate();copy._random_state=_random_state.duplicate(true)
 	copy._remaining_count=_remaining_count;copy._destroyed_count=_destroyed_count
@@ -440,12 +474,13 @@ func seed_seconds() -> int:
 func has_pending_destruction() -> bool:
 	if _bodies==null:return false
 	if _destruction.is_empty():return _bodies.has_pending_destruction()
-	var state: Dictionary=_bodies.snapshot()
+	var state: Dictionary=_bodies.read_snapshot()
 	for index in _destruction.size():
 		if state.objects[index].vitals.hull==0 and _destruction[index].actor_state()==0:return true
 	return false
 
 func clear() -> void:
+	_read_snapshot={};_initialization_snapshot={}
 	error="";_motion=null;_detail=null;_bodies=null;_seed_seconds=0
 	_destruction=[];_random_state={};_remaining_count=0;_destroyed_count=0;_mined_count=0;_events=[]
 	_presentation_identity=null

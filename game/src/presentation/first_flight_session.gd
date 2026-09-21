@@ -23,6 +23,7 @@ const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
 const StationGeneration=preload("res://src/content/station_generation_definitions.gd")
 const BOUNDARIES=["station_transition_required","game_over_transition_required","local_arrival_transition_required","convoy_arrival_transition_required","gate_confirmation_required","gate_map_required","gate_arrival_transition_required"]
 var error:=""
+var _presentation_state:={}
 var status:="idle"
 var camera: Camera3D
 var scene: Node3D
@@ -149,7 +150,7 @@ func step(now_microseconds: int, commands:=Vector2.ZERO, fire_primary:=false) ->
 	var blocked: bool=is_paused() or status!="running" or _world.dialogue_visible()
 	var milliseconds:=roundi(clock.sample(now_microseconds,blocked)*1000)
 	if not clock.error.is_empty():return reject(clock.error)
-	if is_paused() or status!="running" or not _world.snapshot().get("contracts",{}).get("pending_result",{}).is_empty():_clock=clock;return true
+	if is_paused() or status!="running" or _world.contract_result_pending():_clock=clock;return true
 	var drilling: bool=_world.drill_owner()!=null
 	var world: RefCounted=_world.evaluate(milliseconds,Vector2.ZERO if drilling else commands,_throttle,false,Vector2i(camera.get_viewport().get_visible_rect().size),commands if drilling else Vector2.ZERO,fire_primary)
 	if world==null:return reject(_world.error)
@@ -205,7 +206,7 @@ func select_planet(station_id: int) -> bool:
 	return true
 
 func can_open_map() -> bool:
-	return can_control() and not _world.snapshot().get("local_travel",{}).is_empty()
+	return can_control() and _world.has_local_travel()
 
 func select_gate_destination(station_id: int) -> bool:
 	error=""
@@ -269,7 +270,7 @@ func _confirm_map_destination(station_id: int,now_microseconds: int,gate: bool) 
 	return set_pause("map",false,now_microseconds)
 
 func _commit(world: RefCounted, advance_sun: bool, absolute_milliseconds: int=-1) -> bool:
-	var state: Dictionary=world.snapshot()
+	var state: Dictionary=world.snapshot(true)
 	var briefing_line:=-1;var objective_line:=-1
 	if state.dialogue.visible:
 		if state.phase=="briefing":briefing_line=int(state.dialogue.index)
@@ -278,11 +279,11 @@ func _commit(world: RefCounted, advance_sun: bool, absolute_milliseconds: int=-1
 	if not briefing_audio.valid_line(briefing_line) or not objective_audio.valid_line(objective_line):return reject("Mining speech is unavailable")
 	var sound:={}
 	if flight_audio!=null:
-		sound=flight_audio.prepare_full_hold(world)
+		sound=flight_audio.prepare_full_hold(world,state)
 		if sound.is_empty():return reject(flight_audio.error)
 	var presentation_time: int=_presentation_ms if absolute_milliseconds<0 else absolute_milliseconds
-	if not scene.present(world,advance_sun,presentation_time):return reject(scene.error)
-	_world=world;_generation+=1
+	if not scene.present(world,advance_sun,presentation_time,state):return reject(scene.error)
+	_world=world;_presentation_state=state;_generation+=1
 	_presentation_ms=presentation_time
 	briefing_audio.present(briefing_line);objective_audio.present(objective_line)
 	if flight_audio!=null:flight_audio.commit_frame(sound)
@@ -327,7 +328,7 @@ func set_pause(reason: String, paused: bool, now_microseconds: int) -> bool:
 func rebase_time(now_microseconds: int) -> bool:
 	return _clock!=null and _clock.rebase(now_microseconds)
 func is_paused() -> bool:return not _pauses.is_empty()
-func can_control() -> bool:return _active and status=="running" and not is_paused() and not _world.death_active() and not _world.local_departing() and not _world.cinematic_input_blocked() and _world.snapshot().entry_released and not _world.dialogue_visible()
+func can_control() -> bool:return _active and status=="running" and not is_paused() and not _world.death_active() and not _world.local_departing() and not _world.cinematic_input_blocked() and _world.entry_released() and not _world.dialogue_visible()
 func can_stop_mining() -> bool:return _active and status=="running" and not is_paused() and not _world.game_over_waiting() and _world.drill_owner()!=null and not _world.dialogue_visible()
 func flight_hud_visible(state: Dictionary={}) -> bool:
 	if _world==null:return false
@@ -336,12 +337,20 @@ func flight_hud_visible(state: Dictionary={}) -> bool:
 func flight_owner() -> RefCounted:return null if _world==null else _world.fork_for_frame()
 func snapshot() -> Dictionary:
 	if _world==null:return {}
-	var state: Dictionary=_world.snapshot();state.session_generation=_generation;state.input_throttle=_throttle
+	var state: Dictionary=_world.snapshot() if _presentation_state.is_empty() else _presentation_state.duplicate(true)
+	state.session_generation=_generation;state.input_throttle=_throttle
 	return state
+
+func presentation_snapshot() -> Dictionary:
+	if _world==null:return {}
+	var state: Dictionary=_world.snapshot(true) if _presentation_state.is_empty() else _presentation_state.duplicate()
+	state.session_generation=_generation;state.input_throttle=_throttle
+	return preload("res://src/simulation/readonly_state.gd").freeze(state)
 func clear() -> void:
 	for child in get_children():child.free()
 	error="";status="idle";camera=null;scene=null;briefing_audio=null;objective_audio=null;flight_audio=null
 	_world=null;_clock=null;_pauses={};_active=false;_throttle=1.0;_generation=0
+	_presentation_state={}
 	_presentation_ms=0
 func fail(message: String) -> bool:clear();status="error";error=message;return false
 func reject(message: String) -> bool:error=message;return false

@@ -16,7 +16,7 @@ func evaluate(projectiles: RefCounted, combat: RefCounted, bodies: RefCounted, i
 		return fail("Opening contacts require ordinary projectiles and both native target owners")
 	if inventory==null or inventory.get_script()!=Inventory:
 		return fail("Opening contacts require the verified fresh target inventory")
-	if not inventory.validate_owners(combat.snapshot(),bodies.snapshot()): return fail(inventory.error)
+	if not inventory.validate_owners(combat.snapshot(),bodies.read_snapshot()): return fail(inventory.error)
 	var targets: Dictionary = inventory.snapshot()
 	var npc_operation := NpcContacts.new()
 	var npc := npc_operation.evaluate(projectiles,combat,targets.npc_ids,bounds_selection)

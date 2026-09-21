@@ -22,8 +22,11 @@ func run() -> void:
 	var prefs:=Preferences.new();check(prefs.read_file(path),prefs.error)
 	for key in original:
 		if key!="schema":check(prefs.values[key]==original[key],"Preferences upgrade lost "+key)
-	check(prefs.values.schema==2 and prefs.values.mouse_steering,"Preferences upgrade omitted desktop controls")
-	for pair in [["resolution","0x0"],["aspect_ratio","portrait"],["frame_rate",true],["frame_rate",61],["mouse_sensitivity",NAN],["mouse_sensitivity",0],["window_mode","invalid"]]:
+	check(prefs.values.schema==3 and prefs.values.mouse_steering and prefs.values.ui_scale==0,"Preferences upgrade omitted desktop controls or automatic UI scale")
+	var version2:=prefs.values.duplicate(true);version2.schema=2;version2.erase("ui_scale")
+	file=FileAccess.open(path,FileAccess.WRITE);file.store_string(JSON.stringify(version2));file.close()
+	check(prefs.read_file(path) and prefs.values.schema==3 and prefs.values.content==original.content and prefs.values.music==original.music,"Version 2 upgrade lost the existing installation/preferences")
+	for pair in [["resolution","0x0"],["aspect_ratio","portrait"],["frame_rate",true],["frame_rate",61],["mouse_sensitivity",NAN],["mouse_sensitivity",0],["window_mode","invalid"],["ui_scale",true],["ui_scale",101],["ui_scale",NAN],["ui_scale",400]]:
 		var invalid:=prefs.values.duplicate();invalid[pair[0]]=pair[1]
 		check(not Preferences.valid(invalid),"Invalid display/input preference accepted: "+pair[0])
 	var settings:=DisplaySettings.new()
@@ -41,6 +44,9 @@ func run() -> void:
 		check(DisplaySettings.aspect_size(native,"native",native)==native,"Native aspect ratio added bars")
 	check(DisplaySettings.aspect_size(Vector2i(1600,900),"16:10",Vector2i(1920,1080))==Vector2i(1440,900),"Fixed aspect ratio distorted geometry")
 	check(DisplaySettings.fit_size(Vector2i(3840,2160),Vector2i(1600,900))==Vector2i(1600,900),"Oversized window escaped the screen")
+	check(DisplaySettings.ui_factor(Vector2i(5120,2880),0)==2.75,"5K automatic UI scale remained tiny")
+	check(DisplaySettings.ui_factor(Vector2i(5120,2880),200)==2.0,"Explicit UI percentage was ignored")
+	check(DisplaySettings.ui_factor(Vector2i(960,540),300)==1.0,"Large UI choice made a small window unusable")
 	root.size_changed.disconnect(settings.refresh_aspect)
 	var args:=OS.get_cmdline_user_args()
 	if args.size()>=3:await check_options(args,directory)
@@ -72,10 +78,31 @@ func check_options(args: PackedStringArray,directory: String) -> void:
 		app.change_preference("window_mode","fullscreen")
 		await wait_for_window(Window.MODE_FULLSCREEN)
 		check(root.mode==Window.MODE_FULLSCREEN and root.size==DisplaySettings.native_size(root),"Fullscreen did not use native display resolution: mode=%d size=%s native=%s"%[root.mode,root.size,DisplaySettings.native_size(root)])
-		check(Vector2i(app.size)==root.size and app._settings_controls.resolution.disabled,"Fullscreen did not fill the native aspect or explain window-only resolutions")
+		check((app.size*root.content_scale_factor-Vector2(root.size)).length()<4 and app._settings_controls.resolution.disabled,"Fullscreen did not fill the native aspect or explain window-only resolutions")
 		app.change_preference("window_mode","windowed")
 		await wait_for_window(Window.MODE_WINDOWED)
 		check(root.mode==Window.MODE_WINDOWED and not app._settings_controls.resolution.disabled,"Could not return from fullscreen")
+	root.size=Vector2i(5120,2880)
+	app.change_preference("aspect_ratio","auto")
+	app.show_options()
+	app._settings_controls.ui_scale.select(Preferences.UI_SCALES.find(200))
+	app._settings_controls.ui_scale.item_selected.emit(Preferences.UI_SCALES.find(200))
+	await process_frame;await process_frame;await process_frame
+	check(app.preferences.values.ui_scale==200 and root.content_scale_factor==2.0,"UI scaling option did not apply live")
+	check(app.get_global_rect().encloses(app._details.get_global_rect()),"Scaled options escaped the logical viewport")
+	var restored:=Preferences.new()
+	check(restored.read_file(directory.path_join("ui/player.json")) and restored.values.ui_scale==200,"UI percentage was not saved")
+	var view:=preload("res://src/presentation/native_scene_view.gd").new();app.add_child(view)
+	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	await process_frame;await process_frame
+	check(view.viewport.size==root.size,"UI scaling reduced the 3D render resolution: "+str(view.viewport.size))
+	check(view.viewport.get_visible_rect().size.is_equal_approx(app.size),"3D projection no longer matches logical HUD coordinates")
+	view.free()
+	if args.size()>3 and DisplayServer.get_name()!="headless":
+		RenderingServer.force_draw(false);await RenderingServer.frame_post_draw
+		check(root.get_texture().get_image().save_png(args[3].path_join("options-5k-200.png"))==OK,"Could not capture 5K options")
+	app.change_preference("ui_scale",0);await process_frame;await process_frame
+	check(is_equal_approx(root.content_scale_factor,DisplaySettings.ui_factor(root.size,0)),"Automatic scaling did not return after a manual choice")
 	app.free();await process_frame
 
 func wait_for_window(mode: int) -> void:

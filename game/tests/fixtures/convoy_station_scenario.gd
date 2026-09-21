@@ -63,7 +63,10 @@ func decode(data: Variant) -> RefCounted:
 	return owner
 
 static func private_path(path: String) -> bool:
-	return path.is_absolute_path() and not path.simplify_path().begins_with(ProjectSettings.globalize_path("res://").trim_suffix("/").get_base_dir()+"/")
+	var resources:=ProjectSettings.globalize_path("res://").trim_suffix("/")
+	# Export templates have no filesystem path for the embedded resource pack.
+	var engine:=OS.get_executable_path().get_base_dir() if resources.is_empty() else resources.get_base_dir()
+	return path.is_absolute_path() and not path.simplify_path().begins_with(engine+"/")
 
 func accepts(state: Dictionary,bindings: RefCounted) -> bool:return earned(state,bindings)
 

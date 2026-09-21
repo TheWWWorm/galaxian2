@@ -88,6 +88,8 @@ func verify_lifecycle(bindings: RefCounted) -> void:
 	check(emitter.snapshot().cursor==(cursor+40)%18,"Particle insertion ring did not wrap")
 	before=emitter.snapshot();var fork:=emitter.fork_for_frame();fork.advance(moving,1000,1000)
 	check(emitter.snapshot()==before and fork.snapshot()!=before,"Staged emitter frame mutated its source")
+	var reset_fork:=emitter.fork_for_frame();reset_fork.reset()
+	check(emitter.snapshot()==before,"Resetting a staged emitter changed its source sprites")
 	emitter.set_emitting(false)
 	check(emitter.advance(moving,1000,1000).get("births")==0,"Disabled emitter restarted")
 	for slot in emitter.snapshot().slots:check(slot.appearance.age_ms==-1,"Old particles survived beyond their source lifetime")

@@ -46,6 +46,10 @@ def parser():
         s.add_argument('--bindings', type=Path)
         s.add_argument('--visuals', type=Path)
         s.add_argument('--gpu', action='store_true')
+        s.add_argument('--rendering-method', choices=['gl_compatibility', 'mobile', 'forward_plus'])
+        s.add_argument('--rendering-driver', choices=['opengl3', 'vulkan', 'metal', 'd3d12'])
+        s.add_argument('--profile', action='store_true', help='Include Godot script profiler data in the log')
+        s.add_argument('--exported', action='store_true', help='Run a test exported as the executable main loop')
         s.add_argument('--captures', type=output_path)
         s.add_argument('--scenario', type=output_path)
         s.add_argument('--capture-scenario', type=output_path)
@@ -76,11 +80,22 @@ def command(args):
     if args.kind == 'editor':
         return cmd + ['--headless', '--editor', '--quit']
     test = args.test.removesuffix('.gd')
+    if args.exported:
+        cmd = [str(godot)]
     script = (ROOT / 'game/tests' / (test + '.gd')).resolve()
     if not script.is_relative_to(ROOT / 'game/tests') or not script.is_file():
         raise ValueError('Choose an existing script inside game/tests')
-    cmd += ['--rendering-method', 'gl_compatibility'] if args.gpu else ['--headless']
-    cmd += ['--script', 'res://tests/' + script.relative_to(ROOT / 'game/tests').as_posix(), '--']
+    if not args.gpu:
+        cmd += ['--headless']
+    if args.rendering_method:
+        cmd += ['--rendering-method', args.rendering_method]
+    if args.rendering_driver:
+        cmd += ['--rendering-driver', args.rendering_driver]
+    if args.profile:
+        cmd += ['--debug', '--profiling']
+    if not args.exported:
+        cmd += ['--script', 'res://tests/' + script.relative_to(ROOT / 'game/tests').as_posix()]
+    cmd += ['--']
     cmd += content_arguments(args)
     if args.captures:
         args.captures.mkdir(parents=True, exist_ok=True)

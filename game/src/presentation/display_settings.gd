@@ -4,6 +4,7 @@ extends RefCounted
 var _window: Window
 var _values:={}
 var _refreshing:=false
+var _mobile:=false
 
 func apply(window: Window,values: Dictionary,mobile: bool=false) -> void:
 	if _window!=window:
@@ -11,6 +12,7 @@ func apply(window: Window,values: Dictionary,mobile: bool=false) -> void:
 		window.size_changed.connect(refresh_aspect)
 	var resize: bool=_values.is_empty() or _values.resolution!=values.resolution or _values.window_mode!=values.window_mode
 	_values=values.duplicate()
+	_mobile=mobile
 	Engine.max_fps=maxi(0,int(values.frame_rate))
 	if DisplayServer.get_name()!="headless":
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if values.frame_rate==-1 else DisplayServer.VSYNC_DISABLED,window.get_window_id())
@@ -45,10 +47,19 @@ static func aspect_size(size: Vector2i,value: String,native: Vector2i) -> Vector
 		var parts:=value.split(":");ratio=float(parts[0])/float(parts[1])
 	return Vector2i(mini(size.x,roundi(size.y*ratio)),mini(size.y,roundi(size.x/ratio)))
 
+static func ui_factor(size: Vector2i,percent: int,mobile: bool=false) -> float:
+	var automatic:=1.0 if mobile else maxf(1.0,roundf(float(size.y)/1080.0*4.0)/4.0)
+	var requested:=automatic if percent==0 else percent/100.0
+	# Keep options and their Back button reachable after a smaller window resize.
+	var maximum:=maxf(0.75,minf(float(size.x)/960.0,float(size.y)/540.0))
+	return clampf(requested,0.75,minf(3.0,maximum))
+
 func refresh_aspect() -> void:
 	if _window==null or _values.is_empty() or _refreshing:return
 	_refreshing=true
 	_window.content_scale_mode=Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 	_window.content_scale_aspect=Window.CONTENT_SCALE_ASPECT_KEEP
 	_window.content_scale_size=aspect_size(_window.size,_values.aspect_ratio,native_size(_window))
+	var area:=_window.content_scale_size if _window.content_scale_size!=Vector2i.ZERO else _window.size
+	_window.content_scale_factor=ui_factor(area,int(_values.ui_scale),_mobile)
 	_refreshing=false

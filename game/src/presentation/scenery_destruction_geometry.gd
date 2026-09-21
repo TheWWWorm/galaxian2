@@ -72,7 +72,7 @@ func apply_world(world: RefCounted, camera: Transform3D, parent_rgba: PackedByte
 	if world.presentation_identity()==null or (_world_identity!=null and world.presentation_identity()!=_world_identity):return fail("Destruction presentation follows one logical world")
 	if not camera.is_finite() or Effect.tint(parent_rgba,global_tint).is_empty() or not (darken is float or darken is int) or not is_finite(darken) or not is_finite(Effect.single(darken)):
 		return fail("Invalid world destruction presentation inputs")
-	var field: Dictionary=world.snapshot()
+	var field: Dictionary=world.read_snapshot()
 	for key in _identity:
 		if field.get(key)!=_identity[key]:return fail("Destruction presentation belongs to another field")
 	if field.get("objects",[]).size()!=_model_ids.size() or field.get("destruction",[]).size()!=_model_ids.size():return fail("Destruction presentation field size changed")

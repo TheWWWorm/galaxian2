@@ -148,7 +148,7 @@ func configure_npc_scanner(bindings: RefCounted, catalogues: RefCounted, radii: 
 func evaluate(timeline: RefCounted, scenery: RefCounted, delta_ms: Variant, present_radio: Variant, detail: Variant = 1.0, commands := Vector2.ZERO, fire_primary := false, hud_viewport := Vector2i.ZERO, fade_active := true) -> Dictionary:
 	error=""
 	if _controller==null or not timeline is Timeline or not scenery is Scenery: return fail("Configure opening frame owners before updating")
-	var previous: Dictionary=timeline.snapshot();var field: Dictionary=scenery.snapshot()
+	var previous: Dictionary=timeline.snapshot();var field: Dictionary=scenery.clock_snapshot()
 	for key in _identity:
 		if previous.get("scene",{}).get(key)!=_identity[key] or field.get(key)!=_identity[key]: return fail("Opening frame owners belong to another content identity")
 	if previous.get("elapsed_ms")!=_elapsed_ms or field.get("random_state")!=_random_state or scenery.presentation_identity()!=_scenery_identity:
@@ -251,7 +251,7 @@ func evaluate(timeline: RefCounted, scenery: RefCounted, delta_ms: Variant, pres
 		if not next._aim.sample_feedback(npc_contact,delta_ms,int(scene.camera.shot.phase)==4 and player.hull>0):return fail(next._aim.error)
 	if next._scanner!=null and not next._scanner.advance(clock.combat_owner().snapshot(),scene.scene.player_pose,scene.camera.view.get("pose",Transform3D.IDENTITY),next._aim.snapshot(),delta_ms,int(scene.camera.shot.phase)==4 and player.hull>0):return fail(next._scanner.error)
 	next._controller=actors.controller;next._weapons=actors.weapons;next._events=actors.actors
-	next._elapsed_ms=clock.snapshot().elapsed_ms;next._random_state=world.snapshot().random_state
+	next._elapsed_ms=clock.snapshot().elapsed_ms;next._random_state=world.random_state()
 	return {"world_frame":next,"timeline":clock,"scenery":world}
 
 func snapshot() -> Dictionary:

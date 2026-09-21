@@ -53,6 +53,27 @@ class CheckRunnerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             run_checks.command(args)
 
+    def test_gpu_uses_the_project_renderer_unless_overridden(self):
+        args = run_checks.parser().parse_args(['native', 'asset_readers', '--godot', 'godot', '--gpu'])
+        cmd = run_checks.command(args)
+        self.assertNotIn('--rendering-method', cmd)
+        self.assertNotIn('--rendering-driver', cmd)
+        self.assertNotIn('--headless', cmd)
+        args.rendering_method = 'gl_compatibility'
+        args.rendering_driver = 'opengl3'
+        cmd = run_checks.command(args)
+        self.assertEqual(cmd[cmd.index('--rendering-method') + 1], 'gl_compatibility')
+        self.assertEqual(cmd[cmd.index('--rendering-driver') + 1], 'opengl3')
+
+    def test_exported_mainloop_does_not_override_its_project_or_script(self):
+        args = run_checks.parser().parse_args(['native', 'asset_readers', '--godot', 'benchmark', '--exported', '--profile'])
+        cmd = run_checks.command(args)
+        self.assertEqual(cmd[0], 'benchmark')
+        self.assertNotIn('--path', cmd)
+        self.assertNotIn('--script', cmd)
+        self.assertIn('--profiling', cmd)
+        self.assertIn('--debug', cmd)
+
 
     def test_scenario_capture_preserves_previous_file_on_failure(self):
         self.assert_scenario_promotion(passed=False, writes=True, expected='previous')

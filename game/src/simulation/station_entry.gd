@@ -630,6 +630,8 @@ func prepare_contract_departure(bindings: RefCounted,catalogues: RefCounted) -> 
 	return packet
 
 func contract_owner() -> RefCounted:return null if _contracts==null else _contracts.fork()
+func has_contracts() -> bool:return _contracts!=null
+func contract_locations_snapshot() -> Dictionary:return {} if _contracts==null else _contracts.locations_snapshot()
 
 func _prepare_local_departure(bindings: RefCounted, catalogues: RefCounted) -> Dictionary:
 	if bindings==null or catalogues==null or not Departure.parameters(bindings.station_departure):fail("This pack has no supported local departure");return {}

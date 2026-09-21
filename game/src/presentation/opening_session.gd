@@ -315,7 +315,7 @@ func present(advance_sun := false) -> bool:
 	if not message.is_empty():return reject(message)
 	if not sky.apply_view(view,state.escape if escape_sequence else {}):return reject(sky.error)
 	if planets!=null and not planets.apply_view(view,state.escape if escape_sequence else {}):return reject(planets.error)
-	var scenery_state: Dictionary = _scenery.snapshot()
+	var scenery_state: Dictionary = _scenery.read_snapshot()
 	if not scenery.apply_state(scenery_state) or not scenery.apply_detail(scenery_state.detail):return reject(scenery.error)
 	if scenery.destruction!=null and not scenery.apply_destruction(_scenery,camera.transform,PackedByteArray([255,255,255,255]),Vector4(1,1,1,1),1.0):return reject(scenery.error)
 	if npc_deaths!=null:

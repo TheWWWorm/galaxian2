@@ -180,7 +180,7 @@ func evaluate_opening_update(combat: RefCounted, bodies: RefCounted, inventory: 
 	if inventory==null or inventory.get_script()!=TargetInventory:
 		return fail("Opening primary updates require the verified fresh target inventory")
 	# Even an unarmed owner must belong to the complete verified opening world.
-	if not inventory.validate_loadout(_loadout) or not inventory.validate_owners(combat.snapshot(),bodies.snapshot()):
+	if not inventory.validate_loadout(_loadout) or not inventory.validate_owners(combat.snapshot(),bodies.read_snapshot()):
 		return fail(inventory.error)
 	var staged: RefCounted = fork_state()
 	var staged_combat: RefCounted = combat.fork_for_frame()

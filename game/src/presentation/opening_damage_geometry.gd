@@ -24,6 +24,7 @@ func build(owner: RefCounted,library: RefCounted,visuals: RefCounted,bindings: R
 		for key in state.owners:
 			if not state.owners[key].has(kind):continue
 			var current: Dictionary=state.owners[key][kind].preset
+			if not Appearance.Definitions.sprite_preset(current):return reject("Unsupported damage sprite preset")
 			if not preset.is_empty() and current!=preset:return reject("Damage owner sprite preset differs from its manager")
 			preset=current
 			var descriptor: Dictionary=bindings.resolve_material(int(preset.material_id))
@@ -63,7 +64,7 @@ func prepare_world(owner: RefCounted,world: Dictionary,camera_pose: Variant) -> 
 		for index in emitter.slots.size():
 			var slot: Dictionary=emitter.slots[index]
 			if slot.appearance.slot!=index or not slot.position is Vector3 or not slot.position.is_finite():return failed("Invalid damage sprite slot")
-			var appearance:=Appearance.sample(item.preset,slot.appearance,emitter.get("fade_in_rgb",false))
+			var appearance:=Appearance.sample_prepared(item.preset,slot.appearance,emitter.get("fade_in_rgb",false))
 			if appearance.has("error"):return failed(appearance.error)
 			if not appearance.active or not emitter.visible:continue
 			var quad:=sprite(view*slot.position,appearance)

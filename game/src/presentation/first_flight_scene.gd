@@ -140,11 +140,11 @@ func build(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalogu
 	if not present(flight):return fail(error)
 	return true
 
-func present(flight: RefCounted, advance_sun:=false, absolute_milliseconds: Variant=0) -> bool:
+func present(flight: RefCounted, advance_sun:=false, absolute_milliseconds: Variant=0, state: Dictionary={}) -> bool:
 	error=""
 	if _projection==null or flight==null or flight.get_script()!=Frame:return reject("Build a first-flight scene before presenting it")
 	if not absolute_milliseconds is int or absolute_milliseconds<0:return reject("Flight presentation requires a nonnegative absolute clock")
-	var state: Dictionary=flight.snapshot()
+	if state.is_empty():state=flight.snapshot()
 	var drill: RefCounted=flight.drill_owner()
 	var pirates: RefCounted=flight.encounter_owner()
 	var death: RefCounted=flight.destruction_owner()

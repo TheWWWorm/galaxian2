@@ -32,6 +32,10 @@ const BASE_STOCK_SETTINGS={"difficulty":0.5,"valkyrie_owned":false,"supernova_ow
 const STATION_DEPARTURE_PHASES=["ready_to_launch","combat_departure_required","local_departure_required","contracts_required","convoy_departure_required","alioth_departure_required","free_play_required"]
 const PRIMARY_FLIGHT_CURSORS=[7,10,11,12,13,14,16,17,18,19]
 
+var _support_context: RefCounted
+var _support_identity:=""
+var _departure_support:={}
+
 var library: RefCounted
 var bindings: RefCounted
 var visuals: RefCounted
@@ -105,10 +109,9 @@ func _ready() -> void:
 	status=Label.new();status.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;add_child(status)
 	_save_notice=Label.new();_save_notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;_save_notice.hide();add_child(_save_notice)
 	var host := Control.new();host.size_flags_vertical=Control.SIZE_EXPAND_FILL;add_child(host)
-	var container := SubViewportContainer.new();container.stretch=true;host.add_child(container)
+	var container := preload("res://src/presentation/native_scene_view.gd").new();host.add_child(container)
 	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	viewport=SubViewport.new();viewport.own_world_3d=true;viewport.handle_input_locally=false
-	viewport.render_target_update_mode=SubViewport.UPDATE_DISABLED;container.add_child(viewport)
+	viewport=container.viewport
 	target_frame=TargetFrame.new();host.add_child(target_frame);target_frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	target_frame.set_mobile_layout(OS.has_feature("mobile"))
 	aim_reticle=AimReticle.new();host.add_child(aim_reticle);aim_reticle.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -164,9 +167,9 @@ func enable_saves(directory: String="user://saves") -> void:
 
 func station_save_path() -> String:return StationSaveFile.path_for(_save_directory,bindings)
 
-func _can_save_station() -> bool:
+func _can_save_station(state: Dictionary={}) -> bool:
 	if _save_directory.is_empty() or not StationArchive.available(bindings) or not session is StationSession:return false
-	var state: Dictionary=session.snapshot()
+	if state.is_empty():state=session.snapshot()
 	return StationArchive.can_capture(state)
 
 func save_station(announce: bool=true) -> bool:
@@ -296,12 +299,29 @@ func _notification(what: int) -> void:
 	if session!=null and (session.status=="running" or session.status in BOUNDARIES):session.set_pause("focus",not _focused,Time.get_ticks_usec())
 	refresh_render_mode()
 
-func refresh_render_mode() -> void:
+func _departure_available(cursor: int) -> bool:
+	# UI availability is invariant for an opened content pack and campaign cursor.
+	# Actual departure still validates its packet and all native owners.
+	var identity: String="" if bindings==null else bindings.binding_id
+	if _support_context!=bindings or _support_identity!=identity:
+		_support_context=bindings;_support_identity=identity;_departure_support={}
+	if not _departure_support.has(cursor):_departure_support[cursor]=FirstFlightSession.supported(bindings,cursor)
+	return _departure_support[cursor]
+
+func _shopping_available() -> bool:
+	var identity: String="" if bindings==null else bindings.binding_id
+	if _support_context!=bindings or _support_identity!=identity:
+		_support_context=bindings;_support_identity=identity;_departure_support={}
+	if not _departure_support.has("shopping"):_departure_support.shopping=Shopping.available(bindings)
+	return _departure_support.shopping
+
+func refresh_render_mode(state: Dictionary={}) -> void:
+	if state.is_empty() and session!=null:state=session.snapshot()
 	_sync_mouse_capture()
 	if _menu_button!=null:_menu_button.visible=_player_mode and (session is StationSession or _controls.touch_controls)
 	if _save_button!=null:
 		_save_button.visible=not _save_directory.is_empty() and session is StationSession
-		_save_button.disabled=not _can_save_station() or not _focused or not _launch_packet.is_empty()
+		_save_button.disabled=not _can_save_station(state) or not _focused or not _launch_packet.is_empty()
 	if _load_button!=null:
 		var path:=station_save_path()
 		_load_button.visible=not path.is_empty() and (session==null or session is StationSession or _controls.touch_controls)
@@ -309,17 +329,17 @@ func refresh_render_mode() -> void:
 		_load_button.text="Retry saved game" if not _last_game_over.is_empty() else "Load"
 	if _retry_button!=null:_retry_button.visible=_transition_failed and session!=null
 	if _launch_button!=null:
-		_launch_button.visible=session is StationSession and session.snapshot().phase in STATION_DEPARTURE_PHASES and not session.snapshot().get("lounge_open",false) and not session.snapshot().get("hangar_open",false) and session.snapshot().get("contracts",{}).get("pending_result",{}).is_empty() and FirstFlightSession.supported(bindings,int(session.snapshot().campaign_cursor))
+		_launch_button.visible=session is StationSession and state.phase in STATION_DEPARTURE_PHASES and not state.get("lounge_open",false) and not state.get("hangar_open",false) and state.get("contracts",{}).get("pending_result",{}).is_empty() and _departure_available(int(state.campaign_cursor))
 		_launch_button.disabled=session==null or session.is_paused() or not _focused or not _launch_packet.is_empty()
 	if _flight_actions!=null:
-		_flight_actions.visible=_controls.touch_controls and session is FirstFlightSession and session.flight_hud_visible() and not session.map_open()
+		_flight_actions.visible=_controls.touch_controls and session is FirstFlightSession and session.flight_hud_visible(state) and not session.map_open()
 		_mine_button.disabled=session==null or not session.can_control() or not _focused
 		_station_button.disabled=_mine_button.disabled
-		var local: bool=session is FirstFlightSession and not session.snapshot().get("local_travel",{}).is_empty()
+		var local: bool=session is FirstFlightSession and not state.get("local_travel",{}).is_empty()
 		_map_button.visible=local;_map_button.disabled=_mine_button.disabled
-		_jump_button.visible=local and int(session.snapshot().local_travel.acquired_station_id)>=0
+		_jump_button.visible=local and int(state.local_travel.acquired_station_id)>=0
 		_jump_button.disabled=_mine_button.disabled
-		_mine_button.text="Stop" if session is FirstFlightSession and not session.snapshot().mining_session.drill.is_empty() else "Mine"
+		_mine_button.text="Stop" if session is FirstFlightSession and not state.mining_session.drill.is_empty() else "Mine"
 		_layout_flight_overlays()
 	if station_panel!=null:station_panel.set_active(session!=null and session is StationSession and not session.is_paused() and is_visible_in_tree() and _focused)
 	if equipment_panel!=null:equipment_panel.set_active(session!=null and session is StationSession and not session.is_paused() and is_visible_in_tree() and _focused)
@@ -327,15 +347,15 @@ func refresh_render_mode() -> void:
 	if gate_panel!=null:gate_panel.set_active(session is FirstFlightSession and session.status=="gate_confirmation_required" and session.gate_modal_active() and is_visible_in_tree() and _focused)
 	if lounge_panel!=null:lounge_panel.set_active(session!=null and not session.is_paused() and is_visible_in_tree() and _focused)
 	if _lounge_button!=null:
-		_lounge_button.visible=_station_lounge_available() and not session.snapshot().dialogue.visible and not session.snapshot().get("lounge_open",false) and not session.snapshot().get("hangar_open",false) and session.snapshot().contracts.pending_result.is_empty()
+		_lounge_button.visible=_station_lounge_available(state) and not state.dialogue.visible and not state.get("lounge_open",false) and not state.get("hangar_open",false) and state.contracts.pending_result.is_empty()
 		_lounge_button.disabled=not _focused or not is_visible_in_tree() or (session!=null and session.is_paused())
 	if _hangar_button!=null:
-		_hangar_button.visible=session is StationSession and bindings!=null and EquipmentDefinitions.parameters(bindings.station_equipment) and (session.snapshot().phase=="station_equipment_required" or (session.snapshot().phase=="free_play_required" and Shopping.available(bindings))) and not session.snapshot().get("hangar_open",false) and not session.snapshot().get("lounge_open",false) and session.snapshot().get("contracts",{}).get("pending_result",{}).is_empty()
+		_hangar_button.visible=session is StationSession and bindings!=null and EquipmentDefinitions.parameters(bindings.station_equipment) and (state.phase=="station_equipment_required" or (state.phase=="free_play_required" and _shopping_available())) and not state.get("hangar_open",false) and not state.get("lounge_open",false) and state.get("contracts",{}).get("pending_result",{}).is_empty()
 		_hangar_button.disabled=not _focused or not is_visible_in_tree() or not _launch_packet.is_empty() or (session!=null and session.is_paused())
 	if touch_overlay!=null:
-		var drilling: bool=session is FirstFlightSession and not session.snapshot().mining_session.drill.is_empty()
-		touch_overlay.set_fire_label(("Stop" if drilling else "Fire" if session.snapshot().location.campaign_cursor in PRIMARY_FLIGHT_CURSORS else "Mine") if session is FirstFlightSession else "Fire")
-		touch_overlay.visible=_controls.touch_controls and session!=null and session.flight_hud_visible()
+		var drilling: bool=session is FirstFlightSession and not state.mining_session.drill.is_empty()
+		touch_overlay.set_fire_label(("Stop" if drilling else "Fire" if state.location.campaign_cursor in PRIMARY_FLIGHT_CURSORS else "Mine") if session is FirstFlightSession else "Fire")
+		touch_overlay.visible=_controls.touch_controls and session!=null and session.flight_hud_visible(state)
 		touch_overlay.set_active(touch_overlay.visible and session.can_control() and is_visible_in_tree() and _focused)
 	if viewport==null:return
 	if not is_visible_in_tree():viewport.render_target_update_mode=SubViewport.UPDATE_DISABLED
@@ -614,9 +634,10 @@ func prepare_lounge() -> bool:
 	if not lounge_panel.configure(library,bindings,visuals,cat):return transition_error(lounge_panel.error)
 	return true
 
-func _station_lounge_available() -> bool:
-	if not session is StationSession or session.contract_owner()==null:return false
-	return session.snapshot().phase in ["contracts_required","convoy_departure_required"] or (session.snapshot().phase=="free_play_required" and preload("res://src/content/ordinary_contracts_definitions.gd").available(bindings))
+func _station_lounge_available(state: Dictionary={}) -> bool:
+	if not session is StationSession or not session.has_contracts():return false
+	if state.is_empty():state=session.snapshot()
+	return state.phase in ["contracts_required","convoy_departure_required"] or (state.phase=="free_play_required" and preload("res://src/content/ordinary_contracts_definitions.gd").available(bindings))
 
 func contract_action(action: String,id: int) -> bool:
 	if session==null or not _focused or not is_visible_in_tree() or session.is_paused():return false
@@ -866,7 +887,7 @@ func retry_transition() -> bool:
 
 func present_session() -> void:
 	if session==null:return
-	var state: Dictionary=session.snapshot()
+	var state: Dictionary=session.presentation_snapshot() if session.has_method("presentation_snapshot") else session.snapshot()
 	if session is FirstFlightSession and session.status=="gate_confirmation_required":
 		if not gate_panel.visible:
 			var catalogues:=Catalogues.new()
@@ -888,14 +909,14 @@ func present_session() -> void:
 		elif state.dialogue.visible:status.text=session.station_name+" · Enter / controller A continues · Left / controller B goes back · Esc / Start pauses"
 		elif state.get("lounge_open",false):status.text=session.station_name+" · Space Lounge · Arrows / D-pad select · Enter / A confirms · Backspace / B returns"
 		elif state.get("hangar_open",false):status.text=session.station_name+" · Hangar · Tab / controller focus navigates · Esc / Start pauses"
-		elif state.phase in STATION_DEPARTURE_PHASES and FirstFlightSession.supported(bindings,int(state.campaign_cursor)):status.text=session.station_name+" · Depart when ready · Enter / controller A"+(" · Space Lounge: L" if state.campaign_cursor in [13,14] else " · Hangar: H" if state.campaign_cursor in [18,19] and Shopping.available(bindings) else "")
+		elif state.phase in STATION_DEPARTURE_PHASES and _departure_available(int(state.campaign_cursor)):status.text=session.station_name+" · Depart when ready · Enter / controller A"+(" · Space Lounge: L" if state.campaign_cursor in [13,14] else " · Hangar: H" if state.campaign_cursor in [18,19] and _shopping_available() else "")
 		elif state.phase=="station_equipment_required":status.text=session.station_name+(" · Enter the hangar · Enter / controller A" if EquipmentDefinitions.parameters(bindings.station_equipment) else " · This content pack has no equipment tutorial declarations.")
 		elif state.phase=="combat_departure_required":status.text=session.station_name+" · Equipment ready. The combat-training flight is still being reconstructed."
 		elif state.phase=="station_reload_required":status.text=session.station_name+" · Entering station"
 		elif state.phase=="station_followup_required":status.text=session.station_name+" · Training complete. The next mission is still being reconstructed."
 		elif state.phase=="free_play_required":status.text=session.station_name+" · The next departure is unavailable in this content pack."
 		else:status.text=session.station_name+" · The next flight is still being reconstructed."
-		refresh_render_mode();return
+		refresh_render_mode(state);return
 	if session is FirstFlightSession:
 		var station_name: String=state.get("station_exterior",{}).get("name","")
 		if not session.can_control():clear_input()
@@ -915,7 +936,7 @@ func present_session() -> void:
 		elif state.location.campaign_cursor in PRIMARY_FLIGHT_CURSORS:status.text="Steer: WASD / arrows / stick · Fire: Space / right trigger · Mine: E / X · Station: P / Y · Speed: + / −"
 		else:status.text="Steer: WASD / arrows / stick · Mine: E / X · Station: P / Y · Speed: + / − · Cargo: %d / %d"%[state.cargo.used,state.cargo.capacity]
 		if session.can_open_map():status.text+=" · Map: M / L1"
-		refresh_render_mode();return
+		refresh_render_mode(state);return
 	var hud_visible: bool=session.flight_hud_visible(state)
 	if not radio_panel.present(state.radio):show_error(radio_panel.error);return
 	target_frame.set_active(hud_visible)
@@ -930,11 +951,11 @@ func present_session() -> void:
 		elif session.status=="station_transition_required":status.text="The rescue has reached Var Hastra. Station entry is still being reconstructed."
 		else:status.text="This binding pack supports the opening cinematic. Reimport bindings for the supported first fight."
 		_pause_button.disabled=true
-		refresh_render_mode()
+		refresh_render_mode(state)
 	elif session.is_paused():status.text="Paused · Esc / controller Start resumes your pause"
 	elif session.can_control():status.text="Steer: WASD / arrows / left stick · Fire: Space / right trigger · Pause: Esc / Start"
 	else:status.text=("Rescue cinematic" if session is ArrivalSession else "Opening cinematic")+" · Esc / controller Start pauses"
-	refresh_render_mode()
+	refresh_render_mode(state)
 
 func show_error(message: String) -> void:
 	reset()
