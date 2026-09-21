@@ -31,8 +31,10 @@ Android and Web builds are not included in this preview.
 3. Choose **Start new game**. Follow the opening instructions.
 
 Later launches reuse your local import. Cancelling an import preserves an existing
-installation and its saves. Mac Full HD 1.0.6 and the supplied 1.0.7 layout are
-supported; other layouts may report that they are unsupported.
+installation and its saves. Mac Full HD 1.0.6 content is verified. A tested disk
+image labelled 1.0.7 contains the same game files; the additional ships advertised
+for the official 1.0.7 update are not yet verified. Other layouts may report that
+they are unsupported.
 
 ## What's playable
 
