@@ -48,9 +48,8 @@ static func local_model(data: Dictionary, travel: Dictionary, weapon: Dictionary
 	# Only population membership changes: local kind-3 ships occupy 0..3.
 	var source:=weapon.duplicate(true)
 	source.campaign_cursor=7
-	if key.begins_with("player:"):
-		if weapon.get("item_id")!=22:return {}
-		return model(data,source,key,impact)
+	# Either free starter gun from the equipment tutorial may remain mounted.
+	if key.begins_with("player:"):return model(data,source,key,impact)
 	if weapon.get("item_id")!=int(travel.traffic_combat.weapon.item_id):return {}
 	if weapon.campaign_cursor==10 and key not in ["npc:0","npc:1","npc:2","npc:3"]:return {}
 	if not key.begins_with("npc:") or not key.substr(4).is_valid_int() or int(key.substr(4))<0:return {}

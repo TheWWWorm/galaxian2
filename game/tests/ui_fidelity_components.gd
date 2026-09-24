@@ -49,7 +49,11 @@ func run() -> void:
 		check(hud._cargo_text.text=="1 / 25t" and hud._cargo_frame.texture.get_meta("source_image_id")==1218,"Cargo HUD lost source counter art or totals")
 		check(hud._throttle_text.text=="100" and hud._throttle_frame.texture.get_meta("source_image_id")==1352 and hud._throttle_frame.texture.get_meta("source_region")==250,"Throttle HUD lost its accepted percentage or source art")
 		var bare:=flight.duplicate(true);bare.player.capacities.shield=0;bare.player.vitals.shield=0.0;bare.control_throttle=0.35
+		check(hud.throttle_alpha(Time.get_ticks_msec())==0.0,"Throttle indicator stayed visible without a throttle change")
 		check(hud.present(bare) and not hud._shield_visible and hud._throttle_text.text=="35","Unfitted shield or reduced throttle showed a stale gauge")
+		var changed: int=hud._throttle_changed_ms
+		check(hud.throttle_alpha(changed)==1.0 and absf(hud.throttle_alpha(changed+Vitals.THROTTLE_HOLD_MS+Vitals.THROTTLE_FADE_MS/2)-0.5)<0.01 and hud.throttle_alpha(changed+Vitals.THROTTLE_HOLD_MS+Vitals.THROTTLE_FADE_MS)==0.0,"Throttle indicator did not show then fade after a change")
+		check(hud.present(bare) and hud._throttle_changed_ms==changed,"An unchanged throttle restarted its indicator")
 		var invalid:=flight.duplicate(true);invalid.control_throttle=1.5
 		check(not hud.present(invalid) and hud._throttle_text.text=="35","Invalid throttle replaced the last accepted indicator")
 		check(hud.present(flight),hud.error)

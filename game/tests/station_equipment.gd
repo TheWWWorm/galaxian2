@@ -66,6 +66,7 @@ func after_second_return(args: PackedStringArray):
 	check(host.equipment_action("open") and host.equipment_action("mount",55),host.session.error)
 	state=host.session.snapshot()
 	check(state.equipment.requirements.satisfied and state.cargo.used==1 and state.cargo.entries==[{"item_id":0,"quantity":1}],"Equipment predicate counted cargo or consumed the spare gun")
+	state=choose_starter_gun(state)
 	host.equipment_panel.select_tab("ship")
 	if args.size()==4:
 		var file:=FileAccess.open(args[3].path_join("equipment-installed-state.json"),FileAccess.WRITE)
@@ -100,10 +101,14 @@ func after_second_return(args: PackedStringArray):
 	if args.size()==4:await capture(args[3],"equipment-completed-action-rejection")
 	var scenario_path:=OS.get_environment("GOF2_SCENARIO_OUTPUT")
 	if not scenario_path.is_empty() and failures==0:
-		var problem:=EquipmentScenario.capture(scenario_path,bindings,scenario_before,state,host.session._world.equipment_owner())
+		var problem:=EquipmentScenario.capture(scenario_path,bindings,scenario_before,state,host.session._world.equipment_owner(),scenario_transactions())
 		check(problem.is_empty(),problem)
 
 func death_branch(_args: PackedStringArray, _packet: Dictionary):pass
+
+# Players may finish the tutorial with either free starter gun mounted.
+func choose_starter_gun(state: Dictionary) -> Dictionary:return state
+func scenario_transactions() -> Array:return EquipmentScenario.TRANSACTIONS
 
 func capture(directory: String, name: String):
 	# The desktop can change focus while this fixture yields for rendering.

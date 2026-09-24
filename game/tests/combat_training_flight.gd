@@ -454,8 +454,10 @@ func verify_training_application(args: PackedStringArray):
 	key(KEY_ESCAPE);host.session.rebase_time(now_us)
 	# Actual trigger input, then a disclosed close placement for activation.
 	var event:=InputEventJoypadMotion.new();event.device=7;event.axis=JOY_AXIS_TRIGGER_RIGHT;event.axis_value=.9;host._unhandled_input(event)
-	for i in 3:
+	# Either tutorial starter gun may be mounted; each has its own cooldown.
+	for i in 30:
 		if not training_app_step():return
+		if host.session.snapshot().encounter.primary_fire.weapons[0].result.fired:break
 	check(host.session.snapshot().encounter.primary_fire.weapons[0].result.fired,"Held controller trigger did not fire after the source cooldown")
 	event=InputEventJoypadMotion.new();event.device=7;event.axis=JOY_AXIS_TRIGGER_RIGHT;event.axis_value=0;host._unhandled_input(event)
 	var flight: RefCounted=host.session.flight_owner()

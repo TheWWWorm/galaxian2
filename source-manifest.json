@@ -2320,6 +2320,8 @@
     "tools/requirements-visuals.txt",
     "tools/run_checks.py",
     "tools/source_checks.py",
-    "tools/test_physical_scenery_contacts.py"
+    "tools/test_physical_scenery_contacts.py",
+    "game/tests/station_equipment_standard_gun.gd",
+    "game/tests/station_equipment_standard_gun.gd.uid"
   ]
 }

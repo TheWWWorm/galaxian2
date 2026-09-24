@@ -72,7 +72,8 @@ func configure(bindings: RefCounted, resources: RefCounted, construction: RefCou
 			if catalogues.content_id!=bindings.base_content_id:return reject("Destruction equipment belongs to another catalogue")
 			for id in expected_equipment:
 				if not Numbers.integer(id,0,catalogues.tables.items.size()-1) or catalogues.tables.items[id].arrays[2][5]==27:return reject("Escape-device destruction is not yet supported")
-		elif expected_equipment!=[22,86,81,55]:return reject("Local destruction has an unsupported escape-device context")
+		# Either tutorial starter gun may remain mounted beside the exchanged gear.
+		elif expected_equipment not in [[22,86,81,55],[0,86,81,55]]:return reject("Local destruction has an unsupported escape-device context")
 	_rules=rules.duplicate(true)
 	# Imported JSON numbers become floats; native story observations use ints.
 	_rules.story_cursors=_rules.story_cursors.map(func(value):return int(value))

@@ -13,6 +13,8 @@ const PRODUCERS=["res://src/simulation/station_equipment.gd",
 	"res://src/content/station_return_definitions.gd"]
 const TRANSACTIONS=[["buy",0],["sell",0],["buy",0],["mount",0],["unmount",0],
 	["buy",22],["mount",22],["buy",55],["mount",55]]
+# The player may instead keep the standard free gun mounted.
+const STANDARD_GUN_TRANSACTIONS=TRANSACTIONS+[["unmount",22],["mount",0]]
 var error:=""
 var document:={}
 
@@ -21,7 +23,7 @@ static func producer_hashes() -> Dictionary:
 	for path in PRODUCERS:result[path]=FileAccess.get_sha256(path)
 	return result
 
-static func capture(path: String, bindings: RefCounted, before: Dictionary, after: Dictionary, equipment: RefCounted) -> String:
+static func capture(path: String, bindings: RefCounted, before: Dictionary, after: Dictionary, equipment: RefCounted, transactions: Array=TRANSACTIONS) -> String:
 	var project:=ProjectSettings.globalize_path("res://").trim_suffix("/").get_base_dir()+"/"
 	var target:=path.simplify_path()
 	if not target.is_absolute_path() or target.begins_with(project):return "Keep captured scenarios outside the source repository"
@@ -29,6 +31,7 @@ static func capture(path: String, bindings: RefCounted, before: Dictionary, afte
 	var data:={"schema":1,"scenario":"equipped_combat_training","base_content_id":bindings.base_content_id,
 		"binding_id":bindings.binding_id,"producers":producer_hashes(),"station_before":before.duplicate(true),
 		"station_after":after.duplicate(true),"equipment":equipment.snapshot()}
+	if transactions!=TRANSACTIONS:data.transactions=transactions.duplicate(true)
 	var file:=FileAccess.open(target,FileAccess.WRITE)
 	if file==null:return "Cannot write equipment scenario"
 	file.store_var(data);file.close()
@@ -51,7 +54,9 @@ func restore(data: Variant, bindings: RefCounted, catalogues: RefCounted) -> Ref
 	if after.get("campaign_cursor")!=7 or after.get("phase")!="combat_departure_required" or not after.get("equipment_acknowledged",false):return fail("Equipment scenario has not acknowledged its transition")
 	var equipment:=Equipment.new()
 	if not equipment.configure(bindings,catalogues,data.station_before):return fail(equipment.error)
-	for action in TRANSACTIONS:
+	var transactions: Variant=data.get("transactions",TRANSACTIONS)
+	if transactions not in [TRANSACTIONS,STANDARD_GUN_TRANSACTIONS]:return fail("Unsupported equipment scenario transactions")
+	for action in transactions:
 		if not equipment.transact(action[0],action[1]):return fail(equipment.error)
 	var state:=equipment.snapshot()
 	if state!=data.equipment or not equipment.requirements().satisfied:return fail("Scenario transactions differ from the captured equipment")

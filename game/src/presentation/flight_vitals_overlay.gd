@@ -6,6 +6,10 @@ const OriginalUI=preload("res://src/presentation/original_ui.gd")
 const INTERFACE_ATLAS="resources/data/textures/gof2_interface_ipad_1440.aei"
 const SOURCE_IMAGES={"hull_badge":1195,"armor_badge":1194,"shield_badge":1197,"cargo_frame":1218,"throttle_frame":1352}
 const SOURCE_REGIONS={"hull_fill":90,"armor_fill":91,"gauge_back":97,"shield_fill":98}
+# Remake presentation timing: the throttle reading appears after a change and
+# then fades. The original display duration has not been recovered.
+const THROTTLE_HOLD_MS:=1500
+const THROTTLE_FADE_MS:=500
 var error:=""
 var _identity:={}
 var _catalogues: RefCounted
@@ -22,6 +26,8 @@ var _armor_ratio:=0.0
 var _shield_ratio:=0.0
 var _throttle_visible:=false
 var _throttle_percent:=0
+var _throttle_seen:=-1
+var _throttle_changed_ms:=-THROTTLE_HOLD_MS-THROTTLE_FADE_MS
 var _armor_label:=""
 var _shield_label:=""
 var _hull_badge: TextureRect
@@ -161,8 +167,25 @@ func present(state: Dictionary,show_hull_value:=true) -> bool:
 	_throttle_percent=roundi(float(throttle)*100.0) if has_throttle else 0
 	_throttle_text.text=str(_throttle_percent) if has_throttle else ""
 	_throttle_frame.tooltip_text="Throttle %d%%"%_throttle_percent if has_throttle else ""
+	# The first reading of a flight is its baseline; only later changes show.
+	if has_throttle and _throttle_percent!=_throttle_seen:
+		if _throttle_seen>=0:_throttle_changed_ms=Time.get_ticks_msec()
+		_throttle_seen=_throttle_percent
 	_has_state=true;visible=_active;_relayout()
 	return true
+
+func _process(_delta: float) -> void:
+	if _throttle_visible:_apply_throttle_alpha(Time.get_ticks_msec())
+
+func throttle_alpha(now_ms: int) -> float:
+	var age:=now_ms-_throttle_changed_ms
+	if not _throttle_visible or age<0 or age>=THROTTLE_HOLD_MS+THROTTLE_FADE_MS:return 0.0
+	return 1.0 if age<=THROTTLE_HOLD_MS else 1.0-float(age-THROTTLE_HOLD_MS)/float(THROTTLE_FADE_MS)
+
+func _apply_throttle_alpha(now_ms: int) -> void:
+	var alpha:=throttle_alpha(now_ms)
+	for node in [_throttle_frame,_throttle_text]:
+		node.visible=alpha>0.0;node.modulate.a=alpha
 
 func set_active(value: bool) -> void:
 	_active=value;visible=value and _has_state
@@ -212,14 +235,15 @@ func _relayout() -> void:
 	_cargo_frame.size=Vector2(counter_width,counter_height)
 	_cargo_text.position=_cargo_frame.position;_cargo_text.size=_cargo_frame.size
 	var throttle_size: Vector2=_throttle_frame.texture.get_size()*(1.0 if _mobile else 0.7) if _throttle_frame.texture!=null else Vector2.ZERO
-	_throttle_frame.visible=_throttle_visible;_throttle_text.visible=_throttle_visible
+	_apply_throttle_alpha(Time.get_ticks_msec())
 	_throttle_frame.size=throttle_size
 	_throttle_frame.position=Vector2((size.x-throttle_size.x)*0.5,size.y*0.5-(19.0 if _mobile else 14.0))
 	_throttle_text.position=_throttle_frame.position+Vector2(0,throttle_size.y*0.54)
 	_throttle_text.size=Vector2(throttle_size.x,21 if _mobile else 16)
 
 func clear() -> void:
-	_has_state=false;visible=false;_cargo_text.text="";_throttle_text.text="";_throttle_visible=false
+	_has_state=false;visible=false;_cargo_text.text="";_throttle_text.text="";_throttle_visible=false;_throttle_seen=-1
+	_throttle_changed_ms=-THROTTLE_HOLD_MS-THROTTLE_FADE_MS
 	_throttle_frame.hide();_throttle_text.hide()
 	for label in [_hull_text,_armor_text,_shield_text]:label.text=""
 
