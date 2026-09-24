@@ -34,7 +34,7 @@ static func valid_source(source: String) -> bool:
 func start(source: String,directory: String) -> bool:
 	error=""
 	if busy():return reject("A Mac import is already running")
-	if not valid_source(source):return reject("Choose a Galaxy on Fire 2 Full HD Mac .app ZIP" if OS.get_name()=="Android" else "Choose your Galaxy on Fire 2 Full HD Mac .dmg file or .app folder")
+	if not valid_source(source):return reject("Choose a Galaxy on Fire 2 Full HD Mac .dmg or .app ZIP" if OS.get_name()=="Android" else "Choose your Galaxy on Fire 2 Full HD Mac .dmg file or .app folder")
 	if OS.get_name()=="Android":
 		if not Engine.has_singleton("GoF2AndroidImport"):return reject("The Android Mac app importer is missing from this game package")
 		var android_jobs:=directory.path_join("import-jobs")

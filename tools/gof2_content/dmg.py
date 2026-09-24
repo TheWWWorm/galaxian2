@@ -13,6 +13,7 @@ MAX_LISTING = 32 * 1024 * 1024
 MAX_ENTRIES = 20000
 MAX_TOTAL = 8 * 1024 * 1024 * 1024
 MAX_FILE = 256 * 1024 * 1024
+HEADROOM = 512 * 1024 * 1024
 
 
 def app_files(listing):
@@ -132,6 +133,13 @@ class DmgApp:
         listing = self.run_tool(tool, ['l', '-slt', '-ba', '-sns-', '-sccUTF-8', '-p-', '--', str(self.source)],
                                 root / 'listing.txt', 'Reading the Mac disk image')
         app, files = app_files(listing)
+        # The extracted app, prepared base content and decoded textures can
+        # coexist. Check the volume that holds the preparation stage before
+        # asking 7-Zip to write any original content.
+        needed = sum(files.values()) * 3 + HEADROOM
+        if shutil.disk_usage(root).free < needed:
+            raise ContentError('Import needs more free storage for the Mac disk image; keep at least '
+                               + str((needed + 1024**3 - 1) // 1024**3) + ' GiB available')
         names = root / 'files.txt'
         names.write_text('\n'.join(files) + '\n', encoding='utf-8')
         destination = root / 'app'

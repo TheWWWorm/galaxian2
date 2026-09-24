@@ -62,9 +62,19 @@ they do not include original-game content or executable code.
 Chaquopy: https://chaquo.com/chaquopy/ .
 
 DMG extraction uses [7-Zip 26.03](https://github.com/ip7z/7zip/releases/tag/26.03),
-Copyright (C) Igor Pavlov, under GNU LGPL with the BSD and unRAR restrictions
-described in its included `importer/7zip/License.txt`. Corresponding source is
-available with that release. The helper is a separate, replaceable executable.
+Copyright (C) Igor Pavlov. Desktop packages include its separate `7zz` helper
+and `importer/7zip/License.txt`. Android APKs include a standalone Android PIE
+executable as `lib/<abi>/libgof2_7zz.so`, installed into the app's native library
+directory, plus `assets/licenses/7zip-License.txt` and
+`assets/licenses/7zip-LGPL-2.1.txt`. The full upstream license notice describes
+GNU LGPL 2.1-or-later, BSD components and the unRAR restriction. Android builds
+set `DISABLE_RAR=1`, excluding RAR support and its restricted code. The helper
+runs as a separate process. Corresponding unmodified source is the
+[26.03 tag archive](https://github.com/ip7z/7zip/archive/refs/tags/26.03.tar.gz),
+SHA-256 `74b11efd8559f9b3dc652e89dc8ebdf4acb66e514a745e44cf75582cdf4512fd`.
+`platform/android_importer/build_android.py` records the NDK 27.3.13750724,
+Android API 29 and upstream Clang make target and flags used to reproduce the
+Android executable.
 Pinned download URLs and SHA-256 hashes for all desktop dependencies are recorded
 in `tools/desktop-dependencies.json` and shipped as `importer/dependencies.json`.
 
@@ -99,5 +109,4 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 The source DMG importer invokes a separately installed 7-Zip command-line tool
 (`7zz` or `7z`) to read disk-image files. No 7-Zip binary is included in this
-source tree. Distribution of packaged helpers must include the applicable
-7-Zip licensing and notices.
+source tree. Packaged helpers include the applicable 7-Zip licensing and notices.

@@ -4,11 +4,12 @@ import ntpath
 import tempfile
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 
-from gof2_content.dmg import DmgApp, app_files
+from gof2_content.dmg import DmgApp, HEADROOM, app_files
 from gof2_content.formats import ContentError
 
 
@@ -68,6 +69,26 @@ class DiskImageTests(unittest.TestCase):
                     patch.object(DmgApp, 'run_tool', side_effect=InterruptedError('cancelled')):
                 with self.assertRaises(InterruptedError), DmgApp(image, work=work):
                     self.fail('Cancelled extraction was accepted')
+            self.assertEqual(list(work.iterdir()), [])
+
+    def test_selected_dmg_bytes_are_budgeted_before_extraction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'Game.dmg'
+            image.write_bytes(b'koly' + b'\0' * 508)
+            work = Path(directory) / 'work'; work.mkdir()
+            calls = []
+
+            def run(tool, arguments, report, message):
+                calls.append(arguments[0])
+                return self.listing()
+
+            # Two selected ten-byte files need 60 bytes plus the headroom.
+            with patch.dict('os.environ', {'GOF2_7ZIP': '/test/tool'}), \
+                    patch.object(DmgApp, 'run_tool', side_effect=run), \
+                    patch('gof2_content.dmg.shutil.disk_usage', return_value=SimpleNamespace(free=HEADROOM + 59)):
+                with self.assertRaisesRegex(ContentError, 'free storage'), DmgApp(image, work=work):
+                    self.fail('Extraction started without enough storage')
+            self.assertEqual(calls, ['l'])
             self.assertEqual(list(work.iterdir()), [])
 
     def test_hfs_metadata_streams_are_disabled_for_listing_and_extraction(self):

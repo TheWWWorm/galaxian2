@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an engine-only Godot Android APK with a direct Mac app ZIP importer.
+"""Build an engine-only Godot Android APK with a Mac app ZIP/DMG importer.
 
 Build dependencies are downloaded into --work, verified, and compiled for one
 Android ABI. Original game files and prepared imports are never build inputs.
@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tarfile
@@ -62,6 +63,15 @@ RUNTIME_NOTICES = {
         "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-21.1.0/libcxx/LICENSE.TXT",
         "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"),
 }
+SEVEN_ZIP_SOURCE = (
+    "https://github.com/ip7z/7zip/archive/refs/tags/26.03.tar.gz",
+    "74b11efd8559f9b3dc652e89dc8ebdf4acb66e514a745e44cf75582cdf4512fd",
+)
+SEVEN_ZIP_LICENSES = {
+    "7zip-License.txt": "DOC/License.txt",
+    "7zip-LGPL-2.1.txt": "DOC/copying.txt",
+}
+EXTRACTOR_NAME = "libgof2_7zz.so"
 
 
 def checked_download(url, target, expected=None):
@@ -170,6 +180,58 @@ def native_wheels(work, ndk, abi):
                   tex_files, tex_licenses))
 
 
+def check_extractor_elf(data, abi):
+    """Check that the renamed .so is an Android PIE executable for this ABI."""
+    machine = {"arm64-v8a": 183, "x86_64": 62}[abi]
+    if (len(data) < 64 or data[:6] != b"\x7fELF\x02\x01"
+            or struct.unpack_from("<HH", data, 16) != (3, machine)):
+        raise ValueError("7-Zip helper is not a 64-bit Android PIE for " + abi)
+    if b"libc++_shared.so" in data:
+        raise ValueError("7-Zip helper unexpectedly depends on app loader paths")
+    program_offset = struct.unpack_from("<Q", data, 32)[0]
+    program_size, program_count = struct.unpack_from("<HH", data, 54)
+    if program_size < 56 or program_count > 64 or program_offset + program_size * program_count > len(data):
+        raise ValueError("7-Zip helper has invalid ELF program headers")
+    for index in range(program_count):
+        header = program_offset + index * program_size
+        if struct.unpack_from("<I", data, header)[0] == 3:  # PT_INTERP
+            offset = struct.unpack_from("<Q", data, header + 8)[0]
+            size = struct.unpack_from("<Q", data, header + 32)[0]
+            if size <= 64 and data[offset:offset + size] == b"/system/bin/linker64\0":
+                return
+    raise ValueError("7-Zip helper lacks the Android executable interpreter")
+
+
+def native_extractor(work, ndk, abi):
+    """Build unmodified upstream 7-Zip as an installer-extracted PIE helper."""
+    build = work / "native-7zip"
+    build.mkdir(parents=True)
+    archive = checked_download(SEVEN_ZIP_SOURCE[0], build / "7zip-26.03.tar.gz",
+                               SEVEN_ZIP_SOURCE[1])
+    with tarfile.open(archive, "r:gz") as source:
+        source.extractall(build, filter="data")
+    source = build / "7zip-26.03"
+    project = source / "CPP/7zip/Bundles/Alone2"
+    compiler = ndk / "toolchains/llvm/prebuilt/linux-x86_64/bin"
+    cc = compiler / f"{ARCHES[abi]}-linux-android{API}-clang"
+    cxx = compiler / f"{ARCHES[abi]}-linux-android{API}-clang++"
+    # Android's bionic has pthread functions in libc; the NDK has no libpthread.
+    # Link libc++ into this separate executable: its process may not inherit the
+    # app loader's native-library search path.
+    # DISABLE_RAR leaves DMG/HFS/APFS support intact and avoids restricted RAR code.
+    flags = ["CXXFLAGS_EXTRA=-Wno-shorten-64-to-32"] if abi == "x86_64" else []
+    command(["make", "-j", "4", "-f", "../../cmpl_clang.mak",
+             f"CC={cc}", f"CXX={cxx}", "LIB2=-ldl",
+             "LDFLAGS_STATIC_3=-static-libstdc++", "DISABLE_RAR=1", *flags],
+            cwd=project, log=build / "build.log")
+    built = project / "b/c/7zz"
+    result = build / EXTRACTOR_NAME
+    shutil.copyfile(built, result)
+    result.chmod(0o755)
+    check_extractor_elf(result.read_bytes(), abi)
+    return result
+
+
 def replace_once(path, before, after):
     content = path.read_text()
     if content.count(before) != 1:
@@ -177,7 +239,7 @@ def replace_once(path, before, after):
     path.write_text(content.replace(before, after))
 
 
-def stage_project(work, template, wheels, abi, ndk, *, release=False,
+def stage_project(work, template, wheels, abi, ndk, extractor, *, release=False,
                   version_name=None, version_code=None):
     sys.path.insert(0, str(ROOT / "tools"))
     from source_checks import manifest_files
@@ -212,6 +274,10 @@ def stage_project(work, template, wheels, abi, ndk, *, release=False,
     replace_once(build / "build.gradle", "main.res.srcDirs += ['res']",
                  "main.res.srcDirs += ['res']\n"
                  "        main.assets.srcDirs += ['src/licenses/assets']")
+    # Compressed .so entries are installed into nativeLibraryDir, where Android
+    # permits execution. The helper cannot be executed from writable app storage.
+    replace_once(build / "build.gradle", "useLegacyPackaging shouldUseLegacyPackaging()",
+                 "useLegacyPackaging true")
     replace_once(build / "config.gradle", "ndkVersion         : '29.0.14206865'",
                  f"ndkVersion         : '{NDK_VERSION}'")
     manifest = build / "src/main/AndroidManifest.xml"
@@ -247,6 +313,13 @@ def stage_project(work, template, wheels, abi, ndk, *, release=False,
     if hashlib.sha256(ndk_notice.read_bytes()).hexdigest() != NDK_NOTICE_SHA256:
         raise ValueError("Android NDK toolchain notice changed")
     shutil.copyfile(ndk_notice, notices / "Android-NDK-NOTICE.toolchain")
+    seven_zip = extractor.parent / "7zip-26.03"
+    for name, relative in SEVEN_ZIP_LICENSES.items():
+        shutil.copyfile(seven_zip / relative, notices / name)
+    native_dir = build / "src/main/jniLibs" / abi
+    native_dir.mkdir(parents=True)
+    check_extractor_elf(extractor.read_bytes(), abi)
+    shutil.copyfile(extractor, native_dir / EXTRACTOR_NAME)
     wheel_dir = build / "src/main/wheels"
     wheel_dir.mkdir(parents=True)
     for path in wheels:
@@ -342,18 +415,23 @@ def environment(work, sdk, ndk, java, templates, supplied_key=None, release=Fals
     return env
 
 
-def verify_apk(output, abi):
+def verify_apk(output, abi, sdk):
     with zipfile.ZipFile(output) as archive:
         names = archive.namelist()
         if not any(name.startswith(f"lib/{abi}/") for name in names):
             raise ValueError("Target Android ABI libraries missing")
         if any(name.startswith("lib/") and not name.startswith(f"lib/{abi}/") for name in names):
             raise ValueError("Unexpected Android ABI in APK")
+        helper = f"lib/{abi}/{EXTRACTOR_NAME}"
+        if helper not in names or archive.getinfo(helper).compress_type != zipfile.ZIP_DEFLATED:
+            raise ValueError("Installer-extracted 7-Zip helper missing from APK")
+        check_extractor_elf(archive.read(helper), abi)
         if any(Path(name).suffix.lower() in {".dmg", ".ipa", ".aem", ".aei", ".gof2save"}
                or "installation.json" in name for name in names):
             raise ValueError("Original content or import receipt entered the APK")
         expected = {"assets/licenses/" + name for name in
                     ("LICENSE.md", "THIRD_PARTY_NOTICES.md", "Android-NDK-NOTICE.toolchain",
+                     *SEVEN_ZIP_LICENSES,
                      *RUNTIME_NOTICES)}
         if not expected.issubset(names):
             raise ValueError("Required third-party notices missing from APK")
@@ -363,8 +441,8 @@ def verify_apk(output, abi):
         try:
             with zipfile.ZipFile(io.BytesIO(archive.read("assets/chaquopy/app.imy"))) as python:
                 if not {"android_import_worker.pyc", "import_game.pyc",
-                        "gof2_content/game_install.pyc"}.issubset(python.namelist()):
-                    raise ValueError("Shared Mac app ZIP importer missing from APK")
+                        "gof2_content/game_install.pyc", "gof2_content/dmg.pyc"}.issubset(python.namelist()):
+                    raise ValueError("Shared Mac app ZIP/DMG importer missing from APK")
             with zipfile.ZipFile(io.BytesIO(archive.read("assets/chaquopy/requirements-common.imy"))) as packages:
                 licenses = {"capstone-5.0.6.dist-info/licenses/LICENSE.TXT",
                             "capstone-5.0.6.dist-info/licenses/LICENSE_LLVM.TXT",
@@ -379,6 +457,15 @@ def verify_apk(output, abi):
                         raise ValueError("Android importer native dependency has the wrong ABI: " + native)
         except (KeyError, zipfile.BadZipFile) as error:
             raise ValueError("Android Python importer missing from APK") from error
+    aapt2 = next((path for path in sorted((sdk / "build-tools").glob("*/aapt2"), reverse=True)
+                  if path.is_file()), None)
+    if aapt2 is None:
+        raise ValueError("Android build-tools aapt2 is needed to verify native extraction")
+    manifest = subprocess.run([str(aapt2), "dump", "xmltree", "--file",
+                               "AndroidManifest.xml", str(output)],
+                              check=True, capture_output=True, text=True, timeout=30).stdout
+    if re.search(r":extractNativeLibs\([^)]*\)=true\b", manifest) is None:
+        raise ValueError("APK does not request installer extraction of native libraries")
 
 
 def main():
@@ -419,21 +506,22 @@ def main():
     work.mkdir(parents=True)
     print("Building native importer dependencies", flush=True)
     wheels = native_wheels(work, args.ndk.resolve(), args.abi)
+    extractor = native_extractor(work, args.ndk.resolve(), args.abi)
     print("Staging the engine-only Android Gradle project", flush=True)
     stage = stage_project(work, args.templates.resolve(), wheels, args.abi,
-                          args.ndk.resolve(), release=args.release,
+                          args.ndk.resolve(), extractor, release=args.release,
                           version_name=args.version_name, version_code=args.version_code)
     env = environment(work, args.sdk.resolve(), args.ndk.resolve(), args.java.resolve(),
                       args.templates.resolve(), args.keystore, args.release)
     print("Importing Godot project resources", flush=True)
     command([str(args.godot), "--headless", "--path", str(stage), "--editor", "--import"],
             env=env, log=work / "godot-editor.log", timeout=300)
-    print("Exporting Android APK with direct ZIP importer", flush=True)
+    print("Exporting Android APK with Mac ZIP/DMG importer", flush=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     command([str(args.godot), "--headless", "--path", str(stage),
              "--export-release" if args.release else "--export-debug",
              "Android Import", str(output)], env=env, log=work / "godot-export.log", timeout=1200)
-    verify_apk(output, args.abi)
+    verify_apk(output, args.abi, args.sdk.resolve())
     print(output, output.stat().st_size, hashlib.sha256(output.read_bytes()).hexdigest())
 
 

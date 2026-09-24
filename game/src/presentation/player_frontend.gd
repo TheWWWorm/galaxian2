@@ -62,7 +62,7 @@ func _ready() -> void:
 	_picker.filters=PackedStringArray(["*.dmg,*.app ; Galaxy on Fire 2 Full HD Mac game"])
 	if OS.get_name()=="Android":
 		_picker.use_native_dialog=true;_picker.file_mode=FileDialog.FILE_MODE_OPEN_FILE
-		_picker.filters=PackedStringArray(["*.zip ; Galaxy on Fire 2 Full HD Mac application ZIP"])
+		_picker.filters=PackedStringArray(["*.dmg,*.zip ; Galaxy on Fire 2 Full HD Mac disk image or application ZIP"])
 	_importer=DmgImport.new();add_child(_importer)
 	_importer.progress.connect(func(message):
 		if phase=="import" and is_instance_valid(_import_status):_import_status.text=message)
@@ -221,7 +221,7 @@ func _resume() -> void:
 func show_setup() -> void:
 	_show_details("setup","Galaxy on Fire 2 Full HD")
 	if OS.get_name()=="Android":
-		_label("Select a ZIP containing your Galaxy on Fire 2 Full HD Mac application. The game prepares the original content on this device, then remembers it for future launches.")
+		_label("Select your Galaxy on Fire 2 Full HD Mac disk image (.dmg) or a ZIP containing its application (.app). The game prepares the original content on this device, then remembers it for future launches.")
 	else:
 		_label("Select your Mac disk image (.dmg) or application folder (.app). The game prepares the original content locally the first time, then remembers it for future launches.")
 	_label("Original game content is not included with the remake.")

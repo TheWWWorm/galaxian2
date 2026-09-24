@@ -19,7 +19,7 @@ This is an early playable preview, not the complete game.
 | Windows x64 | Windows 10/11, Intel or AMD 64-bit | Extract the ZIP, then open `Galaxian2.exe` |
 | Linux x64 | Modern Linux with glibc, Intel or AMD 64-bit | Extract the archive, then run `./Galaxian2` |
 | macOS Apple Silicon | M-series Macs | Extract the ZIP and open `Galaxian2.app` |
-| Android ARM64 (experimental) | Android 10 or later, 64-bit ARM | Install the APK, then select a ZIP containing your Mac `.app` |
+| Android ARM64 (experimental) | Android 10 or later, 64-bit ARM | Install the APK, then select your Mac `.dmg` or a ZIP containing its `.app` |
 
 Desktop packages include the engine and offline import helpers. Keep each package
 intact. Windows and macOS builds are unsigned. Linux is the tested platform;
@@ -41,12 +41,13 @@ disk image labelled 1.0.7 that contains those same game files. The newer App Sto
 folders and disk images use the same content preparation. Existing completed
 imports and their saves remain usable.
 
-On Android, make a ZIP containing the original Mac `.app` folder and transfer
-it to the device. Select that ZIP through **Choose Mac game…**. Direct `.dmg`
-import is unavailable on Android. Keep ample free space for the ZIP, extracted
-files and prepared content; the importer reports storage requirements. Importing
-can take several minutes. The APK includes its import tools and requires no
-separate Python installation.
+On Android, transfer your original Mac `.dmg` to the device and select it through
+**Choose Mac game…**. You can also select a ZIP containing the original Mac `.app`
+folder. Keep ample free space for the selected file, extracted files and prepared
+content; the importer reports storage requirements. Importing can take several
+minutes. The APK includes its import tools and requires no separate Python or
+archive utility installation. Updating the APK preserves existing local imports
+and saves; there is no need to import the same game again.
 
 ## What's playable
 

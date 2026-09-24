@@ -1,4 +1,4 @@
-"""Prepare a player-selected Mac app ZIP with the shared private Mac importer.
+"""Prepare a player-selected Mac app ZIP or DMG with the shared Mac importer.
 
 The Android bridge copies the SAF document to a private, bounded file before
 calling this module. The original executable is only read as static input.
@@ -89,7 +89,18 @@ def extract_app(source, destination, checkpoint):
         return app
 
 
-def run(source, data_directory, status_path, cancel_path):
+def _native_extractor(path):
+    """Use only the executable 7-Zip binary installed with the Android package."""
+    if not path:
+        raise ContentError("This Android build is missing its DMG extractor")
+    tool = Path(path)
+    if (not tool.is_absolute() or tool.name != "libgof2_7zz.so" or tool.is_symlink()
+            or not tool.is_file() or not os.access(tool, os.X_OK)):
+        raise ContentError("The installed Android DMG extractor is missing or cannot run")
+    return str(tool)
+
+
+def run(source, data_directory, status_path, cancel_path, extractor_path=None):
     """Chaquopy entry point. Always write the same status contract as import_game.py."""
     source = Path(source)
     data_directory = Path(data_directory)
@@ -110,12 +121,35 @@ def run(source, data_directory, status_path, cancel_path):
                                        "progress": float(ratio)})
 
     extracted = source.parent / "extracted"
+    extracted_created = False
     try:
         checkpoint("Checking Android native importer", 0.0)
+        if source.suffix.lower() == ".dmg":
+            if source.is_symlink() or not source.is_file() or not 0 < source.stat().st_size <= MAX_SOURCE:
+                raise ContentError("Choose a readable Mac DMG within the 8 GiB import limit")
+            extractor = _native_extractor(extractor_path)
+        elif source.suffix.lower() == ".zip":
+            extractor = None
+        else:
+            raise ContentError("Choose a Mac app ZIP or DMG")
         verify_native_decoders()
-        extracted.mkdir()
-        app = extract_app(source, extracted, checkpoint)
-        receipt, _ = prepare(app, data_directory / "imports", checkpoint)
+        if extractor is None:
+            extracted.mkdir()
+            extracted_created = True
+            app = extract_app(source, extracted, checkpoint)
+            receipt, _ = prepare(app, data_directory / "imports", checkpoint)
+        else:
+            previous = os.environ.get("GOF2_7ZIP")
+            os.environ["GOF2_7ZIP"] = extractor
+            try:
+                # Pass the original image so desktop and Android use the same
+                # mac-dmg receipt, source hash, and cache identity.
+                receipt, _ = prepare(source, data_directory / "imports", checkpoint)
+            finally:
+                if previous is None:
+                    os.environ.pop("GOF2_7ZIP", None)
+                else:
+                    os.environ["GOF2_7ZIP"] = previous
         checkpoint("Mac game is ready", 1.0)
         write_status(status_path, {"state": "ready", "message": "Mac game is ready",
                                    "receipt": str(receipt)})
@@ -124,5 +158,5 @@ def run(source, data_directory, status_path, cancel_path):
         write_status(status_path, {"state": "cancelled" if stopped else "failed",
                                    "message": str(error)})
     finally:
-        if extracted.exists():
+        if extracted_created:
             shutil.rmtree(extracted)

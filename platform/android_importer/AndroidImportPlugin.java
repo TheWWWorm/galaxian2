@@ -63,7 +63,7 @@ public final class AndroidImportPlugin extends GodotPlugin {
             Context context = getActivity().getApplicationContext();
             Uri uri = Uri.parse(uriText);
             if (!"content".equals(uri.getScheme())) {
-                throw new IllegalArgumentException("Choose your Mac app ZIP using the Android file picker");
+                throw new IllegalArgumentException("Choose your Mac .dmg or app ZIP using the Android file picker");
             }
             File data = new File(dataPath).getCanonicalFile();
             File status = new File(statusPath).getCanonicalFile();
@@ -82,9 +82,10 @@ public final class AndroidImportPlugin extends GodotPlugin {
             if (!jobs.isDirectory() && !jobs.mkdirs()) {
                 throw new IllegalStateException("Could not create the import progress folder");
             }
-            String displayName = displayName(context.getContentResolver(), uri);
-            if (!displayName.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-                throw new IllegalArgumentException("Choose a ZIP containing the original Mac .app");
+            String displayName = displayName(context.getContentResolver(), uri).toLowerCase(Locale.ROOT);
+            String extension = displayName.endsWith(".dmg") ? ".dmg" : ".zip";
+            if (!displayName.endsWith(".zip") && !displayName.endsWith(".dmg")) {
+                throw new IllegalArgumentException("Choose the original Mac .dmg or a ZIP containing its .app");
             }
             File work = new File(jobs, status.getName() + ".work");
             if (!work.mkdir()) {
@@ -92,7 +93,7 @@ public final class AndroidImportPlugin extends GodotPlugin {
             }
             activeCancel = cancel;
             lastError = "";
-            Thread worker = new Thread(() -> execute(context, uri, data, status, cancel, work),
+            Thread worker = new Thread(() -> execute(context, uri, data, status, cancel, work, extension),
                                        "gof2-android-import");
             worker.start();
             return true;
@@ -120,9 +121,10 @@ public final class AndroidImportPlugin extends GodotPlugin {
         }
     }
 
-    private void execute(Context context, Uri uri, File data, File status, File cancel, File work) {
+    private void execute(Context context, Uri uri, File data, File status, File cancel, File work,
+                         String extension) {
         try {
-            File source = new File(work, "source.zip");
+            File source = new File(work, "source" + extension);
             copySource(context.getContentResolver(), uri, source, status, cancel);
             if (cancel.isFile()) {
                 throw new InterruptedException("Import cancelled; the previous game and saves are unchanged");
@@ -132,7 +134,9 @@ public final class AndroidImportPlugin extends GodotPlugin {
             }
             Python.getInstance().getModule("android_import_worker").callAttr(
                     "run", source.getAbsolutePath(), data.getAbsolutePath(),
-                    status.getAbsolutePath(), cancel.getAbsolutePath());
+                    status.getAbsolutePath(), cancel.getAbsolutePath(),
+                    new File(context.getApplicationInfo().nativeLibraryDir,
+                             "libgof2_7zz.so").getAbsolutePath());
         } catch (Exception error) {
             String message = error.getMessage() == null ? "Android importer stopped before finishing" : error.getMessage();
             writeStatus(status, cancel.isFile() ? "cancelled" : "failed", message);
@@ -164,7 +168,7 @@ public final class AndroidImportPlugin extends GodotPlugin {
         long count = 0;
         long last = 0;
         try (InputStream input = resolver.openInputStream(uri)) {
-            if (input == null) throw new IllegalArgumentException("Cannot read the selected Mac app ZIP");
+            if (input == null) throw new IllegalArgumentException("Cannot read the selected Mac game file");
             try (FileOutputStream output = new FileOutputStream(source)) {
                 int size;
                 while ((size = input.read(buffer)) != -1) {
@@ -173,7 +177,7 @@ public final class AndroidImportPlugin extends GodotPlugin {
                     }
                     count += size;
                     if (count > MAX_SOURCE) {
-                        throw new IllegalArgumentException("The Mac app ZIP exceeds the 8 GiB import limit");
+                        throw new IllegalArgumentException("The Mac game file exceeds the 8 GiB import limit");
                     }
                     if (source.getUsableSpace() < HEADROOM) {
                         throw new IllegalStateException("Import needs more free device storage");
@@ -182,13 +186,13 @@ public final class AndroidImportPlugin extends GodotPlugin {
                     long now = System.nanoTime();
                     if (now - last > 200_000_000L) {
                         last = now;
-                        writeStatus(status, "working", "Copying the selected Mac app ZIP");
+                        writeStatus(status, "working", "Copying the selected Mac game file");
                     }
                 }
                 output.getFD().sync();
             }
         }
-        if (count == 0) throw new IllegalArgumentException("The selected Mac app ZIP is empty");
+        if (count == 0) throw new IllegalArgumentException("The selected Mac game file is empty");
     }
 
     private static void writeStatus(File path, String state, String message) {
