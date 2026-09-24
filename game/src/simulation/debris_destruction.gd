@@ -1,4 +1,5 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
 ## Stationary Junk debris. A lethal update removes the model immediately and
 ## may replace it with cargo; ship tumble, fragments and expiry do not apply.
 const Rules=preload("res://src/content/contract_junk_definitions.gd")
@@ -27,8 +28,8 @@ func configure(bindings: RefCounted,resources: RefCounted,construction: RefCount
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(data.campaign_cursor),
 		"actor_id":actor_id,"actor_kind":-1,"resource_id":actor.resource_id,"phase":"ready","mode":int(rules.initial_mode),
 		"pose":actor.body_pose,"statistics_pose":actor.statistics_pose,"active":bool(rules.initial_active),
-		"model_draw_enabled":bool(rules.initial_model_draw_enabled),"cargo":{},"elapsed_ms":0}
-	_rules=rules.duplicate(true);_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+		"model_draw_enabled":bool(rules.initial_model_draw_enabled),"cargo":{},"elapsed_ms":0,"retire_on_transfer":true}
+	_rules=rules.duplicate(true);_max_ms=Frames.simulation_limit(bindings)
 	return true
 
 func advance(delta_ms: Variant,random_state: Dictionary,actor: Dictionary) -> Dictionary:
@@ -61,6 +62,18 @@ func advance(delta_ms: Variant,random_state: Dictionary,actor: Dictionary) -> Di
 	return {"state":snapshot(),"random_state":random.snapshot(),"started":started,
 		"sound_events":sounds,"audio_events":sounds.map(func(id):return {"source_id":id,"position":_state.pose.origin}),
 		"bursts":bursts,"clear_selected_target":clear_target}
+
+## The encounter publishes these changes together with its combat body and
+## hold. Collection retires debris without replaying destruction or its reward.
+func _retain_recovery_frame(frame: Dictionary) -> void:
+	var changes: Dictionary=frame.actor_changes
+	if changes.has("body_pose"):_state.pose=changes.body_pose
+	if changes.has("statistics_pose"):_state.statistics_pose=changes.statistics_pose
+	if changes.has("cargo_pose"):_state.cargo.pose=changes.cargo_pose
+	if changes.has("cargo_model_exists"):_state.cargo.model_exists=changes.cargo_model_exists
+	if changes.has("cargo_eligible"):_state.cargo.eligible=changes.cargo_eligible
+	if changes.has("cargo_entries"):_state.cargo.entries=changes.cargo_entries.duplicate(true)
+	if changes.has("active"):_state.active=changes.active
 
 func snapshot() -> Dictionary:return _state.duplicate(true)
 

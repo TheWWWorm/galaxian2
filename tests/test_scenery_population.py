@@ -9,7 +9,7 @@ from test_ship_models import branch
 from test_materials import arm_wide
 
 
-def fixture(mac,shift=0):
+def fixture(mac,shift=0,alternate=False):
     base=0x100000+shift;offset=512;data=bytearray(9000);slice_offset=4096 if mac else 0
     sites={'count':1000,'station':2000,'station_id':2200,'seed':2400,'draw':2600,'bits':3000,'resize':3500,'modulo':6000}
     blocks={}
@@ -34,7 +34,7 @@ def fixture(mac,shift=0):
     block('count',reader.MAC_COUNT if mac else reader.ARM_COUNT)
     block('station','554889e5488b87180200005dc3' if mac else 'd0f888017047')
     block('station_id','554889e58b47105dc3' if mac else '80687047')
-    for key in ['seed','draw','bits']:block(key,getattr(reader,('MAC_' if mac else 'ARM_')+key.upper()))
+    for key in ['seed','draw','bits']:block(key,reader.MAC_ALTERNATES[key][0][1] if alternate and mac else getattr(reader,('MAC_' if mac else 'ARM_')+key.upper()))
     text={'name':b'__text','segment':b'__TEXT','address':base,'offset':offset,'length':5000}
     if not mac:
         struct.pack_into('<7I',data,0,0xfeedface,12,9,2,3,296,0)
@@ -50,6 +50,20 @@ def fixture(mac,shift=0):
 
 
 class SceneryPopulation(unittest.TestCase):
+    def test_alternate_mac_sampler_keeps_mask_and_call_proofs(self):
+        for shift in (0, 0x400000):
+            m, blocks = fixture(True, shift, alternate=True)
+            result = reader.extract_scenery_population(m)
+            self.assertEqual((result['count_base'], result['count_bound']), (17, 37))
+            self.assertEqual(result['provenance']['draw']['bytes'], 170)
+            for key, at in [('seed', 0x3d + 2), ('bits', 0x41 + 2), ('draw', blocks['draw'][2]['repeat'][0])]:
+                original = m.data
+                raw = bytearray(original)
+                raw[512 + blocks[key][0] + at] ^= 1
+                m.data = bytes(raw)
+                self.assertFalse(reader.extract_scenery_population(m), key)
+                m.data = original
+
     def test_relocated_and_changed_counts(self):
         for mac in [True,False]:
             for shift in [0,0x400000]:

@@ -22,7 +22,8 @@ static func validate(data: Variant,executable_bytes: int,architecture: String,pr
 	var spans := []
 	for key in sizes:
 		var row: Variant = provenance.get(key)
-		if not Fonts.extent(row,"offset","bytes",[sizes[key]],executable_bytes):return "Invalid reflection selection extent: "+key
+		var lengths: Array = [330,310] if architecture=="x86_64" and key=="bind" else [sizes[key]]
+		if not Fonts.extent(row,"offset","bytes",lengths,executable_bytes):return "Invalid reflection selection extent: "+key
 		var begin := int(row.offset);var end := begin+int(row.bytes)
 		for span in spans:
 			if begin<span.y and end>span.x:return "Overlapping reflection declarations"

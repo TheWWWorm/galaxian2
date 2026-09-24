@@ -35,7 +35,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, station_id: Variant
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	_models=bindings.scenery_resources.model_ids.duplicate()
 	_override_item_id=int(bindings.scenery_resources.override_item_id)
-	_count=count_state.count;_system_id=int(catalogues.tables.stations[station_id].system_id)
+	_count=count_state.count;_system_id=-1 if station_id==-1 else int(catalogues.tables.stations[station_id].system_id)
 	_station_id=station_id;_location_match=location_match;_ores=ores
 	return true
 

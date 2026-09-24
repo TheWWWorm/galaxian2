@@ -1,7 +1,9 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 const Kappa=preload("res://src/content/kappa_population_definitions.gd")
+const Story=preload("res://src/content/story_encounter_definitions.gd")
 ## Ordinary NPC ownership; Opening alone uses the radio activation cue. AI and weapon
 ## target-list selection remain distinct from this canonical actor-ID inventory.
 const EscapeCamera=preload("res://src/content/opening_escape_camera_definitions.gd")
@@ -38,6 +40,8 @@ var _contact_random:={}
 var _display_available:=false
 var _contract_encounter:={}
 var _contract_settlement:={}
+const EMPTY_RECOVERY={"accepted_quantity":0,"kind9_quantity":0,"friendly_cargo_taken":false,"item_flags":[]}
+var _recovery_totals:={}
 
 func clear() -> void:
 	error = ""
@@ -54,6 +58,7 @@ func clear() -> void:
 	_provocation=null;_reputation_rules={};_contact_random={};_display_available=false
 	_contract_encounter={}
 	_contract_settlement={}
+	_recovery_totals={}
 
 func configure(bindings: RefCounted, catalogues: RefCounted, difficulty: Variant) -> bool:
 	clear()
@@ -137,7 +142,7 @@ func _configure_reputation(bindings: RefCounted, cursor: int, difficulty: Varian
 	if not Reputation.available(bindings):return true
 	var history:=Reputation.new()
 	var kinds:=_actors.map(func(actor):return int(actor.snapshot().actor_kind))
-	if not history.configure(bindings,cursor,kinds,difficulty):return reject(history.error)
+	if not history.configure(bindings,cursor,kinds,difficulty,_training_weapons.has("kappa_lifecycle")):return reject(history.error)
 	_reputation=history
 	return true
 
@@ -175,6 +180,29 @@ func configure_convoy(bindings: RefCounted,catalogues: RefCounted,construction: 
 	_reputation_rules=bindings.mido_travel.convoy_lifecycle.terran_hostility.duplicate(true)
 	if not _configure_reputation(bindings,int(data.campaign_cursor),data.difficulty):
 		var reason:=error;clear();return reject(reason)
+	return true
+
+func _configure_story(bindings: RefCounted,catalogues: RefCounted,data: Dictionary,equipment: RefCounted,reputation: Dictionary) -> bool:
+	clear()
+	var reaction:=Provocation.new()
+	if not reaction._configure_story(bindings,catalogues,data,equipment,reputation):return reject(reaction.error)
+	var policy: Variant=bindings.weapon_parameters.get("ordinary_hit_policy",{})
+	if not HitDefinitions.parameters(policy):return reject("Story combat lacks the ordinary hit policy")
+	var actors:=[]
+	for row in data.actor_rows:
+		var actor:=Actor.new()
+		if not actor._configure_story(bindings,data,row):return reject(actor.error)
+		actors.append(actor)
+	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(data.campaign_cursor)}
+	_actors=actors;_hit_policy=policy.duplicate(true);_provocation=reaction;_training_weapons=data
+	_reputation_rules=data.standing
+	return _configure_reputation(bindings,int(data.campaign_cursor),data.difficulty)
+
+func apply_story_guidance(decision: Dictionary) -> bool:
+	var id: Variant=decision.get("actor_id")
+	if not _training_weapons.get("authored_story",false) or not id is int or id<0 or id>=_actors.size():return reject("Story guidance names an unavailable actor")
+	if not _actors[id].apply_story_guidance(decision):return reject(_actors[id].error)
+	_activated=_activated or bool(_actors[id].snapshot().active)
 	return true
 
 func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,equipment: RefCounted,reputation: Dictionary) -> bool:
@@ -233,12 +261,12 @@ func apply_kappa_guidance(decision: Dictionary) -> bool:
 	return true
 
 func advance_systems(actor_id: int,delta_ms: Variant) -> bool:
-	if not _training_weapons.has("kappa_lifecycle") or actor_id<0 or actor_id>=_actors.size():return reject("Systems update names an unavailable fighter")
+	if actor_id<0 or actor_id>=_actors.size():return reject("Systems update names an unavailable actor")
 	if not _actors[actor_id].advance_systems(delta_ms):return reject(_actors[actor_id].error)
 	return true
 
 func systems_for_frame(actor_id: int) -> RefCounted:
-	if not _training_weapons.has("kappa_lifecycle") or actor_id<0 or actor_id>=_actors.size():reject("Systems update names an unavailable fighter");return null
+	if actor_id<0 or actor_id>=_actors.size():reject("Systems update names an unavailable actor");return null
 	return _actors[actor_id].systems_for_frame()
 
 func apply_kappa_sequence(owner: RefCounted) -> bool:
@@ -252,7 +280,7 @@ func apply_kappa_sequence(owner: RefCounted) -> bool:
 
 func systems_hit(actor_id: Variant,amount: Variant,nonplayer_source: Variant=false) -> Dictionary:
 	error=""
-	if not _training_weapons.has("kappa_lifecycle") or not actor_id is int or actor_id<0 or actor_id>=_actors.size():reject("Systems hit names an unavailable fighter");return {}
+	if _provocation==null or _reputation==null or not actor_id is int or actor_id<0 or actor_id>=_actors.size():reject("Systems hit names an unavailable actor");return {}
 	var actor: RefCounted=_actors[actor_id].fork_for_frame()
 	var reaction: Dictionary=_provocation.evaluate_systems(actor.snapshot(),amount,nonplayer_source,_contact_random,_display_available)
 	if reaction.is_empty():reject(_provocation.error);return {}
@@ -274,6 +302,8 @@ func _reaction_actors(reaction: RefCounted,actors: Array) -> Array:
 		var actor: RefCounted=actors[id].fork_for_frame()
 		if _training_weapons.has("kappa_lifecycle"):
 			if not actor.retain_kappa_force(state.forced_hostile[id],state.permanent_hostile[id]):reject(actor.error);return []
+		elif state.has("systems_requested_damage"):
+			if not actor.retain_ordinary_force(state.forced_hostile[id],state.permanent_hostile[id]):reject(actor.error);return []
 		else:
 			if not actor.retain_local_force(state.forced_hostile[id]):reject(actor.error);return []
 		result.append(actor)
@@ -287,6 +317,12 @@ func alioth_actor_context() -> Dictionary:
 		var actor: Dictionary=owner.snapshot()
 		actor.current_hull=int(actor.vitals.hull)
 		result.actors.append(actor)
+	return result
+
+func kappa_actor_context() -> Dictionary:
+	if not _training_weapons.has("kappa_lifecycle"):return {}
+	var result:=_identity.duplicate()
+	result.actors=_actors.map(func(owner):return owner.kappa_observation())
 	return result
 
 func apply_alioth_sequence(owner: RefCounted) -> bool:
@@ -359,6 +395,8 @@ func relaunch_ambient(actor_id: int,bindings: RefCounted,death_owner: RefCounted
 	var reaction: RefCounted=_provocation.fork_for_frame()
 	if not actor.relaunch_ambient(bindings,death_owner):return reject(actor.error)
 	if not reaction.reset_actor_damage(actor_id):return reject(reaction.error)
+	var reactions: Dictionary=reaction.snapshot()
+	if reactions.has("systems_requested_damage") and not actor.retain_ordinary_force(reactions.forced_hostile[actor_id],reactions.permanent_hostile[actor_id]):return reject(actor.error)
 	var history: RefCounted=_reputation.fork_for_frame()
 	if actor.snapshot().has("spawn_generation") and not history.register_relaunch(actor.snapshot()):return reject(history.error)
 	_actors[actor_id]=actor;_provocation=reaction
@@ -450,6 +488,32 @@ func reputation_after(prior: Dictionary) -> Dictionary:
 	if result.is_empty():reject(_reputation.error)
 	return result
 
+## Called on the staged combat branch after the native hold accepts its one
+## transfer. World and career observe the same accepted quantity, not inventory
+## stack deltas. A failed enclosing frame discards this branch, including faction
+## changes that precede capacity acceptance in the original transaction.
+func record_cargo_recovery(actor: Dictionary,events: Array) -> bool:
+	var totals:=recovery_totals()
+	for event in events:
+		match event.kind:
+			"faction_cargo_taken":
+				if _reputation==null:return reject("Cargo recovery has no retained faction history")
+				if not _reputation.record_cargo_recovery(actor):return reject(_reputation.error)
+			"world_cargo_quantity":
+				if totals.accepted_quantity>2147483647-event.quantity:return reject("Recovered cargo exceeds the source counter range")
+				totals.accepted_quantity+=event.quantity
+			"friendly_cargo_taken":totals.friendly_cargo_taken=true
+			"kind9_cargo_quantity":
+				if totals.kind9_quantity>2147483647-event.quantity:return reject("Recovered Void cargo exceeds the source counter range")
+				totals.kind9_quantity+=event.quantity
+			"item_recovery_flag":
+				if not totals.item_flags.has(event.index):totals.item_flags.append(event.index)
+	_recovery_totals=totals
+	return true
+
+func recovery_totals() -> Dictionary:
+	return (EMPTY_RECOVERY if _recovery_totals.is_empty() else _recovery_totals).duplicate(true)
+
 func apply_local_patrol_guidance(decision: Dictionary) -> bool:
 	error=""
 	var id: Variant=decision.get("actor_id")
@@ -510,18 +574,33 @@ func update(scene: Variant, phase: Variant, preceding_radio: Variant) -> bool:
 
 func snapshot() -> Dictionary:
 	if _identity.is_empty(): return {}
-	var result := _identity.duplicate()
+	var result := career_snapshot()
 	result.activated = _activated
 	result.phase = _phase
-	result.actors = []
-	for actor in _actors: result.actors.append(actor.snapshot())
+	result.actors = actor_snapshots()
+	if _training_weapons.has("free_lifecycle"):result.free_context=_training_weapons.free_context.duplicate(true)
+	return result
+
+## Detached accounting and encounter identity, without copying actor poses.
+func career_snapshot() -> Dictionary:
+	if _identity.is_empty():return {}
+	var result:=_identity.duplicate()
 	if _reputation!=null:result.reputation=_reputation.snapshot()
 	elif _contract_encounter.get("kind")==7:result.reputation={"events":[]};result.current_reputation=current_reputation()
 	if _provocation!=null:
 		result.provocation=_provocation.snapshot();result.current_reputation=current_reputation()
 	if not _contract_encounter.is_empty():result.contract_encounter=_contract_encounter.duplicate(true)
 	if not _contract_settlement.is_empty():result.contract_settlement=_contract_settlement.duplicate(true)
-	if _training_weapons.has("free_lifecycle"):result.free_context=_training_weapons.free_context.duplicate(true)
+	if not _recovery_totals.is_empty():result.recovery=_recovery_totals.duplicate(true)
+	return result
+
+func actor_snapshot(actor_id: int) -> Dictionary:
+	if actor_id<0 or actor_id>=_actors.size():reject("Observation names an unavailable actor");return {}
+	return _actors[actor_id].snapshot()
+
+func actor_snapshots() -> Array:
+	var result:=[]
+	for actor in _actors:result.append(actor.snapshot())
 	return result
 
 func normal_hit(actor_id: Variant, amount: Variant, nonplayer_source: Variant=false) -> Dictionary:
@@ -563,7 +642,7 @@ func refresh_hostility(actor_id: Variant) -> bool:
 			var state: Dictionary=_provocation.snapshot()
 			if not _actors[actor_id].refresh_kappa_hostility(current_reputation(),state.forced_hostile[actor_id],state.permanent_hostile[actor_id],_reputation_rules):return reject(_actors[actor_id].error)
 			return true
-		if _training_weapons.has("free_lifecycle"):
+		if _training_weapons.has("free_lifecycle") or _training_weapons.get("authored_story",false):
 			if not _actors[actor_id].apply_free_hostility(current_reputation(),_provocation.snapshot().forced_hostile[actor_id],_reputation_rules):return reject(_actors[actor_id].error)
 			return true
 		if _training_weapons.has("alioth_lifecycle"):
@@ -617,10 +696,10 @@ func supports_weapon_hit(weapon: Variant) -> bool:
 	var kinds: Array=[0]
 	if not _training_weapons.is_empty() and weapon is Dictionary:
 		if weapon.get("nonplayer_source",false)==true:
-			var valid: bool=Kappa.npc_hit(_training_weapons,weapon) if _training_weapons.has("kappa_lifecycle") else FreeLife.npc_hit(_training_weapons,weapon) if _training_weapons.has("free_lifecycle") else Alioth.npc_hit(_training_weapons,weapon) if _training_weapons.has("alioth_lifecycle") else Convoy.npc_hit(_training_weapons,weapon) if _training_weapons.has("capital_death") else (ContractLife.npc_hit(_training_weapons,weapon) if not _contract_encounter.is_empty() else (Travel.npc_hit(_training_weapons,weapon) if _provocation!=null else TrainingWeapons.npc_hit(_training_weapons,weapon)))
+			var valid: bool=Story.npc_hit(_training_weapons,weapon) if _training_weapons.get("authored_story",false) else Kappa.npc_hit(_training_weapons,weapon) if _training_weapons.has("kappa_lifecycle") else FreeLife.npc_hit(_training_weapons,weapon) if _training_weapons.has("free_lifecycle") else Alioth.npc_hit(_training_weapons,weapon) if _training_weapons.has("alioth_lifecycle") else Convoy.npc_hit(_training_weapons,weapon) if _training_weapons.has("capital_death") else (ContractLife.npc_hit(_training_weapons,weapon) if not _contract_encounter.is_empty() else (Travel.npc_hit(_training_weapons,weapon) if _provocation!=null else TrainingWeapons.npc_hit(_training_weapons,weapon)))
 			if not valid:return reject("NPC damage differs from this encounter's weapon declaration")
 			kinds=[0,1]
-		elif weapon.get("campaign_cursor") in [18,19] and preload("res://src/content/ordinary_fitting_definitions.gd").ordinary(weapon):kinds=[0,1,2]
+		elif (weapon.get("campaign_cursor") in FlightStages.FREE or (weapon.get("campaign_cursor")==21 and _training_weapons.has("kappa_lifecycle"))) and preload("res://src/content/ordinary_fitting_definitions.gd").ordinary(weapon):kinds=[0,1,2]
 		elif weapon.get("kind")==2:
 			if not TrainingWeapons.dispersed_primary(weapon):return reject("Player damage lacks its verified primary declaration")
 			kinds=[0,2]
@@ -662,6 +741,8 @@ func fork_for_frame() -> RefCounted:
 	copy._reputation_rules=_reputation_rules;copy._contact_random=_contact_random.duplicate(true);copy._display_available=_display_available
 	copy._contract_encounter=_contract_encounter
 	copy._contract_settlement=_contract_settlement.duplicate(true)
+	# Recovery replaces its small observation only on pickup.
+	copy._recovery_totals=_recovery_totals
 	for actor in _actors: copy._actors.append(actor.fork_for_frame())
 	return copy
 

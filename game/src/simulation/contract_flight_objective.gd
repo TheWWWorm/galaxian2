@@ -6,23 +6,32 @@ const Encounter=preload("res://src/simulation/full_hold_encounter.gd")
 const World=preload("res://src/content/contract_world_definitions.gd")
 const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
 const Visit=preload("res://src/simulation/campaign_visit.gd")
+const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 var error:=""
 var _state:={}
 var _contracts: RefCounted
 var _field_identity: RefCounted
 var _visit: RefCounted
 var _bindings: RefCounted
+var _rescue_result:=false
+var _result_observation: RefCounted
 
 func configure(bindings: RefCounted,construction: RefCounted,encounter: RefCounted,library: RefCounted=null) -> bool:
 	error=""
 	if not World.available(bindings) or not construction is Construction or not encounter is Encounter:return reject("Contract objectives require the prepared ordinary flight")
 	var entry: Dictionary=construction.snapshot()
 	var contracts: RefCounted=construction.contract_owner()
-	if contracts==null or not (World.ordinary_entry(bindings,entry) or FreeFlight.ordinary_entry(bindings,entry)) or not encounter.bind_contract_session(contracts,bindings):return reject(encounter.error)
+	var rescue:=Kappa.prepared_entry(bindings,entry)
+	if contracts==null or not (World.ordinary_entry(bindings,entry) or FreeFlight.ordinary_entry(bindings,entry) or rescue):return reject("The objective lost its prepared encounter or retained career")
 	var visit: RefCounted
-	if FreeFlight.Campaign.active_visit(bindings.mido_travel,entry.departure.get("free_context",{})):
+	if rescue:
+		visit=Visit.new()
+		if not visit.configure_result(bindings,library,entry.campaign_cursor,entry.departure.mission):return reject(visit.error)
+	elif FreeFlight.Campaign.active_visit(bindings.mido_travel,entry.departure.get("free_context",{})):
 		visit=Visit.new()
 		if not visit.configure(bindings,library,entry.campaign_cursor,entry.departure.mission):return reject(visit.error)
+	var bound: bool=encounter.bind_campaign_session(contracts,bindings,entry.departure.mission) if rescue else encounter.bind_contract_session(contracts,bindings)
+	if not bound:return reject(encounter.error)
 	_state={"base_content_id":entry.base_content_id,"binding_id":entry.binding_id,"campaign_cursor":entry.campaign_cursor,
 		"phase":"collecting","mission":entry.departure.mission.duplicate(true),"required_cargo":0,
 		"cargo_objective_satisfied":false,"cargo_objective_acknowledged":false,"station_return_required":false,
@@ -30,12 +39,27 @@ func configure(bindings: RefCounted,construction: RefCounted,encounter: RefCount
 		"reward_credits":0,"dialogue":{"visible":false,"index":0,"count":0,"previous_available":false}}
 	_contracts=contracts;_field_identity=construction.scenery_owner().presentation_identity()
 	_visit=visit;_bindings=bindings
+	_rescue_result=rescue;_result_observation=null
 	return true
 
 func poll_visit(world_ms: int,hud_ms: int,blocked: bool) -> bool:
 	error=""
-	if _visit==null:return true
+	if _visit==null or _rescue_result:return true
 	return true if _visit.poll(_contracts.station_id(),world_ms,hud_ms,false,blocked) else reject(_visit.error)
+
+func poll_campaign_result(encounter: RefCounted,radio: RefCounted,rescue: RefCounted,completion_allowed: bool) -> bool:
+	error=""
+	if not _rescue_result or _visit==null or not encounter is Encounter:return reject("No prepared campaign result belongs to this objective")
+	if _result_observation!=null:return true
+	var observed: RefCounted=encounter.observe_kappa_rescue(rescue,radio)
+	if observed==null:return reject(encounter.error)
+	var visit: RefCounted=_visit.fork()
+	if not visit.poll_result(observed,completion_allowed):return reject(visit.error)
+	if visit.snapshot().dialogue.visible:
+		_result_observation=observed
+		_state.combat_objective_satisfied=visit.snapshot().outcome=="completed"
+	_visit=visit
+	return true
 
 func navigate(action: String,encounter: RefCounted) -> bool:
 	error=""
@@ -43,10 +67,16 @@ func navigate(action: String,encounter: RefCounted) -> bool:
 	var visit: RefCounted=_visit.fork()
 	if not visit.navigate(action):return reject(visit.error)
 	if not visit.transition().is_empty():
-		var contracts: RefCounted=encounter.acknowledge_campaign_visit(_bindings,_contracts,visit)
+		var receipt: Dictionary=visit.transition()
+		var contracts: RefCounted=encounter.acknowledge_campaign_result(_bindings,_contracts,visit,_result_observation) if _rescue_result else encounter.acknowledge_campaign_visit(_bindings,_contracts,visit)
 		if contracts==null:return reject(encounter.error)
-		_contracts=contracts;_state.campaign_cursor=visit.transition().campaign_cursor
-		_state.mission=visit.transition().mission
+		_contracts=contracts
+		if receipt.get("outcome")=="failed":
+			_state.campaign_failure=receipt.duplicate(true)
+		else:
+			_state.campaign_cursor=receipt.campaign_cursor;_state.mission=receipt.mission
+			if _rescue_result:
+				_state.combat_objective_acknowledged=true;_state.station_return_required=true
 	_visit=visit
 	return true
 
@@ -77,6 +107,7 @@ func acknowledge(encounter: RefCounted,serial: int) -> Dictionary:
 func retained_for_arrival(encounter: RefCounted) -> RefCounted:
 	error=""
 	if _contracts==null or not encounter is Encounter:reject("The arrival lost its retained contract flight");return null
+	if _rescue_result and not _state.combat_objective_acknowledged:reject("Acknowledge the rescued target before returning to station");return null
 	var result: RefCounted=encounter.finish_contract_session(_contracts)
 	if result==null:reject(encounter.error)
 	return result
@@ -85,6 +116,9 @@ func contract_owner() -> RefCounted:return null if _contracts==null else _contra
 
 func result_pending() -> bool:return _contracts!=null and _contracts.result_pending()
 func dialogue_visible() -> bool:return _visit!=null and _visit.snapshot().dialogue.visible
+
+func retain_mining_hint(seen: bool) -> void:
+	_contracts.retain_mining_hint(seen)
 
 func snapshot() -> Dictionary:
 	if _contracts==null:return {}
@@ -101,6 +135,7 @@ func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy._state=_state.duplicate(true);copy._contracts=null if _contracts==null else _contracts.fork();copy._field_identity=_field_identity
 	copy._visit=null if _visit==null else _visit.fork();copy._bindings=_bindings
+	copy._rescue_result=_rescue_result;copy._result_observation=null if _result_observation==null else _result_observation.fork()
 	return copy
 
 func reject(message: String) -> bool:error=message;return false

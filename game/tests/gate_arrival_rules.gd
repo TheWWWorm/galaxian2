@@ -57,3 +57,8 @@ func verify_arrival(args: PackedStringArray) -> void:
 	for key in Arrival.SPANS:
 		var bad:=bindings.mido_travel.duplicate(true);bad.provenance.erase(key)
 		check(not Travel.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Missing arrival proof was accepted: "+key)
+	var bad:=bindings.mido_travel.duplicate(true)
+	var alternate_source: bool=int(bad.conversations[0].events[0].text_id)==int(Travel.MAC_VALUES.conversations[0].events[0].text_id)
+	var other: Dictionary=Arrival.SPANS if alternate_source else Arrival.MAC_SPANS
+	bad.provenance.gate_arrival_commit.offset=int(bindings.arrival_staging.provenance.actor.offset)+int(other.gate_arrival_commit[0])
+	check(not Travel.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Mixed-source gate arrival proof was accepted")

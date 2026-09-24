@@ -1,9 +1,9 @@
 """Original ordinary planet-size and arrival-pose declarations only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_local_arrival_environment(mach, arrival):
-    proof=hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'augmenta_local_arrival_environment',
@@ -67,6 +67,56 @@ LAYOUTS = {'local_arrival_planet_initial': [843293,
                                 '__const',
                                 '54e347282ecf0fd46f002970fa012534725e0bf3b2ad2f4ca0efc0134d7e1d28'],
  'local_arrival_distance_scale': [1575050,
+                                  4,
+                                  '__const',
+                                  '4f4b9b7d8b86633e2824e2f439819357b0cd010ab410ea1a691b12c5f94e91e0']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'local_arrival_planet_initial': [843925,
+                                  157,
+                                  '__text',
+                                  '740ddc85a1b3a49303db996249abbeb30d86879773325da8b76ebb3f5ce27f60'],
+ 'local_arrival_planet_sizes': [843105,
+                                103,
+                                '__text',
+                                '0c69a25686b48c43a1813a5f353307e6cd3b0a43712fc18ff0f036ac1a0c577d'],
+ 'local_arrival_special_planet': [873058,
+                                  80,
+                                  '__text',
+                                  '1a698012e1d64fe9f8b90dc3981140a3db6c10f9d9e30979020a9bcf1aa84051'],
+ 'local_arrival_planet_type': [852056,
+                               10,
+                               '__text',
+                               '7420c657eada7977f7682c2322a9a2430a8fb5883aecc5ada569ff27177d6816'],
+ 'local_arrival_pose_selection': [-43078,
+                                  586,
+                                  '__text',
+                                  '9984bcc095d7f7c55b1c0cc7117b539511c18de69f073e5950959984c310476c'],
+ 'local_arrival_cache_getter': [856000,
+                                14,
+                                '__text',
+                                '9d38ab6ec9fd45c1aa30b667c89657b2dfaba4064a62e754e896d3acc49b9eea'],
+ 'local_arrival_station_list': [735926,
+                                10,
+                                '__text',
+                                '3b843a5e0a33d0bd1fcd684b3a6a912724066ca70083334901d245bf633a91bf'],
+ 'local_arrival_list_constructor': [734764,
+                                    236,
+                                    '__text',
+                                    '56690428c5f202baadd8567bab29de3f0e3bfe37f40c3fbf3102a3acdaee2a31'],
+ 'local_arrival_list_loader': [-679366,
+                               1100,
+                               '__text',
+                               'ed1307f3b2249adbc99fa87dc54bce34c7de097c2f229dcf0e922fe9303416cd'],
+ 'local_arrival_face_origin': [-729894,
+                               480,
+                               '__text',
+                               'e71b22aec69731e5833cc31144dfc31d7e67bc30aebaf4a3adbf01f44635349c'],
+ 'local_arrival_planet_scale': [1550078,
+                                4,
+                                '__const',
+                                '54e347282ecf0fd46f002970fa012534725e0bf3b2ad2f4ca0efc0134d7e1d28'],
+ 'local_arrival_distance_scale': [1550114,
                                   4,
                                   '__const',
                                   '4f4b9b7d8b86633e2824e2f439819357b0cd010ab410ea1a691b12c5f94e91e0']}

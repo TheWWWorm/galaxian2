@@ -1,6 +1,7 @@
 """Optional Mac ordinary weapon model mappings for the training encounter."""
 import copy
-from .station_exterior import hashed_declarations
+from .declaration_layouts import recognize
+from .station_exterior import declaration_bytes
 
 
 def extract_combat_training_visuals(mach, arrival, weapons, staging):
@@ -11,11 +12,14 @@ def extract_combat_training_visuals(mach, arrival, weapons, staging):
             return {}
         if not staging['projectile_visuals'] or not staging['projectile_impacts']:
             return {}
-        proof = hashed_declarations(mach, arrival, LAYOUTS)
-        if not proof:
-            return {}
-        result = copy.deepcopy(VALUES)
-        result['provenance'] = proof
+        if mach.architecture!='x86_64':return {}
+        origin=arrival['provenance']['actor']
+        if origin['bytes']!=315:return {}
+        layouts=[{k:[v[2],v[0],v[1],'sha256:'+v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
         return result
     except (KeyError, TypeError, ValueError, IndexError, OverflowError):
         return {}
@@ -107,3 +111,16 @@ LAYOUTS = {'wrapper_default': [475185,
                    4,
                    '__const',
                    'e7a31085b22247cc08bcdbd23fb51854506464a75e14e65185a301f27b7e704b']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'wrapper_default': [475711, 6, '__text', 'f14ae3be6b76e78dd58bc5fa7949d2e1b7bc01db4e86f1d085cb21464a2e0270'],
+ 'captured_up_draw': [479980, 55, '__text', '0e2746c9660d0b41543e0b66026a8524c7455bfdc9fa6f9b91742a5eef5b98b0'],
+ 'captured_up_launch': [-186903, 59, '__text', 'ad4b0687c921df40a0dcb47d104ee5f08120fb67611f2d303b5e354111de8595'],
+ 'matrix_up': [1234014, 15, '__text', 'b786e38224ecb3139b2bf7e734bd7d0048ca7a64bd68e95f64e3ccc055bafb9d'],
+ 'player_flag': [-188304, 14, '__text', '84a110a2d5d1a9f1e1342afe8dd9c22d4961fd8e1b386c8a096d305d27472d47'],
+ 'impact_0': [1547906, 4, '__const', '2f71717123e07e2e209cc0dc807e9d1e48dd2e9d0cddb9e5238afa837b209770'],
+ 'impact_19': [1547982, 4, '__const', 'ba68c0bc07a4ca462026f5108537fb3a023f3095f79c0d4c205fde3e86089e80'],
+ 'impact_22': [1547994, 4, '__const', 'b18cc146d20e56ff0808059bc8ddf272dc008ee143402c5d32424175d3b54720'],
+ 'impact_25': [1548006, 4, '__const', 'b18cc146d20e56ff0808059bc8ddf272dc008ee143402c5d32424175d3b54720'],
+ 'projectile_0': [1551522, 4, '__const', '36984f0f9871e85edea08d3492809d05459229f43a3e948d05df70451e7ad6b3'],
+ 'projectile_22': [1551610, 4, '__const', 'e7a31085b22247cc08bcdbd23fb51854506464a75e14e65185a301f27b7e704b']}

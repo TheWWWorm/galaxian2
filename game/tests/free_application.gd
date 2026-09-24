@@ -3,6 +3,18 @@ extends "res://tests/alioth_return.gd"
 ## return. The optional checkpoint is captured by the inherited campaign path.
 var _free_capture_dir:=""
 
+func choose_free_keyboard_flight_action(opener: int, action: String) -> bool:
+	var event:=InputEventKey.new();event.physical_keycode=opener;event.pressed=true;app._unhandled_input(event)
+	event=InputEventKey.new();event.physical_keycode=opener;event.pressed=false;app._unhandled_input(event)
+	if not app.flight_menu.visible:return false
+	var rows: Array=app.flight_menu.snapshot().rows
+	for index in rows.size():
+		if rows[index].action!=action:continue
+		event=InputEventKey.new();event.physical_keycode=KEY_1+index;event.pressed=true;app._unhandled_input(event)
+		event=InputEventKey.new();event.physical_keycode=KEY_1+index;event.pressed=false;app._unhandled_input(event)
+		return not app.flight_menu.visible
+	app.close_flight_menu();return false
+
 func _initialize() -> void:
 	if OS.get_environment("GOF2_FREE_PLAY_STATION_SCENARIO").is_empty() and OS.get_environment("GOF2_SOURCE_SAVE").is_empty():super._initialize()
 	else:call_deferred("run_free_checkpoint")
@@ -77,7 +89,7 @@ func verify_free_application() -> void:
 		check(not app._flight_actions.visible and not app.touch_overlay.visible and not app._pause_button.visible,"Desktop ordinary flight ignored the touch-controls preference")
 		if not await release_application_flight():return
 		if trip==0:
-			var left:=InputEventKey.new();left.physical_keycode=KEY_A;left.pressed=true;app._unhandled_input(left)
+			var left:=InputEventKey.new();left.physical_keycode=KEY_LEFT;left.pressed=true;app._unhandled_input(left)
 			var fire:=InputEventKey.new();fire.physical_keycode=KEY_SPACE;fire.pressed=true;app._unhandled_input(fire)
 			var shots:=0
 			for tick in 12:
@@ -138,7 +150,7 @@ func verify_free_game_over() -> void:
 	check(retained.snapshot()==before,"The death diagnostic changed its retained station")
 
 func verify_free_touch_controls() -> void:
-	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.set_touch_controls(true)
+	root.size=Vector2i(960,540);app.set_mobile_layout(true);TouchInput.set_preference(app,true)
 	await process_frame;resume_application_focus();app.present_session()
 	check(app._flight_actions.visible and app.touch_overlay.visible and app._pause_button.visible,"Landscape touch preference omitted ordinary flight actions")
 	app.touch_overlay.firing.emit(true)
@@ -155,6 +167,7 @@ func verify_free_touch_controls() -> void:
 	check(not app._flight_actions.visible and not app.touch_overlay.visible and not app._pause_button.visible,"Disabling touch preference left ordinary flight controls visible")
 
 func capture_free_application(label: String) -> void:
+	if _free_capture_dir.is_empty():_free_capture_dir=OS.get_environment("GOF2_CAPTURE_DIR")
 	if _free_capture_dir.is_empty() or DisplayServer.get_name()=="headless":return
 	if not FreePlayCheckpoint.private_path(_free_capture_dir+"/capture.png"):check(false,"Keep application captures outside engine source");return
 	DirAccess.make_dir_recursive_absolute(_free_capture_dir)

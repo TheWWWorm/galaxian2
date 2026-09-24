@@ -40,7 +40,7 @@ func configure(bindings: RefCounted, effect: Dictionary, scale: Variant) -> bool
 		"source_duration_ms":int(effect.duration_ms),"duration_ms":int(duration),
 		"scale":stored_scale,"speed":speed,"elapsed_ms":0,"models":models,
 		"triggered":false,"active":false,"finished":false,"pose":null}
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
 	_presentation_identity=RefCounted.new()
 	return true
 

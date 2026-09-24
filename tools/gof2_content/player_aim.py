@@ -1,6 +1,6 @@
 """Recognize ordinary projected-forward aim declarations without executing code."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {'mode': 'projected_forward', 'distance': 22000.0, 'new_weight': 0.20000000298023224, 'previous_weight': 0.800000011920929, 'initial_aim': [0, 0, 0], 'initial_contact': False, 'initial_contact_ms': 0, 'contact_limit_ms': 201, 'reticle_phase': 4, 'image_ids': [1216, 1230], 'texture_id': 10062, 'image_regions': [115, 129], 'motion_before_aim': True, 'aim_before_camera': True, 'draw_before_contact_expiry': True}
 
@@ -10,12 +10,10 @@ def extract_player_aim(mach, staging, projection):
     try:
         if not staging['player_flight'] or not staging['player_motion'] or not staging['projectile_impacts'] or not projection:return {}
         origin=staging['provenance']['initial']['offset']
-        at=mach.text['address']+origin-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,raw) in LAYOUTS[arch].items():
-            found=section_bytes(mach,at+delta,size,b'__const' if key.endswith('_constant') else b'__text')
-            if found is None or found[0]!=bytes.fromhex(raw):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        layouts=[LAYOUTS[arch]]+([MAC_ALTERNATE] if arch=='x86_64' else [])
+        constants=[k for k in LAYOUTS[arch] if k.endswith('_constant')]
+        proof=recognize(mach,origin,layouts,constants=constants)
+        if not proof:return {}
         result=copy.deepcopy(VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,IndexError,ValueError,OverflowError):return {}
@@ -91,3 +89,44 @@ LAYOUTS = {'x86_64': {'initial_aim': [428166, 22, '48c783d80000000000000048c783d
                              'e06890f830102868002944d042f6ce014ff04409c0f224014ff01108794491ed000a91ed011abbff0007d4f83c12bbff0117cde9008910ee102a11ee103a49f1c6fdd4f83001d4f848120844c4f84802c928a2bfe068002180f8301039e042f68401c0f22401794491ed000a91ed011abbff0007d4f84012bbff011710ee102a11ee103a4ff044094ff01108cde9008949f19dfd1de042f644014ff04409c0f224014ff01108794491ed000a91ed011abbff0007d4f83812bbff0117cde9008910ee102a11ee103a49f181fd0020c4f84802'],
            'player_before_world': [253418, 40, '23f096fedbf854004ff0ff36b49621f095fcdbf83c1005469bf85b30dbf87000ca17b496c1f7e0f9'],
            'controller_later': [264340, 4, 'c2f7cdfd']}}
+
+
+# Independently verified alternate Mac compiler layout.
+MAC_ALTERNATE = {'initial_aim': [428702, 22, '48c783d80000000000000048c783d000000000000000'],
+ 'initial_timer': [429395, 10, 'c783e802000000000000'],
+ 'initial_world_contact': [-168052, 4, 'c6434000'],
+ 'body_vectors': [461265,
+                  96,
+                  '498b3e4883c708e88aee0900f30f118d20fdfffff30f118518fdffff660f70c001f30f11851cfdffff498b3e4883c708e801ee0900f30f118d10fdfffff30f118508fdffff660f70c001f30f11850cfdffff41f68618020000010f849a000000'],
+ 'projected_mode': [461515,
+                    263,
+                    '488d05e5fd1b008338007420807d1800751a41f686a8010000018b45200f84e400000083f8010f84e4000000488dbd08fdffffe8944c0700f30f118d20fcfffff30f118518fcffff660f70c001f30f11851cfcfffff30f10056ff10e00488dbd18fcffffe893460700488dbd18fdffff488db528fcfffff30f118d30fcfffff30f118528fcffff660f70c001f30f11852cfcffffe863440700488db538fcffff488d1585421c00488d0546fb1b00f30f118d40fcfffff30f118538fcffff660f70c001f30f11853cfcffff488b38e859e40800660fefc0f30f100d55421c000f2ec80f861d0300008b0546421c00898510fcffff488b0531421c0048898508fcffffe990030000'],
+ 'smoothing': [462544,
+               165,
+               '488d3d203f1c00f30f10052c480e00e863420700f30f118d00fcfffff30f1185f8fbffff660f70c001f30f1185fcfbffff498dbed0000000f30f100587490e00e832420700488dbdf8fbffff488db5e8fbfffff30f118df0fbfffff30f1185e8fbffff660f70c001f30f1185ecfbffffe882400700f30f118d10fcfffff30f118508fcffff660f70c001f30f11850cfcffff488d3d8e3e1c00488db508fcffffe8623d0700'],
+ 'retain_aim': [462801, 19, '498dbed0000000488d35183e1c00e8f33c0700'],
+ 'image_loads': [431485,
+                 57,
+                 '488d93d80200004c8d3d34711c004885c00f958342040000498b3fbec0040000e8c50c0900488d93dc020000498b3fbece040000e8b10c0900'],
+ 'idle_alias': [-653193,
+                64,
+                'bf18000000e84c3b1f004889c3bf04000000e83f3b1f0066c7004e2766c74002730066c703c004c7430403000000c74308ffffffff4889431048899d28d4ffff'],
+ 'contact_alias': [-652873,
+                   64,
+                   'bf18000000e80c3a1f004889c3bf04000000e8ff391f0066c7004e2766c74002810066c703ce04c7430403000000c74308ffffffff4889431048899d50d4ffff'],
+ 'player_contact_enable': [-57001, 13, '4c89f7be01000000e85322fcff'],
+ 'contact_setter': [-310345, 14, '554889e54088b7480100005dc390'],
+ 'npc_contact': [-305056, 24, '41c64424580141f68748010000017408498b4770c6404001'],
+ 'draw_gate': [481872,
+               203,
+               '4883bb00020000000f856e020000488bbb780200004885ff7413f6831802000001750ae8278c0600e94f020000488bbb700200004885ff740ae8abd9fcffe939020000f68388020000010f85ff010000488b3be897fefeff85c00f8eef010000f64340010f85e50100004180f6014584f60f85d8010000f68348020000010f85cb010000f68382020000010f85be010000f68381020000010f85b1010000f683f203000001740df68318020000010f849b0100008a8318020000f683a8010000017408a8010f8484010000'],
+ 'draw_feedback': [482318,
+                   143,
+                   '488d05aaaa1b00488b38488b4318f6404001744a8bb3dc020000f30f2c0dcbf11b00f30f2c15bff11b0041b81100000041b944000000e8ce2908008b83e80200000383840100008983e80200003dc90000007c62488b4318c6404000eb588bb3d8020000f30f2c0d81f11b00f30f2c1575f11b0041b81100000041b944000000e884290800c783e802000000000000'],
+ 'player_before_world': [244051,
+                         40,
+                         'e831230300498b7d60e8a2f2020088c349637548498bbd90000000410fb6556b83e201e8ae34fcff'],
+ 'controller_later': [256122, 5, 'e89658fcff'],
+ 'distance_constant': [1440919, 4, '00e0ab46'],
+ 'new_weight_constant': [1398539, 4, 'cdcc4c3e'],
+ 'previous_weight_constant': [1398935, 4, 'cdcc4c3f']}

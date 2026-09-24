@@ -50,6 +50,27 @@ func build_lounge(library: RefCounted,visuals: RefCounted,bindings: RefCounted,c
 	selection.campaign_cursor=cursor;selection.world_type=context.world_type
 	return true
 
+func build_station(library: RefCounted,visuals: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int,quality:="high") -> bool:
+	clear()
+	if library.manifest.get("content_id","")!=bindings.base_content_id or visuals.base_content_id!=bindings.base_content_id or catalogues.content_id!=bindings.base_content_id:
+		return reject("Station background belongs to another content identity")
+	if station_id<0 or station_id>=catalogues.tables.stations.size():return reject("Unknown station background location")
+	var system_id:=int(catalogues.tables.stations[station_id].system_id)
+	if system_id<0 or system_id>=catalogues.tables.systems.size() or system_id==27:return reject("This station background uses an unsupported source orientation")
+	var sky_index:=int(catalogues.tables.systems[system_id].sky_index)
+	var sky: Dictionary=bindings.opening_sky
+	var arrival: Dictionary=bindings.arrival_environment
+	if not Definitions.parameters(sky) or sky_index<0 or sky_index>int(arrival.get("maximum_sky_index",-1)):
+		return reject("Station background has no supported source sky")
+	var orientation:=Orientation.new()
+	var rotation_value: Dictionary=orientation.for_station(station_id,sky_index in [17,18])
+	if rotation_value.is_empty():return reject(orientation.error)
+	var variant:=system_id%int(sky.star_variants)
+	var descriptors:=[{"mesh_id":int(sky.star_mesh_base)+variant,"texture_id":int(sky.star_texture_base)+variant,"mode":0},
+		{"mesh_id":int(arrival.sky_mesh_base)+sky_index,"texture_id":int(arrival.sky_texture_base)+sky_index,"mode":2}]
+	_initial_descriptors=descriptors.duplicate(true)
+	return _build_layers(library,visuals,bindings,{"station_id":station_id,"system_id":system_id},quality,descriptors,rotation_value,variant)
+
 func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, cache: Variant, quality := "high", equipment: RefCounted=null) -> bool:
 	clear()
 	var location:=Arrival.new()
@@ -80,6 +101,21 @@ func _build_location(library: RefCounted, visuals: RefCounted, bindings: RefCoun
 		if bindings.opening_staging.get("escape_camera",{}).is_empty() or escape.is_empty():return reject("Escape sky requires supported escape declarations")
 		_escape_descriptor={"mesh_id":int(escape.jump_sky_mesh_id),"texture_id":int(escape.jump_sky_texture_id),"mode":2}
 		descriptors.append(_escape_descriptor)
+	return _build_layers(library,visuals,bindings,opening,quality,descriptors,rotation_value,variant)
+
+func build_void(library: RefCounted,visuals: RefCounted,bindings: RefCounted,environment: RefCounted,quality:="high") -> bool:
+	clear()
+	if not is_instance_of(environment,load("res://src/simulation/void_environment.gd")):return reject("Void sky requires its generated source world")
+	var state: Dictionary=environment.snapshot()
+	for key in ["base_content_id","binding_id"]:
+		if state.get(key)!=bindings.get(key):return reject("Void sky belongs to another source")
+	if visuals.base_content_id!=bindings.base_content_id or library.manifest.get("content_id")!=bindings.base_content_id:return reject("Void sky textures belong to another source")
+	var source: Dictionary=state.sky
+	_initial_descriptors=[{"mesh_id":int(source.star_mesh_id),"texture_id":int(source.star_texture_id),"mode":0},
+		{"mesh_id":int(source.sky_mesh_id),"texture_id":int(source.sky_texture_id),"mode":2}]
+	return _build_layers(library,visuals,bindings,state,quality,_initial_descriptors,state.sky_orientation,0)
+
+func _build_layers(library: RefCounted,visuals: RefCounted,bindings: RefCounted,opening: Dictionary,quality: String,descriptors: Array,rotation_value: Dictionary,variant: int) -> bool:
 	var cache := {}
 	for descriptor in descriptors:
 		# The source explicitly overrides the texture for these mesh IDs. Path-only

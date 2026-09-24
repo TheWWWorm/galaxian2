@@ -23,7 +23,8 @@ def extract_reflection_selection(mach, projection, sky):
     def target(m,key):
         return base+m.end(key)+int.from_bytes(m[key],'little',signed=True) if mac else instruction(m,key).operands[0].imm
     def match(key,address=None):
-        name=prefix+key.upper();pattern=template(globals()[name])
+        name=prefix+key.upper()
+        pattern=template((MAC_BIND, MAC_BIND_ALTERNATE) if mac and key=='bind' else globals()[name])
         matches=([pattern.match(code,address-base)] if address is not None else [m for m in pattern.finditer(code) if mac or m.start()%2==0])
         require(len(matches)==1 and matches[0] is not None);m=matches[0]
         if not mac:
@@ -117,6 +118,35 @@ MAC_BIND = """
 8b7dc4e8
 {call_13f:4}
 4883c4405dc3
+"""
+
+# Same linked texture selection with the newer compiler's binding helper.
+MAC_BIND_ALTERNATE = """
+554889e54883ec30488d05
+{ref_8:4}
+48897df88975f4488b7df8f6000148897dd80f8505000000e904010000817df4000000000f82100000008b45f4488b4dd83b41180f8205000000e9e2000000488b45d84805180000008b75f44889c7e8
+{call_5e:4}
+488b00f6401c010f8577000000488b45d84805180000008b75f44889c7e8
+{call_8b:4}
+488b004805080000004889c7e8
+{call_9c:4}
+488d3d
+{ref_70:4}
+488945e8488b75e88b55f4b000e8
+{call_b2:4}
+48817de8000000000f841d000000488b45e8483d00000000488945d00f8409000000488b7dd0e8
+{call_dd:4}
+48c745e800000000e949000000bfc78400008b45f48905
+{ref_fe:4}
+e8
+{call_10d:4}
+488b4dd84881c1180000008b75f44889cfe8
+{call_123:4}
+bf13850000488b000fb7308975e48b75e4e8
+{call_137:4}
+bfc0840000e8
+{call_13f:4}
+4883c4305dc3
 """
 
 ARM_SELECT = """

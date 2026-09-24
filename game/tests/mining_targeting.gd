@@ -95,7 +95,7 @@ func verify(args: Array):
 	check(scanner.snapshot().selected_object_index==-1 and scanner.snapshot().candidate_object_index==-1 and scanner.snapshot().elapsed_ms==0,"Moving the aim away retained the asteroid lock")
 	check(elapse(scanner,100) and scanner.snapshot().elapsed_ms==100 and scanner.snapshot().selected_object_index==-1,"Returning aim skipped a fresh acquisition")
 	check(scanner.advance(world,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true,true),scanner.error)
-	check(scanner.snapshot().elapsed_ms==0 and scanner.snapshot().candidate_object_index==-1 and scanner.snapshot().selected_object_index==-1,"An active approach retained a competing selection")
+	check(scanner.snapshot().elapsed_ms==100 and scanner.snapshot().candidate_object_index==3 and scanner.snapshot().selected_object_index==-1 and scanner.snapshot().candidate_indices.is_empty(),"An active approach advanced or discarded the suspended scenery acquisition")
 	# Use a center-projected asteroid so exact integer window edges have an
 	# independent expected pixel. No copy of projection arithmetic is needed.
 	for offset in [Vector2(-44,0),Vector2(44,0),Vector2(0,-44),Vector2(0,44)]:
@@ -107,13 +107,17 @@ func verify(args: Array):
 	check(scanner.advance(tied,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,1,true) and scanner.snapshot().candidate_object_index==0,"Truncated equal distances did not retain the first candidate")
 	var distant: RefCounted=arranged([999999.0])
 	check(scanner.advance(distant,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and scanner.snapshot().candidate_object_index==-1,"Source distance sentinel selected an out-of-range asteroid")
-	var debris: RefCounted=arranged([1000.0]);debris._destruction[0]._state.actor_state=3
+	var debris: RefCounted=arranged([1000.0]);debris._destruction[0]._state.actor_state=3;debris._destruction[0]._read_snapshot={}
 	var no_tractor:=fresh()
 	for i in 39:
 		if not no_tractor.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true):check(false,no_tractor.error);return
 	check(no_tractor.snapshot().selected_object_index==-1 and no_tractor.snapshot().events==[{"kind":"notification","source_id":9,"object_index":0}],"Active debris became a mineable selection")
 	debris._bodies.set_permissions(0,false,false)
-	check(no_tractor.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and no_tractor.snapshot().candidate_indices.is_empty(),"Retired debris stayed selectable")
+	debris.snapshot() # Refresh the parent after this test-only child edit.
+	check(no_tractor.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and no_tractor.snapshot().candidate_indices==[0] and no_tractor.snapshot().events==[{"kind":"notification","source_id":9,"object_index":0}],"Retired statistics hid surviving scenery cargo")
+	verify_tractor_targeting(debris)
+	debris._destruction[0].disable_drop();debris.snapshot()
+	check(no_tractor.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and no_tractor.snapshot().candidate_indices.is_empty(),"Consumed or absent scenery cargo stayed selectable")
 	# Missing equipment and default duration are isolated native owner fixtures;
 	# the actual departure continues to require its source-defined loadout.
 	var without_drill:=Construction.new();without_drill._state=construction._state.duplicate(true);without_drill._scenery=construction.scenery_owner();without_drill._camera=construction.camera_owner();without_drill._player=construction.player_owner()
@@ -125,15 +129,59 @@ func verify(args: Array):
 	var replacement:=Construction.new();check(replacement.prepare(bindings,cat,departure,4096,1789100000,true,bodies,effects),replacement.error)
 	var good: Dictionary=scanner.snapshot()
 	check(not scanner.advance(replacement.scenery_owner(),Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and scanner.snapshot()==good,"Selection crossed into an identically seeded replacement world")
-	for dt in [-1,151,0.5,"1"]:check(not scanner.advance(world,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,dt,true) and scanner.snapshot()==good,"Invalid frame partially changed acquisition")
+	for dt in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5,"1"]:check(not scanner.advance(world,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,dt,true) and scanner.snapshot()==good,"Invalid frame partially changed acquisition")
 	for bad_aim in [{"binding_id":"foreign"},{"point":Vector3(INF,0,0)},{"viewport_size":Vector2i(0,600)}]:
 		var invalid:=aim.duplicate();invalid.merge(bad_aim,true)
 		check(not scanner.advance(world,Transform3D.IDENTITY,Transform3D.IDENTITY,invalid,100,true) and scanner.snapshot()==good,"Invalid aim partially changed acquisition")
-	var malformed: RefCounted=world.fork_for_frame();malformed._bodies=malformed._bodies.fork_for_frame();malformed._bodies._rows.back().position=Vector3(INF,0,0)
+	var malformed: RefCounted=world.fork_for_frame();malformed._bodies=malformed._bodies.fork_for_frame()
+	malformed._bodies._rows[-1]=malformed._bodies._rows[-1].duplicate(true)
+	malformed._bodies._rows[-1].position=Vector3(INF,0,0);malformed.snapshot()
 	check(not scanner.advance(malformed,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and scanner.snapshot()==good,"A bad late body partially committed a good early candidate")
 	check(not scanner.configure(bindings,cat,construction,Vector2.ZERO,frames) and scanner.snapshot()==good,"Failed configuration replaced a good scanner")
 	check(world.snapshot()==field and construction.snapshot()==original and station.prepare_departure(bindings,cat)==departure,"Selection changed scenery, random state or campaign progress")
 	await verify_flight(lib,args)
+
+func verify_tractor_targeting(debris: RefCounted) -> void:
+	if not Targeting.RecoveryDefinitions.available(bindings):return
+	# Detached component equipment vectors, not earned fitting or a saved flight.
+	var equipped:=Construction.new();equipped._state=construction._state.duplicate(true)
+	equipped._scenery=construction.scenery_owner();equipped._camera=construction.camera_owner();equipped._player=construction.player_owner()
+	var original: Dictionary=debris.snapshot()
+	for item in [68,69]:
+		equipped._state.departure.loadout.equipment_ids=[item,81,90]
+		var tractor:=Targeting.new()
+		if not tractor.configure(bindings,cat,equipped,radii,frames):check(false,tractor.error);return
+		check(tractor.snapshot().tractor_id==item and tractor.snapshot().duration_ms==4000,"Scenery acquisition substituted the NPC tractor timer")
+		for i in 38:
+			if not tractor.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true):check(false,tractor.error);return
+		check(tractor.snapshot().recovery_object_index==-1 and tractor.snapshot().elapsed_ms==3800,"Scenery cargo acquired at the strict scanner boundary")
+		check(tractor.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,1,true),tractor.error)
+		var acquired: Dictionary=tractor.snapshot()
+		check(acquired.recovery_object_index==0 and acquired.selected_object_index==-1 and acquired.animation_frame==frames-1 and acquired.events.is_empty(),"Scenery cargo became mining, emitted a missing-device notice or lost the final lock frame")
+		var fork: RefCounted=tractor.fork_for_frame()
+		check(fork.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,false) and fork.snapshot().recovery_object_index==-1 and fork.snapshot().elapsed_ms==3801 and tractor.snapshot()==acquired,"Hidden recovery emitted a new request or altered its retained branch")
+		check(fork.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,0,true) and fork.snapshot().recovery_object_index==0,"Restored cargo aim discarded scanner acquisition time")
+		check(fork.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true,true) and fork.snapshot().recovery_object_index==-1 and fork.snapshot().elapsed_ms==3801 and fork.snapshot().markers.is_empty(),"A mining approach queued scenery recovery or discarded its retained clock")
+		check(fork.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true,false,false,true) and fork.snapshot().recovery_object_index==-1 and fork.snapshot().elapsed_ms==3801 and fork.snapshot().candidate_object_index==0,"An earlier NPC candidate or autopilot advanced the scenery clock")
+		check(fork.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,0,true) and fork.snapshot().recovery_object_index==0,"Releasing a selection suspension restarted the retained acquisition")
+		check(fork.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true,false,true) and fork.snapshot().recovery_object_index==-1 and fork.snapshot().elapsed_ms==0 and fork.snapshot().candidate_object_index==-1,"A retained request, planet or route allowed another scenery acquisition")
+		check(fork.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and fork.snapshot().recovery_object_index==-1 and fork.snapshot().elapsed_ms==100,"A cleared competing target bypassed fresh scenery acquisition")
+		var moved: RefCounted=debris.fork_for_frame();moved._motion=moved._motion.fork_for_frame()
+		moved._motion._field.objects[0].position.x=50000.0;moved.snapshot()
+		check(tractor.advance(moved,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true) and tractor.snapshot().candidate_indices.is_empty(),"Scenery HUD followed stale statistics instead of its moved physical model")
+	check(debris.snapshot()==original,"Acquiring cargo changed its world, RNG or lifecycle")
+	equipped._state.departure.loadout.equipment_ids=[68]
+	var default_timer:=Targeting.new();check(default_timer.configure(bindings,cat,equipped,radii,frames),default_timer.error)
+	for i in 78:
+		if not default_timer.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true):check(false,default_timer.error);return
+	check(default_timer.snapshot().duration_ms==8000 and default_timer.snapshot().recovery_object_index==-1,"Missing scanner bypassed the default scenery clock")
+	check(default_timer.advance(debris,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,1,true) and default_timer.snapshot().recovery_object_index==0,"Timed tractor incorrectly required the NPC scanner gate for scenery")
+	equipped._state.departure.loadout.equipment_ids=[68,70,81,90]
+	check(default_timer.configure(bindings,cat,equipped,radii,frames) and default_timer.snapshot().tractor_id==68,"Scenery did not use the first installed tractor getter")
+	var before: Dictionary=default_timer.snapshot()
+	equipped._state.departure.loadout.equipment_ids=[70,68,81,90]
+	check(not default_timer.configure(bindings,cat,equipped,radii,frames) and default_timer.snapshot()==before,"An unsupported automatic mode replaced a valid timed selector")
+	default_timer.clear();check(default_timer.snapshot().is_empty(),"Clearing selection retained tractor configuration")
 
 func verify_flight(lib: RefCounted,args: Array):
 	var flight:=Frame.new()
@@ -170,6 +218,25 @@ func verify_flight(lib: RefCounted,args: Array):
 	flight._aim=Aim.new();flight._aim.configure(bindings)
 	flight._targeting=fresh()
 	var captures:={}
+	# Isolate a camera-plane asteroid in a detached live flight. Both scenery
+	# representations retain the same body, and the actual frame/scene process it.
+	var crossing: RefCounted=next.fork_for_frame()
+	crossing._scenery=arranged([0.0001])
+	crossing._scenery._bodies._rows[0].position=Vector3(10000,0,-0.0001)
+	crossing._scenery._motion._field.objects[0].position=Vector3(10000,0,-0.0001)
+	crossing._pose=Transform3D(Basis(Vector3.UP,PI),Vector3(0,0,1000))
+	crossing._pilot.angular_units=Vector2.ZERO
+	crossing._camera_follow_enabled=false
+	crossing._camera._state.eye=Vector3.ZERO;crossing._camera._state.look=Vector3.FORWARD;crossing._camera._state.pose=Transform3D.IDENTITY
+	crossing._reference=Vector3.ZERO
+	for i in 2:
+		var accepted: RefCounted=crossing.evaluate(100,Vector2.ZERO,0.0)
+		if accepted==null:check(false,"Camera-plane asteroid stopped the live frame: "+crossing.error);return
+		crossing=accepted
+	var marker: Dictionary=crossing.snapshot().mining_targeting.markers[0]
+	check(not marker.in_view and not marker.in_scan_window and marker.pixels.x>480 and marker.pixels.x<600 and marker.pixels.y==360,"Live camera-plane asteroid lost its bounded marker or became selectable")
+	for key in ["mission","progress","cargo_used","campaign_cursor","mining_completed","reward_credits"]:check(crossing.snapshot()[key]==prior[key],"Camera-plane projection changed gameplay progress: "+key)
+	captures["camera-plane"]=crossing
 	for i in 55:
 		var advanced: RefCounted=flight.evaluate(100,Vector2.ZERO,0.0)
 		if advanced==null:check(false,flight.error);return
@@ -221,11 +288,13 @@ func arranged(distances: Array) -> RefCounted:
 	# Live scenery uses copy-on-write updates. Private fixture edits must detach
 	# the inner owners too, since they bypass those update methods.
 	result._bodies=result._bodies.fork_for_frame();result._motion=result._motion.fork_for_frame()
+	result._bodies._rows=result._bodies._rows.duplicate(true)
 	for i in result._destruction.size():result._destruction[i]=result._destruction[i].fork_for_frame()
 	for i in result._bodies._rows.size():
 		var point:=Vector3(10000+i,0,100000)
 		if i<distances.size():point=Vector3(0,0,-float(distances[i]))
 		result._bodies._rows[i].position=point;result._motion._field.objects[i].position=point
+	result.snapshot() # Discard snapshots inherited before the fixture edits.
 	return result
 func elapse(scanner: RefCounted, milliseconds: int) -> bool:
 	if milliseconds==0:return scanner.advance(world,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,0,true)

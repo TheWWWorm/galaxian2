@@ -1,4 +1,5 @@
 extends RefCounted
+const Readonly=preload("res://src/simulation/readonly_state.gd")
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
@@ -133,6 +134,12 @@ func configure_kappa_rescue(bindings: RefCounted,construction: RefCounted) -> bo
 	_totals.nonhostile_remaining=0
 	return true
 
+func _configure_story(bindings: RefCounted,data: Dictionary) -> bool:
+	if not configure(bindings):return false
+	_training=data;_population=int(data.actor_count);_identity.campaign_cursor=int(data.campaign_cursor)
+	_totals.nonhostile_remaining=0
+	return true
+
 func _record(actor: Dictionary, scripted_restart: bool) -> Dictionary:
 	error=""
 	if _identity.is_empty(): return fail("Configure death accounting before recording a death")
@@ -141,7 +148,7 @@ func _record(actor: Dictionary, scripted_restart: bool) -> Dictionary:
 	var id: Variant=actor.get("actor_id")
 	if not id is int or id<0 or id>=_population: return fail("NPC death is outside the configured population")
 	var kind: int=int(_rules.actor_kind) if _training.is_empty() else int(_training.actors[id].actor_kind)
-	var local: bool=_identity.get("campaign_cursor") in [10,11,12,13,14] or _training.has("kappa_lifecycle") or _training.has("alioth_lifecycle") or _training.has("free_lifecycle")
+	var local: bool=_identity.get("campaign_cursor") in [10,11,12,13,14] or _training.has("kappa_lifecycle") or _training.has("alioth_lifecycle") or _training.has("free_lifecycle") or _training.get("authored_story",false)
 	var hostile: bool=bool(actor.get("hostile",false)) if local else (true if _training.is_empty() else bool(_training.actors[id].hostile))
 	var modes: Array=[0,1] if local or (not _training.is_empty() and id==int(_training.initial_mode_death_actor)) else [1]
 	if not _generations.is_empty():
@@ -165,7 +172,7 @@ func _record(actor: Dictionary, scripted_restart: bool) -> Dictionary:
 		if not hostile:
 			for key in delta:delta[key]=0
 		delta.nonhostile_remaining=int(_training.nonhostile_remaining_delta) if not hostile else 0
-	if _identity.get("campaign_cursor") in [13,14] or _training.has("kappa_lifecycle") or _training.has("alioth_lifecycle") or _training.has("free_lifecycle"):
+	if _identity.get("campaign_cursor") in [13,14] or _training.has("kappa_lifecycle") or _training.has("alioth_lifecycle") or _training.has("free_lifecycle") or _training.get("authored_story",false):
 		delta.pirate_kills=int(_rules.pirate_kills_delta) if hostile and kind==8 and player_credit else 0
 	elif local:delta.pirate_kills=int(_training.pirate_kills_delta)
 	if _training.has("capital_death"):
@@ -194,11 +201,12 @@ func snapshot() -> Dictionary:
 	return result
 
 func fork_for_frame() -> RefCounted:
+	# Configuration is fixed after preparation; detach live state only.
 	var copy: RefCounted=get_script().new()
-	copy._identity=_identity.duplicate();copy._rules=_rules.duplicate(true)
+	copy._identity=_identity.duplicate();copy._rules=Readonly.freeze(_rules)
 	copy._events=_events.duplicate(true);copy._totals=_totals.duplicate()
 	copy._population=_population
-	copy._training=_training.duplicate(true)
+	copy._training=Readonly.freeze(_training)
 	copy._generations=_generations.duplicate()
 	return copy
 

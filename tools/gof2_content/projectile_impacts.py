@@ -1,6 +1,6 @@
 """Recover fresh ordinary impact model and playback declarations statically."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {'item_ids': [2, 19], 'model_ids': [14600, 14605], 'kinds': [0, 1], 'initial_playing': False, 'animation_speed': 1.0, 'animation_loop': False, 'camera_basis_copy': True, 'position_is_projectile': True, 'sample_before_contacts': True, 'restart_preserves_sample': True, 'render_type': 2}
 
@@ -11,12 +11,10 @@ def extract_projectile_impacts(mach,staging,actors,weapons):
         if not weapons['ordinary_hit_policy'] or not weapons['player_hit_policy']:return {}
         if not staging['projectile_visuals'] or actors['npc_initialization']['primary_weapon']['item_id']!=19:return {}
         origin=staging['provenance']['initial']['offset']
-        at=mach.text['address']+origin-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,raw) in LAYOUTS[arch].items():
-            found=section_bytes(mach,at+delta,size,b'__const' if key in ['model_2','model_19'] else b'__text')
-            if found is None or found[0]!=bytes.fromhex(raw):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        layouts=[LAYOUTS[arch]]+([MAC_ALTERNATE] if arch=='x86_64' else [])
+        constants=['model_2','model_19']
+        proof=recognize(mach,origin,layouts,constants=constants)
+        if not proof:return {}
         result=copy.deepcopy(VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,IndexError,ValueError,OverflowError):return {}
@@ -85,3 +83,35 @@ LAYOUTS = {'x86_64': {'player_setter': [-57023,
            'npc_setter': [-66740, 22, '269801222699ca651321cdf8c0b0c8f7e4fc41f68b2a'],
            'model_2': [2339938, 4, '08390000'],
            'model_19': [2340006, 4, '0d390000']}}
+
+
+# Independently verified alternate Mac compiler layout.
+MAC_ALTERNATE = {'player_setter': [-57023, 35, '4c89f7488b75d0e8001ffcff8b45ac418986a00000004c89f7be01000000e85322fcff'],
+ 'effect_table': [-311137, 27, '488d0d31811a00448b34994585f6418987a80000000f88e8000000'],
+ 'allocation': [-311110, 42, '418b5f10488d3c9d00000000e8fc021a00498987680100004889dfe8ed021a004531e449898770010000'],
+ 'initial_disabled': [-310961, 32, '498b8768010000428b34a0498b7d00e8f4a114004889c731f631d2e8c82e1300'],
+ 'update_before_contacts': [-302791,
+                            113,
+                            '498b86680100004885c0744141837e1000743a4c637da44531e44c8d2d65a52700eb07498b8668010000428b34a0498b7d00e8e78114004889c74c89fe31d2e89a10130049ffc4453b661072d641f68690000000010f84fd0100004183bea0000000270f84ef0100004c89f7e89bf4ffff'],
+ 'contact_restart': [-304763,
+                     84,
+                     '498b87680100004885c00f84e9000000428b34a84c8d351fad2700498b3ee8af8914004889c7be0300000031d2e880161300498b8768010000428b34a8498b3ee88d8914004889c7be0100000031d2e85e161300'],
+ 'contact_position': [-304679,
+                      165,
+                      '498b1e4889dfe8638f14004889df89c6e8898b1400488b4820488b5028488b70308b783889bd40ffffff4889b538ffffff48899530ffffff48898d28ffffff488b481848898d20ffffff488b481048898d18ffffff488b08488b400848898510ffffff48898d08fffffff30f1055d0f30f1045c8f30f104dcc488dbdc8feffff488d9d08ffffff4889dee8efb01500498b8768010000428b34a8498b3e4889dae8d9801400'],
+ 'position_load': [-304112,
+                   48,
+                   '498b47184863d1488995b0feffff898da8feffff488d0c95000000004c8d2c49428b4c2808894dd04a8b0428488945c8'],
+ 'draw': [-302175,
+          394,
+          '554889e54157415641554154534881ec980000004989fe498bbe080100004885ff7405e87e0c0f00498b86680100004885c00f844001000041837e10000f8435010000498d8e3001000048898d40ffffff4531e44c8d2dc3a22700488d5d98eb07498b8668010000428b34a0498b7d00e8417f1400f6800d010000010f84e90000004d8b7d004c89ffe8188514004c89ff89c6e83e811400488b4820488b5028488b70308b7838897dd0488975c8488955c048894db8488b481848894db0488b481048894da8488b08488b4008488945a048894d98498b8668010000428b34a0498b7d00e8ed7814004889c7e8d5931500f30f114d90f30f114588660f70c001f30f11458c4c8bbd40ffffff4c89ff488d7588e81ee81200f3410f108e34010000f3410f109638010000f3410f1007488dbd48ffffff4889dee878a61500498b8668010000428b34a0498b7d004889dae861761400498b8668010000428b34a0498b7d0031d2e8eb31140049ffc4453b66100f82e9feffff4881c4980000005b415c415d415e415f5dc3'],
+ 'wrapper_draw': [356390, 9, '498b7f10e872f3f5ff'],
+ 'restart_mode': [946231,
+                  112,
+                  '554889e548897df88975f4488955e8488b55f88b75f485f6488955e08975dc0f8434000000e9000000008b45dc83f8030f852e000000e900000000488b45e0488b882001000048898830010000c6800d01000001e915000000488b45e0c6800d010000008b45f4488b4de08941785dc3'],
+ 'end_sample': [946987,
+                59,
+                '488b8548ffffffc6800d01000000488b882801000048898830010000488b8548ffffff488bb0300100008a4def80e1014889c70fb6d1e831070000'],
+ 'npc_setter': [-65918, 31, '41c78424a0000000010000004c89e7be13000000e8b241fcff41bf8b1a0000'],
+ 'model_2': [1425887, 4, '08390000'],
+ 'model_19': [1425955, 4, '0d390000']}

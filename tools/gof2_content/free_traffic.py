@@ -1,9 +1,9 @@
 """Verified ordinary ship setup declarations, independent of travel permission."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_free_traffic(mach, arrival):
-    proof=hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'augmenta_ordinary_ship_setup',
@@ -25,3 +25,14 @@ LAYOUTS = {'free_traffic_nivelian_boxes': [80500,
                              268,
                              '__text',
                              'f0cef08b7978855b3ee22bba5d5a57afc0ee7e8dee6bc4d433771050e68717af']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'free_traffic_nivelian_boxes': [80500,
+                                 278,
+                                 '__text',
+                                 '5cf5fe9055552b9825d4e5bfb02ac2a73f201ae081cdc41965ba27801cbf1705'],
+ 'free_traffic_box_values': [1550546,
+                             48,
+                             '__const',
+                             '61005225e16dba67c95d8c35984042cdcb6dcd0f7aa44a275b19ceefc6439e92'],
+ 'free_traffic_opposition': [614600, 268, '__text', 'f3d5620be640cc069471477c50f961e0fada34885c4e70e1c75485df434c06da']}

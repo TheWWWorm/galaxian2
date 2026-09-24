@@ -11,6 +11,7 @@ const Death = preload("res://src/simulation/npc_destruction.gd")
 const DeathAccounting = preload("res://src/simulation/npc_death_accounting.gd")
 const Appearance=preload("res://src/content/full_hold_appearance_definitions.gd")
 const Vectors=preload("res://src/simulation/source_vectors.gd")
+const Readonly=preload("res://src/simulation/readonly_state.gd")
 var error := ""
 var _identity := {}
 var _bindings: RefCounted
@@ -65,7 +66,9 @@ func set_full_hold_destruction(resources: RefCounted) -> bool:
 func set_initial_route(actor_id: Variant, route: RefCounted) -> bool:
 	error=""
 	if not actor_id is int or actor_id<0 or actor_id>=_guidance.size(): return reject("Unknown NPC route owner")
-	if not _guidance[actor_id].set_initial_route(route): return reject(_guidance[actor_id].error)
+	var guide: RefCounted=_guidance[actor_id].fork_for_frame()
+	if not guide.set_initial_route(route): return reject(guide.error)
+	_guidance[actor_id]=guide
 	return true
 
 func apply_full_hold_appearance(combat: RefCounted, cursor: Variant, player: Dictionary) -> Dictionary:
@@ -81,7 +84,7 @@ func apply_full_hold_appearance(combat: RefCounted, cursor: Variant, player: Dic
 	if not Flight.rigid_pose(player.get("pose")) or not player.get("ship_id") is int or player.ship_id!=0:return fail("Appearance requires the starter player's physical pose")
 	if scene.get("actors",[]).size()!=1:return fail("Appearance requires the retained pirate population")
 	if cursor==int(rules.campaign_cursor) and _appearance_applied:return fail("Appearance mission cursor regressed")
-	var staged: RefCounted=fork_for_frame();var next: RefCounted=combat.fork_for_frame()
+	var staged: RefCounted=_fork_mutable_owners();var next: RefCounted=combat.fork_for_frame()
 	if cursor!=int(rules.trigger_cursor) or _appearance_applied:return {"controller":staged,"combat":next,"applied":false}
 	var actor: Dictionary=scene.actors[0];var life: Dictionary=_destruction[0].snapshot()
 	var root: Transform3D=actor.pose
@@ -131,7 +134,7 @@ func evaluate(combat: RefCounted, weapons: RefCounted, delta_ms: Variant, player
 	for key in _identity:
 		if scene.get(key)!=_identity[key] or guns.get(key)!=_identity[key]: return fail("NPC control owners have different content identities")
 	if scene.get("actors",[]).size()!=_guidance.size() or guns.get("actors",[]).size()!=_guidance.size():return fail("NPC control population differs from its configured owners")
-	var staged: RefCounted = fork_for_frame()
+	var staged: RefCounted = _fork_mutable_owners()
 	var next_combat: RefCounted = combat.fork_for_frame()
 	var next_weapons: RefCounted = weapons.fork_for_frame()
 	var next_random: Variant = random_state
@@ -140,7 +143,7 @@ func evaluate(combat: RefCounted, weapons: RefCounted, delta_ms: Variant, player
 	for id in _guidance.size():
 		var death: RefCounted=null if staged._destruction.is_empty() else staged._destruction[id]
 		var life: Dictionary={} if death==null else death.snapshot()
-		var actor: Dictionary = next_combat.snapshot().actors[id]
+		var actor: Dictionary = next_combat.actor_snapshot(id)
 		if not life.is_empty() and life.phase!="ready":
 			if actor.pose!=life.get("statistics_pose",life.pose) or actor.vitals.hull!=0 or actor.actor_mode!=life.mode or actor.active!=(life.phase!="retired"): return fail("NPC body diverged from its destruction owner")
 			if not staged._full_hold_seed.is_empty() and actor.get("body_pose")!=life.pose:return fail("Cargo destruction hull diverged from its retained transform")
@@ -162,7 +165,7 @@ func evaluate(combat: RefCounted, weapons: RefCounted, delta_ms: Variant, player
 			if not next_combat.set_pose(id,staged._flight[id].snapshot().pose):return fail(next_combat.error)
 			staged._appearance_pending=false
 		if staged._has_hostility and not next_combat.refresh_hostility(id): return fail(next_combat.error)
-		actor = next_combat.snapshot().actors[id]
+		actor = next_combat.actor_snapshot(id)
 		var root: Variant = actor.get("pose")
 		if staged._flight[id]!=null and (life.is_empty() or life.phase=="ready"):
 			if not actor.get("active"): return fail("Opening NPC control cannot return to holding after activation")
@@ -235,12 +238,20 @@ func fork_for_frame() -> RefCounted:
 	copy._identity=_identity.duplicate();copy._bindings=_bindings
 	copy._has_hostility=_has_hostility
 	copy._started=_started
-	copy._full_hold_seed=_full_hold_seed.duplicate(true)
+	copy._full_hold_seed=Readonly.freeze(_full_hold_seed)
 	copy._appearance_applied=_appearance_applied;copy._appearance_pending=_appearance_pending
+	# An outer frame may fork only to retain observations. Child owners are
+	# detached when a controller mutation begins, before any ordered actor work.
+	copy._accounting=_accounting
+	copy._destruction=_destruction.duplicate();copy._guidance=_guidance.duplicate();copy._flight=_flight.duplicate()
+	return copy
+
+func _fork_mutable_owners() -> RefCounted:
+	var copy: RefCounted=fork_for_frame()
 	if _accounting!=null: copy._accounting=_accounting.fork_for_frame()
-	for death in _destruction: copy._destruction.append(death.fork_for_frame())
-	for guide in _guidance: copy._guidance.append(guide.fork_for_frame())
-	for flight in _flight: copy._flight.append(null if flight==null else flight.fork_for_frame())
+	for id in _destruction.size():copy._destruction[id]=_destruction[id].fork_for_frame()
+	for id in _guidance.size():copy._guidance[id]=_guidance[id].fork_for_frame()
+	for id in _flight.size():copy._flight[id]=null if _flight[id]==null else _flight[id].fork_for_frame()
 	return copy
 
 func clear() -> void:

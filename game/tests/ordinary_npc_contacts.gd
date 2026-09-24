@@ -114,6 +114,18 @@ func check_profile(content: String,pack: String) -> void:
 	var no_targets: Dictionary = operation.evaluate(shots,result.combat,[],{"mode":"target"})
 	check(no_targets.contacts.is_empty() and no_targets.last_contact_actor_id==null,"Empty explicit list invented or retained a last target")
 	check(no_targets.combat.snapshot()==result.combat.snapshot(),"Empty target pass reset actor-owned contact state")
+	# Even a pass with no contacts must return independently mutable owners.
+	var no_hit_source: RefCounted=group.fork_for_frame()
+	var no_hit: Dictionary=operation.evaluate(shots,no_hit_source,[],{"mode":"target"})
+	var no_hit_before: Dictionary=no_hit.combat.snapshot()
+	check(no_hit_source.set_pose(2,Transform3D(Basis.IDENTITY,Vector3(100,200,300))),no_hit_source.error)
+	check(no_hit.combat.snapshot()==no_hit_before,"No-hit result aliases later input mutations")
+	var source_before: Dictionary=no_hit_source.snapshot()
+	check(no_hit.combat.normal_hit(2,1).accepted,no_hit.combat.error)
+	check(no_hit.combat.record_contact(2,Vector3.ONE),no_hit.combat.error)
+	check(no_hit_source.snapshot()==source_before,"No-hit result leaked damage or contact metadata to its input")
+	check(no_hit.projectiles.mark_impact(1),no_hit.projectiles.error)
+	check(shots.snapshot()==before_shots,"No-hit result aliases the original projectile pool")
 	for bad in [null,[3],[true],[0.0],["player"]]:
 		check(operation.evaluate(shots,group,bad,{"mode":"target"}).is_empty(),"Invalid or unsupported target accepted")
 	for bad in [{}, {"mode":"target","half_extent":1},{"mode":"fixed"},{"mode":"fixed","half_extent":true},{"mode":"sphere","half_extent":1}]:

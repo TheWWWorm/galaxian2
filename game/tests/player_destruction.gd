@@ -203,7 +203,7 @@ func verify_invalid():
 	var death: RefCounted=started()
 	if death==null:return
 	var previous: Dictionary=death.snapshot()
-	for delta in [-1,151,0.5,true,null,"16",INF,NAN]:
+	for delta in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5,true,null,"16",INF,NAN]:
 		check(death.advance(delta,POSE,INITIAL_RNG).is_empty() and death.snapshot()==previous,"Invalid frame changed death state")
 	for rng in [null,{},0,{"state":-1},{"state":true},{"state":281474976710656}]:
 		check(death.advance(0,POSE,rng).is_empty() and death.snapshot()==previous,"Invalid random stream changed death state")

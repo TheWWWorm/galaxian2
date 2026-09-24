@@ -18,6 +18,14 @@ func build(library: RefCounted,visuals: RefCounted,bindings: RefCounted,catalogu
 	if not state.get("station_id") is int:return fail("Gate geometry requires a catalogue station")
 	if not layout.configure(bindings,catalogues,state.station_id):return fail(layout.error)
 	if state!=layout.snapshot():return fail("Gate rendering differs from its accepted ordinary environment")
+	return build_layout(library,visuals,bindings,layout)
+
+func build_layout(library: RefCounted,visuals: RefCounted,bindings: RefCounted,layout: RefCounted) -> bool:
+	clear()
+	if not layout is Layout:return fail("Gate geometry requires its native layout")
+	var state: Dictionary=layout.snapshot()
+	for key in ["base_content_id","binding_id"]:
+		if state.get(key)!=bindings.get(key):return fail("Gate geometry belongs to another source")
 	var paths:=[]
 	for row in state.objects:
 		paths.append(row.models[row.mesh_id])

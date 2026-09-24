@@ -5,6 +5,7 @@ const Tracks = preload("res://src/content/animation_tracks.gd")
 const AEM = preload("res://src/content/aem.gd")
 const Model = preload("res://src/presentation/imported_model.gd")
 const Materials = preload("res://src/presentation/material_library.gd")
+const SourceAnimation = preload("res://src/presentation/scenery_animation.gd")
 var error := ""
 var _prototypes := {}
 var _base := ""
@@ -38,10 +39,13 @@ func prepare(paths: Array, library: RefCounted, visuals: RefCounted, bindings: R
 		var reader := AEM.new()
 		var decoded := reader.decode(bytes)
 		if decoded.is_empty(): return reject(path.get_file() + ": " + reader.error)
+		var fixed_poses: Array=[]
 		if require_static and not Tracks.has_identity_tracks(decoded.surfaces):
-			return reject(path.get_file() + ": source animation semantics are not yet supported in this scene")
+			fixed_poses=fixed_surface_poses(decoded.surfaces)
+			if fixed_poses.is_empty():return reject(path.get_file() + ": source animation semantics are not yet supported in this scene")
 		var prototype := Model.new()
 		prototype.build(decoded, images.get(texture_paths[0]), images.get(texture_paths[1]), mode, texture_cache, source_uv)
+		for index in fixed_poses.size():prototype.instances[index].transform=fixed_poses[index]
 		_prototypes[path] = prototype
 	_base=bindings.base_content_id
 	_binding=bindings.binding_id
@@ -49,6 +53,25 @@ func prepare(paths: Array, library: RefCounted, visuals: RefCounted, bindings: R
 	_static=require_static
 	_source_uv=source_uv
 	return true
+
+static func fixed_surface_poses(surfaces: Array) -> Array:
+	# A source clip whose first positive and final integer keys coincide has
+	# one sampled pose. Prepare that pose once using the verified source sampler.
+	# Keep changing clips and material channels outside this static scene path.
+	for surface in surfaces:
+		for name in ["scalar","uv"]:
+			for track in surface.tracks.get(name,[]):
+				if not track.keys.is_empty():return []
+		for name in ["translation","scale"]:
+			var group: Array=surface.tracks.get(name,[])
+			for track in group:
+				if not Tracks.identity_track(track,3 if group.size()==1 else 1,1.0 if name=="scale" else 0.0):return []
+	var sampler:=SourceAnimation.new()
+	if not sampler.configure(surfaces):return []
+	var timing: Dictionary=sampler.snapshot().range
+	if timing.start_ms!=timing.end_ms:return []
+	var sampled: Dictionary=sampler.sample(timing.start_ms,Transform3D.IDENTITY)
+	return sampled.surfaces.map(func(row):return row.pose)
 
 func covers(paths: Array, bindings: RefCounted, quality: String, require_static: bool, source_uv := true) -> bool:
 	if _base!=bindings.base_content_id or _binding!=bindings.binding_id or _quality!=quality or (require_static and not _static) or _source_uv!=source_uv: return false

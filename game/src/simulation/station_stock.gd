@@ -3,6 +3,7 @@ extends RefCounted
 ## stock generation never chooses expansion ownership or enables shopping itself.
 const Definitions=preload("res://src/content/station_generation_definitions.gd")
 const BaseStock=preload("res://src/content/base_station_stock_definitions.gd")
+const DeepScience=preload("res://src/content/deep_science_stock_definitions.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const Random=preload("res://src/simulation/seeded_random.gd")
 const Contacts=preload("res://src/simulation/lounge_contacts.gd")
@@ -18,6 +19,7 @@ var _tech:=0
 var _faction:=0
 var _system:=15
 var _base:={}
+var _deep_science:={}
 const MAX_SELECTION_DRAWS:=65536
 
 static func available(bindings: RefCounted) -> bool:return Definitions.available(bindings)
@@ -29,12 +31,17 @@ func prepare(bindings: RefCounted,cat: RefCounted,context: Variant,random_state:
 	if not context is Dictionary or not Numbers.integer(context.get("station_id"),0,cat.tables.stations.size()-1):return reject("Station stock requires its supported campaign location")
 	var station: Dictionary=cat.tables.stations[context.station_id]
 	var base:={}
+	var deep_science:={}
 	var early: bool=context.size()==7 and station.system_id==int(rules.system_id) and Numbers.integer(context.get("campaign_cursor"),int(rules.first_cursor),int(rules.last_cursor))
 	if not early:
 		if not BaseStock.available(bindings):return reject("This content does not support ordinary base station stock")
 		base=bindings.early_contracts.base_station_stock
-		if context.size()!=8 or not Numbers.integer(context.get("campaign_cursor"),int(base.first_cursor),int(base.last_cursor)) or not Numbers.integer(context.get("ship_price_percent"),-100,1000):return reject("Base station stock requires its supported cursor and retained ship price modifier")
-		if int(context.station_id)>int(base.last_station_id) or int(station.system_id)>int(base.last_system_id) or base.excluded_station_ids.any(func(id):return int(id)==int(context.station_id)):return reject("This special location's stock is not supported yet")
+		if base.excluded_station_ids.any(func(id):return int(id)==int(context.station_id)):
+			if not DeepScience.available(bindings):return reject("This special location's stock is not supported yet")
+			deep_science=bindings.get("deep_science_stock")
+			if int(context.station_id)!=int(deep_science.station_id) or not context.get("all_base_medals_gold") is bool or not Numbers.integer(context.get("campaign_cursor"),int(deep_science.first_cursor),int(deep_science.last_cursor)):return reject("Deep Science stock requires its supported cursor and retained base-medal result")
+		if context.size()!=8+int(not deep_science.is_empty()) or not Numbers.integer(context.get("campaign_cursor"),int(base.first_cursor),int(base.last_cursor)) or not Numbers.integer(context.get("ship_price_percent"),-100,1000):return reject("Base station stock requires its supported cursor and retained ship price modifier")
+		if int(context.station_id)>int(base.last_station_id) or int(station.system_id)>int(base.last_system_id):return reject("This special location's stock is not supported yet")
 	if not context.get("valkyrie_owned") is bool or not context.get("supernova_owned") is bool or context.get("difficulty") not in [0.5,1.0,1.5]:return reject("Retain explicit expansion ownership and game difficulty")
 	for key in ["energy_availability_percent","missile_availability_percent"]:
 		if not Numbers.integer(context.get(key),-100,1000):return reject("Unsupported retained stock modifier")
@@ -42,7 +49,7 @@ func prepare(bindings: RefCounted,cat: RefCounted,context: Variant,random_state:
 	candidate._rng=Random.new()
 	if not candidate._rng.restore(random_state):return reject(candidate._rng.error)
 	candidate._rules=rules.duplicate(true);candidate._context=context.duplicate(true)
-	candidate._base=base.duplicate(true);candidate._system=int(station.system_id)
+	candidate._base=base.duplicate(true);candidate._deep_science=deep_science.duplicate(true);candidate._system=int(station.system_id)
 	candidate._tech=int(station.fields[int(rules.catalogue.station_tech_field)])
 	var system: Dictionary=cat.tables.systems[station.system_id]
 	candidate._faction=int(system.fields[int(rules.catalogue.system_faction_field)])
@@ -88,12 +95,14 @@ func _sample_ships(cat: RefCounted) -> Array:
 	if _base.is_empty() or (_system==int(_rules.system_id) and _context.campaign_cursor<int(_rules.ships_before_cursor)):return []
 	var rules: Dictionary=_base.ships
 	if cat.tables.ships.size()!=rules.affiliations.size():reject("The ship catalogue does not match the imported affiliations");return []
-	var count:=_draw(int(rules.count_draw_bound))+int(_context.station_id==int(rules.additional_count_station))
+	var all_gold: bool=not _deep_science.is_empty() and _context.all_base_medals_gold
+	var count:=int(_deep_science.all_base_gold_count) if all_gold else _draw(int(rules.count_draw_bound))+int(_context.station_id==int(rules.additional_count_station))
 	# A zero initial count returns before even the independent extra-ship rolls.
 	if count==0:return []
 	var chosen:=[];var result:=[]
 	for slot in count:
 		var fixed:=int(rules.fixed_first_ships.get(str(_context.station_id),-1)) if slot==0 else -1
+		if all_gold:fixed=int(_deep_science.all_base_gold_ship_id)
 		var id:=-1
 		while id<0 or id in chosen:
 			if _draws>=MAX_SELECTION_DRAWS:reject("Ship selection exceeded the native work limit");return []
@@ -107,6 +116,9 @@ func _sample_ships(cat: RefCounted) -> Array:
 					if not error.is_empty():return []
 		chosen.append(id)
 		result.append(_ship_offer(cat,id,int(rules.affiliations[id])))
+	# Source-specific offers precede expansion and system offers.
+	for extra in rules.get("faction_extras",[]):
+		if _faction==int(extra.faction) and _draw(int(extra.draw_bound))==0:result.append(_ship_offer(cat,int(extra.ship_id),int(extra.faction_id)))
 	if _context.supernova_owned:
 		for extra in rules.owned_supernova_extras:
 			if _faction==int(extra.faction) and _draw(int(extra.draw_bound))==0:result.append(_ship_offer(cat,int(extra.ship_id),int(extra.faction_id)))

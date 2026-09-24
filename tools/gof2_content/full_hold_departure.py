@@ -1,5 +1,6 @@
 """Second Mac mining departure data. No original code is executed or emitted."""
-import copy, hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_full_hold_departure(mach, arrival, departure, station_return):
@@ -9,15 +10,10 @@ def extract_full_hold_departure(mach, arrival, departure, station_return):
         if station_return['cursor_after_acknowledgement'] != 4 or station_return['next_mission_kind'] != 154 or station_return['next_mission_parameter'] != 25: return {}
         origin = arrival['provenance']['actor']
         if origin['bytes'] != 315: return {}
-        anchor = mach.text['address'] + origin['offset'] - mach.slice_offset - mach.text['offset']
-        proof = {}
-        for key, (delta, size, section, pattern) in LAYOUTS.items():
-            found = declaration_bytes(mach, anchor+delta, size, section.encode())
-            if found is None: return {}
-            if pattern.startswith('sha256:'):
-                if hashlib.sha256(found[0]).hexdigest() != pattern[7:]: return {}
-            elif found[0] != bytes.fromhex(pattern): return {}
-            proof[key] = {'offset': found[1], 'bytes': size}
+        layouts = [{key: [row[2], row[0], row[1], row[3]] for key, row in layout.items()}
+                   for layout in [LAYOUTS, MAC_ALTERNATE]]
+        proof = recognize(mach, origin['offset'], layouts, reader=declaration_bytes)
+        if not proof: return {}
         result = copy.deepcopy(VALUES)
         result['provenance'] = proof
         return result
@@ -74,3 +70,38 @@ LAYOUTS = {'launch_gates': [437002,
                        300,
                        '__text',
                        '554889e54157415653504189d789f34989fe488d053bd31700488b00488bb8080200004885ff7419e86fb4f8ff3db7000000750df30f1005b4e00a00e9b60000008d43930f57c083f8040f87a70000004183ff697f3583f8040f8795000000f30f100521590a00488d0daa000000486304814801c8ffe0f30f10058da20a00eb76f30f1005b72c0a00eb6c4181be780200009d0000007f4583f8047757f30f1005db580a00488d0d58000000486304814801c8ffe0f30f10056f590a00eb38f30f1005ad280a00eb2ef30f10058b280a00eb24f30f1005e59f0a00eb1a83fb6d0f94c00fb6c0488d0d07e00a00f30f100481eb030f57c04883c4085b415e415f5dc36690f3ffffffb1ffffffbbffffffc5ffffffcfffffffdfffffff5fffffff5fffffffbbffffff69ffffff']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'launch_gates': [437438,
+                  820,
+                  '__text',
+                  'sha256:b42951550f5c6a726503b78855f078637d3d93139a66928ea83d253b3995dd64'],
+ 'accepted_departure': [432174,
+                        259,
+                        '__text',
+                        '498bbdb00000004489fe4489f2e88097eeff83f8010f841506000085c00f85fd0e000041f68522010000010f84d200000041c6852201000000488d1dec4a1e00488b3be82e820600488b1b83f830752b488d05cd4a1e00488b38be3a000000e8f642efff4889df4889c6e8957b0600488d051e521e00c60001eb134889dfe8ab8106004889df4889c6e8767b0600488d05974a1e00488b08c781a8000000ffffffff488b08c781a0000000ffffffff488b08c781a4000000ffffffff488d0da14b1e00488b00c780ac000000ffffffff488b39e8443deeff488d05954a1e00488d0d92511e00c70101000000488b38be02000000e89bce0d0041c6454000e91d0e0000'],
+ 'mission_dispatch': [872050, 4, '__text', 'a8d5ffff'],
+ 'mission_factory': [861198,
+                     82,
+                     '__text',
+                     '498bbe0002000031f6e88a05feffbf98000000e852fc09004889c34889dfbe9a00000031d2b94e000000e85ff5f8ff4c89f74889dee8c8fbffff498b8610020000488b4008488b38be19000000e856faf8ff'],
+ 'station_keeps_ship': [415224,
+                        550,
+                        '__text',
+                        'sha256:d5257e11b5fe0a6fa07ead67b399f5395374ffd70e3632899dd9351038fa73d9'],
+ 'negative_pool_restore': [334997,
+                           128,
+                           '__text',
+                           '488d05bec61f00488b008bb0a800000085f67816498b4660488b38e819170300488d059ec61f00488b008bb0a000000085f67816498b4660488b38e817170300488d057ec61f00488b008bb0a400000085f67816498b4660488b38e823170300488d055ec61f00488b008bb0ac00000085f6780c498b4660488b38e823170300'],
+ 'ordinary_pool_refresh': [335125,
+                           207,
+                           '__text',
+                           '498b7e60e892610300488d0535c61f00488b38e877fd070083f85f0f84ae0000004c8d251dc61f00498b3c24e840fd07004889c7e8b2060600498b0c248981a8000000498b3c24e825fd07004889c7e8d3060600498b0c248981a0000000498b3c24e80afd07004889c7e872060600498b0c248981a4000000498b0424c780ac00000064000000498b1c244889dfe8b4fc07004889c7e860e207004189c7498b3c24e8e8fc07004889df4489fe89c2e8dd4c08000f57c90f2ec175137a11498b4660488b38be64000000e854160300'],
+ 'cargo_clear': [731558,
+                 112,
+                 '__text',
+                 '554889e54156534989fe4989767841c74610000000004885f67423833e00741e31db488b4608488b3cd8e81d8cf3ff4101461048ffc3498b76783b1e72e44c89f7e8a0f2ffff418b46284103460c412b4610488d0d5bb91900488b0939813c0100007d0689813c0100005b415e5dc390'],
+ 'gamma_environment': [879270,
+                       300,
+                       '__text',
+                       '554889e54157415653504189d789f34989fe488d059b781700488b00488bb8080200004885ff7419e8fbb3f8ff3db7000000750df30f1005f47c0a00e9b60000008d43930f57c083f8040f87a70000004183ff697f3583f8040f8795000000f30f100501f50900488d0daa000000486304814801c8ffe0f30f1005ad3e0a00eb76f30f100587c80900eb6c4181be780200009d0000007f4583f8047757f30f1005bbf40900488d0d58000000486304814801c8ffe0f30f10054ff50900eb38f30f10057dc40900eb2ef30f10055bc40900eb24f30f1005053c0a00eb1a83fb6d0f94c00fb6c0488d0d477c0a00f30f100481eb030f57c04883c4085b415e415f5dc36690f3ffffffb1ffffffbbffffffc5ffffffcfffffffdfffffff5fffffff5fffffffbbffffff69ffffff']}

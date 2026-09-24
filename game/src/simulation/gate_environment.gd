@@ -61,6 +61,30 @@ func arrival_position() -> Variant:
 	if entry.is_empty():reject("The incoming gate object is unavailable");return null
 	return entry.pose.origin
 
+func configure_void(bindings: RefCounted,environment: RefCounted) -> bool:
+	error=""
+	if not is_instance_of(environment,load("res://src/simulation/void_environment.gd")):return reject("Void gates require their native world environment")
+	var world: Dictionary=environment.snapshot()
+	for key in ["base_content_id","binding_id"]:
+		if world.get(key)!=bindings.get(key):return reject("Void gate belongs to another source")
+	var source: Dictionary=environment.object_state(2)
+	if source.is_empty():return reject("Void entry has no incoming gate")
+	var rules: Dictionary=bindings.mido_travel.gate_environment
+	var ids: Array=source.model_ids
+	var models: Dictionary=source.models
+	for id in rules.lod_mesh_ids[0]:
+		var path: String=bindings.resolve(int(id),"mesh")
+		if path.is_empty():return reject(bindings.error)
+		models[int(id)]=path
+	var gate:={"index":2,"source_kind":int(rules.source_kind),"interactive":false,"pose":source.pose,
+		"mesh_id":ids[0],"child_mesh_ids":[ids[1],ids[2]],"jump_mesh_id":ids[3],"models":models,
+		"lod_mesh_ids":rules.lod_mesh_ids[0].duplicate(),"lod_distances":rules.lod_distances.duplicate(),
+		"child_lod_mesh_ids":[],"collision_radius":0.0}
+	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"station_id":-1,"system_id":-1,
+		"world_mode":"void","gate_type":0,"gate_station_id":-1,"objects":[gate],"arrival_object_index":2,
+		"initial_random":world.initial_random,"random_state":world.random_state}
+	return true
+
 func object_state(index: int) -> Dictionary:
 	for row in _state.get("objects",[]):
 		if row.index==index:return row.duplicate(true)

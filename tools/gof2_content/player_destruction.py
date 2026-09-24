@@ -1,5 +1,6 @@
 """Optional Mac starter player-destruction declarations, read only at import."""
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_player_destruction(mach,arrival,flight,actors):
@@ -10,15 +11,12 @@ def extract_player_destruction(mach,arrival,flight,actors):
         if death['effect_type']!=0 or death['model_ids']!=[16821,16820]:return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None:return {}
-            if pattern.startswith('sha256:'):
-                if hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            elif found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'mac_starter_player_destruction',
@@ -159,3 +157,75 @@ LAYOUTS = {'player_constructor': [549940,
                         354,
                         '__text',
                         'sha256:935830615fe358664943057a92b0ba8752c157657fab42cc9dcf45ca11c8b9e2']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'player_constructor': [550476,
+                        3862,
+                        '__text',
+                        'sha256:289fd4c3fd181835b86546bd64ac04a88648b04f2e5cc587dd6aa9acbffbb88d'],
+ 'escape_equipment_binding': [555140,
+                              988,
+                              '__text',
+                              'sha256:a1d377a6fe43a640d782b051f89399225b6c26a657034febb391b1be913c587c'],
+ 'escape_branch': [599328,
+                   178,
+                   '__text',
+                   '554889e54156534889fb30c04883bbe8000000000f849200000030c083bba8030000000f8583000000488b3be89910ffff89c130c083f9017f72488b3bbe01000000e8670effff8b83ac0300008983a8030000488b3b31f6e8b510ffff4c8d35d6bd1b00498b3ee8faf403004889c3498b3ee8eff403004889c7be1b000000e8040102004889df4889c6e8b9050200488d05dcc31b00488b38be5b04000031d231c90f57c0e886a7ecffb0015b415e5dc390'],
+ 'living_station_predicate': [563488,
+                              38,
+                              '__text',
+                              '554889e553504889fb488b3be8b99cffff85c07f0430c0eb058a434124014883c4085b5dc390'],
+ 'death_poll': [388806, 794, '__text', 'sha256:5cfcd4d94f3bf6d71bd0525775ec34477316e06ae32f6e1ff0fcb8f12fd44675'],
+ 'death_start': [600502, 278, '__text', 'sha256:3dcbde128108c388063879f6543204d2930e51576de53cedd8023dbcf75e8b3b'],
+ 'effect_constructor': [-690616,
+                        1466,
+                        '__text',
+                        'sha256:b12439cbabf0b305d384bd0ac9271cb06e147fcd9cb2ebf4a14246bd8dcab651'],
+ 'effect_wrapper': [-690626, 10, '__text', '554889e55de900000000'],
+ 'effect_trigger': [-687254, 484, '__text', 'sha256:6bebbe94e3c5af68f3f2122a37e51694e20e09d100d29dbb99087cf531739190'],
+ 'effect_sound_choice': [-687710,
+                         456,
+                         '__text',
+                         'sha256:8cb9be771fc5ae5fcb31e23e0d75f04b95c01fa9e0dd2e213b8b6f3a2efadaad'],
+ 'effect_update': [-685808, 280, '__text', 'sha256:c8a752b3b11bb1608e1f35dc692f0da84361edd7f5476b766aed24507b352d5b'],
+ 'effect_reset': [-688792, 424, '__text', 'sha256:a5fcd67a285f31504f74894f2e18953c7256df08b7ba8413d9cddc7350a76bab'],
+ 'player_delta': [571700,
+                  138,
+                  '__text',
+                  '554889e54157415641554154534881eca80400004c898d30fbffff4989cf4889d34189f44989fe4d894e204983beb802000000750f4d89beb802000049895e284d89463041f64640010f8579350000498b7e10e8e821ecfff30f114dd0f30f1145c8660f70c001f30f1145cc488d75c8498dbe980100004889bd38fbffffe8cb6f07004589a684010000'],
+ 'death_update': [584847, 533, '__text', 'sha256:68c994b90cacf496b95016909b10179dda3b548f5afba858115ac740615dd861'],
+ 'death_ready': [601248, 32, '__text', '554889e5b0014883bfc000000000740d81bf94030000401f00000f9fc05dc390'],
+ 'player_draw': [603450,
+                 98,
+                 '__text',
+                 '554889e54157415653504189f64989ff498b3fe89800ffff85c07f46498bbfc00000004885ff741be8df54ecff4181bf94030000b70b00007f09498b7f10e871adebff498bbfc80000004885ff7405e8b854ecff498b7f18be01000000e9e2000000'],
+ 'euler_accumulation': [-728986,
+                        140,
+                        '__text',
+                        '554889e5534881ec880000004889fbf30f584340f30f114340f30f584b44f30f114b44f30f585348f30f1153488b7314488b7b38e883d91c00488d7db88b535cf30f105348f30f104340f30f104b444889c6e805fb1d008b7314488b7b38e859d91c00488dbd78fffffff30f105354f30f10434cf30f104b504889c6e8bb051e004881c4880000005b5dc390'],
+ 'spin_constant': [1557686, 4, '__const', '8fc2f53c'],
+ 'camera_attach': [232178,
+                   136,
+                   '__text',
+                   '554889e541574156534883ec284889f34989fe4889dfe8cd12feff4885c0745c4d8b7e184889dfe8bc12feff488b70104c89ffe8ca460a00488d75d8498b7e18c745d800000000c745dc00001644c745e0008022c4e8bc460a00488d75c8498b7e18c745c800000000c745cc00001644c745d00040a7c4e8b2460a004883c4285b415e415f5dc390'],
+ 'camera_enable': [905706, 10, '__text', '554889e54088774e5dc3'],
+ 'camera_update_gate': [906519, 23, '__text', 'f6434e010f840e0d000083bd34fbffff000f8e010d0000'],
+ 'failure_clock': [364839, 27, '__text', '0031c9e80da4f8ff41f6456b010f85140400004963454849014550'],
+ 'player_update_gate': [365987,
+                        126,
+                        '__text',
+                        '41817d589f0f00007f56498d454c4183bdbc01000000490f4ec48b304d8b8d980000004d8b85a8000000498b8d88000000498b95a0000000498b7d60458b951c010000410fb65d6b418b45208944241083e301895c240844891424e831230300498b7d60e8a2f2020088c349637548498bbd90000000410fb6556b83e201'],
+ 'poll_order': [378043,
+                91,
+                '__text',
+                '41f6456c017542498b7d60e8bbc8020084c0752b488d05841e1f00488b38e8e65507004889c7e88659000084c075104c89efe8e21f000084c00f85ed0800004c89efe8c4290000eb1249817d50b90b00007c08418b454841014558'],
+ 'input_gate': [379158, 39, '__text', '41f6456c010f85a002000041f6456b010f8595020000498b7d60e851c4020084c00f8584020000'],
+ 'failure_display': [390566, 435, '__text', 'sha256:03031925d9149fe368e8f07a93185bb0cbb01c4af24962a2458dc474ad7382a7'],
+ 'failure_input': [341303,
+                   102,
+                   '__text',
+                   '41f6456c01745f41817d58a00f00007c55488d050bae1f00488b38e84de507003d9e000000751841c6455c00498b7d10be02000000e851320f00e9ab100000488d0515ae1f00488b38be02000000e8927af7ff41c6455c00498b7d10be01000000e825320f00'],
+ 'world_after_player': [391398,
+                        354,
+                        '__text',
+                        'sha256:92cf3a31988318a9b56ea64f1ab10bd8d39fb5ec55e07ed20c63178fdd1a7796']}

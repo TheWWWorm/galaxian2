@@ -6,10 +6,26 @@ const SPANS = {"kappa_rescue_cast_dispatch":[51790,4],"kappa_rescue_cast":[5338,
 
 # Native composition.
 const Voice=preload("res://src/content/radio_audio_definitions.gd")
-static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
+const Briefing=preload("res://src/content/mining_briefing_definitions.gd")
+const MAC_SPANS = {"kappa_rescue_cast_dispatch":[51790,4],"kappa_rescue_cast":[5338,948],"kappa_rescue_waypoints":[1554498,76],"kappa_rescue_yaw":[1521054,4],"kappa_rescue_route_constructor":[721834,378],"kappa_rescue_route_loop":[722908,10],"kappa_rescue_route_copy":[723848,472],"kappa_rescue_route_assignment":[-77698,104],"kappa_rescue_dormant_actor":[-78898,44],"kappa_rescue_active_setter":[541446,14],"kappa_rescue_hostile_setter":[536160,28],"kappa_rescue_condition_constructor":[481078,46],"kappa_rescue_briefing":[1531026,16],"kappa_rescue_briefing_count":[1529670,4],"kappa_rescue_briefing_voice":[1535250,8],"kappa_rescue_result":[1522474,8],"kappa_rescue_result_voice":[1536202,8],"kappa_rescue_radio_dispatch":[104570,4],"kappa_rescue_radio_events":[84510,326],"kappa_rescue_radio_voices":[1537946,40],"kappa_rescue_radio_predicate_table":[686854,128],"kappa_rescue_radio_waypoint_survivors":[685189,169],"kappa_rescue_radio_disable":[685415,36],"kappa_rescue_radio_started_active_hostile":[685900,187],"kappa_rescue_radio_npc_link":[536340,14],"kappa_rescue_scenery_flag":[536076,28],"kappa_rescue_actor_system_flag":[622790,13],"kappa_rescue_sequence_provocation":[152277,87],"kappa_rescue_sequence_activation":[157867,156],"kappa_rescue_outcome_table":[482574,124],"kappa_rescue_outcome_death":[481588,58],"kappa_rescue_outcome_radio":[482090,48],"kappa_rescue_retired_flag":[-77838,16],"kappa_rescue_radio_finished":[684932,12]}
+const MAC_VALUES = {"scope":"kappa_boyle_rescue","campaign_cursor":21,"station_id":55,"system_id":11,"mission_kind":4,"population":{"actor_count":4,"construction_order":[1,2,3,0],"waypoints":[[40000,-40000,120000],[-10000,20000,190000]],"route_initial_index":0,"route_loop":false,"actor_route_loop":true,"initial_actor_mode":5,"initial_active":false,"actor_yaw":3.1415927410125732,"target_actor_id":0,"target_name_text_id":1600,"target_position_offset":[1000,0,2000],"actors":[{"actor_id":0,"actor_kind":0,"subtype":0,"hull_catalogue_id":17,"waypoint_index":1,"initial_hostile":true},{"actor_id":1,"actor_kind":0,"subtype":0,"hull_catalogue_id":5,"waypoint_index":0,"initial_hostile":false},{"actor_id":2,"actor_kind":0,"subtype":0,"hull_catalogue_id":5,"waypoint_index":0,"initial_hostile":false},{"actor_id":3,"actor_kind":0,"subtype":0,"hull_catalogue_id":5,"waypoint_index":0,"initial_hostile":false}]},"briefing_events":[{"speaker_id":1,"text_id":1866,"voice_event_id":167}],"instruction":{"speaker_id":16,"source_text_id":1867},"completion_events":[{"speaker_id":1,"text_id":1875,"voice_event_id":286}],"radio_events":[{"speaker_id":10,"text_id":1870,"voice_event_id":504,"condition":16,"values":[0]},{"speaker_id":0,"text_id":1871,"voice_event_id":505,"condition":6,"values":[0]},{"speaker_id":10,"text_id":1872,"voice_event_id":506,"condition":25,"values":[2]},{"speaker_id":14,"text_id":1873,"voice_event_id":507,"condition":8,"values":[0]},{"speaker_id":14,"text_id":1874,"voice_event_id":508,"condition":21,"values":[0]}],"radio_timing":{"display_delay_ms":2000,"base_duration_ms":1500,"per_line_ms":2000},"radio_waypoint":{"previous_index":0,"increase_strict":true,"requires_previous_zero":true,"minimum_survivors":2,"skips_scenery":true,"requires_positive_hull":true,"requires_active":false},"choreography":{"escort_actor_ids":[1,2,3],"escort_activation_event_started":2,"initial_phase":0},"completion":{"condition":22,"last_radio_event":4},"failure":{"condition":7,"first_actor_count":1,"actor_mode":4}}
+
+static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES) or Equal.equal_value(data,MAC_VALUES)
 
 static func available(bindings: RefCounted) -> bool:
 	return bindings!=null and parameters(bindings.mido_travel.get("kappa_rescue"))
+
+## Presentation data only: preparing a lesson never permits a new departure.
+## The silent instruction is a real second page, not a timed radio message.
+static func presentation_briefing(bindings: RefCounted) -> Dictionary:
+	if not available(bindings) or not Briefing.parameters(bindings.mining_briefing):return {}
+	var data: Dictionary=bindings.mido_travel.kappa_rescue
+	if bindings.desktop_text_id(int(data.instruction.source_text_id))!=int(data.instruction.source_text_id)+1:return {}
+	var result: Dictionary=bindings.mining_briefing.duplicate(true)
+	result.campaign_cursor=int(data.campaign_cursor);result.mission_kind=int(data.mission_kind)
+	result.events=data.briefing_events.duplicate(true)
+	result.events.append({"speaker_id":int(data.instruction.speaker_id),"text_id":int(data.instruction.source_text_id),"voice_event_id":-1})
+	return result
 
 static func radio(bindings: RefCounted) -> Dictionary:
 	if not available(bindings) or not Voice.parameters(bindings.opening_dialogue.get("voice")):return {}

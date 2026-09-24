@@ -7,6 +7,8 @@ const SPANS = {"shopping_hangar_entry":[-172628,157],"shopping_prices":[877404,8
 # Native composition.
 const Worlds=preload("res://src/content/ordinary_world_definitions.gd")
 
+const MAC_SPANS = {"shopping_hangar_entry":[-173120,157],"shopping_prices":[878036,892],"shopping_item_constructor":[-85882,172],"shopping_system_x":[735600,10],"shopping_system_y":[735610,10],"shopping_distance":[-664432,46],"shopping_root_input":[-192808,10],"shopping_root":[1241090,48],"shopping_station_match":[853920,22],"shopping_cargo_list":[730676,10],"shopping_installed_list":[730666,10],"shopping_unit_transfer":[-84322,104],"shopping_wallet":[872686,48],"shopping_wallet_commit":[-163580,33],"shopping_funds_message":[-164192,97],"shopping_protected_transfer":[-164542,118],"shopping_combine":[-82728,782],"shopping_split":[-83178,244],"shopping_list_commit":[-166978,78],"shopping_cargo_setter":[731558,112],"shopping_stock_setter":[852562,226],"shopping_repeat_quantity":[-167560,47],"shopping_overfilled_departure":[437438,85],"shopping_reseed":[1120354,64],"shopping_distance_percent_scale":[1531926,4],"shopping_ratio_maximum":[1519594,4],"shopping_variation_fraction":[1557654,4],"shopping_percent_fraction":[1531914,4],"shopping_special_multiplier":[1548946,4]}
+
 static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
 
 static func available(bindings: RefCounted) -> bool:

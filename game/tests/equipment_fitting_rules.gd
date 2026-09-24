@@ -47,6 +47,7 @@ func verify_fitting(args: PackedStringArray) -> void:
 	var primary:=Primary.new()
 	check(primary.configure(bindings,cat,mounts,seed) and primary.snapshot().guns.is_empty(),"An unarmed ship failed primary construction: "+primary.error)
 	verify_empty_effects(bindings,library,primary,textures)
+	verify_secondary_fitting(bindings,cat,seed,assets,empty.support)
 	var supported:=[];var guns:=[]
 	for id in empty.support:
 		if not empty.support[id].is_empty():continue
@@ -94,6 +95,59 @@ func verify_fitting(args: PackedStringArray) -> void:
 	for key in FittingRules.SPANS:
 		var bad:=bindings.mido_travel.duplicate(true);bad.provenance.erase(key)
 		check(not Travel.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Missing fitting proof was accepted: "+key)
+	var mixed:=bindings.mido_travel.duplicate(true)
+	var alternate: bool=Travel._alternate(mixed)
+	var other: Dictionary=FittingRules.SPANS if alternate else FittingRules.MAC_SPANS
+	mixed.provenance.fitting_duplicate_prompt={"offset":int(bindings.arrival_staging.provenance.actor.offset)+int(other.fitting_duplicate_prompt[0]),"bytes":int(other.fitting_duplicate_prompt[1])}
+	check(not Travel.validate(mixed,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Another source supplied fitting confirmation evidence")
+	mixed=bindings.mido_travel.duplicate(true)
+	mixed.ordinary_fitting=(FittingRules.VALUES if alternate else FittingRules.MAC_VALUES).duplicate(true)
+	check(not Travel.parameters(mixed),"Another source supplied its different fitting confirmation policy")
+	# These ships' source-specific prompt exception does not establish device
+	# flight support. Diagnostic loadouts never grant owned ships or progress.
+	for ship in [44,49]:
+		var candidate:=seed.duplicate(true);candidate.ship_id=ship;candidate.equipment_ids=[95]
+		var ship_counts:=[]
+		for property in Loadout.SLOT_PROPERTIES:ship_counts.append(int(cat.tables.ships[ship].stats[property]))
+		candidate.slots.clear();candidate.slots.resize(ship_counts.reduce(func(total,count):return total+count,0))
+		var category:=int(cat.tables.items[95].arrays[2][3]);var offset:=0
+		for index in category:offset+=ship_counts[index]
+		check(ship_counts[category]>0 and not empty.support[95].is_empty(),"The original device guard or compatible slot was lost")
+		candidate.slots[offset]={"item_id":95,"category":category,"slot":0,"quantity":1}
+		check(fitting.inspect(bindings,cat,candidate,assets).is_empty(),"A confirmation exception enabled unfinished device flight")
+
+func verify_secondary_fitting(bindings: RefCounted,cat: RefCounted,seed: Dictionary,assets: Dictionary,support: Dictionary) -> void:
+	var available: bool=Fitting.Secondaries.Definitions.available(bindings)
+	for item in cat.tables.items:
+		if item.arrays[2][3]==1 and (not available or item.id not in [41,42,43]):
+			check(not support[item.id].is_empty(),"Unimplemented secondary equipment was offered for fitting")
+	if not available:return
+	var fitting:=Fitting.new();var held: Dictionary=seed.duplicate(true)
+	var offset:=int(cat.tables.ships[seed.ship_id].stats.primary_slots)
+	for id in [41,42,43]:
+		var candidate:=seed.duplicate(true)
+		candidate.slots[offset]={"item_id":id,"category":1,"slot":0,"quantity":10}
+		candidate.equipment_ids=[id]
+		var resolved:=fitting.inspect(bindings,cat,candidate,assets)
+		check(not resolved.is_empty() and support[id].is_empty(),"A verified EMP stack was unavailable for fitting: "+fitting.error)
+		var owner:=Fitting.Secondaries.new()
+		check(owner.configure(bindings,cat,candidate) and owner.snapshot().guns[0].ammunition==10,"Fitting disagreed with actual launcher construction: "+owner.error)
+		var missing: Dictionary=assets.duplicate(true);missing.items.erase(id)
+		check(fitting.inspect(bindings,cat,candidate,missing).is_empty(),"Installed EMP bypassed original asset verification")
+		# Shared content validation accepts integral JSON numbers, but not
+		# fractions, booleans, empty stacks or values outside the source range.
+		var json_number:=candidate.duplicate(true);json_number.slots[offset].quantity=10.0
+		check(not fitting.inspect(bindings,cat,json_number,assets).is_empty(),"A whole-number JSON ammunition value was rejected")
+		for invalid in [0,-1,1.5,true,2147483648]:
+			var bad:=candidate.duplicate(true);bad.slots[offset].quantity=invalid
+			check(fitting.inspect(bindings,cat,bad,assets).is_empty(),"Malformed EMP ammunition was accepted by fitting")
+		var wrong:=candidate.duplicate(true);wrong.equipment_ids=[]
+		check(fitting.inspect(bindings,cat,wrong,assets).is_empty(),"EMP fitting ignored an inconsistent ordered loadout")
+		var capability: Dictionary=bindings.mido_travel.secondary_ownership
+		bindings.mido_travel.erase("secondary_ownership")
+		check(fitting.inspect(bindings,cat,candidate,assets).is_empty(),"Prepared assets bypassed missing equipped-secondary capability")
+		bindings.mido_travel.secondary_ownership=capability
+	check(seed==held,"EMP fitting diagnostics changed their detached input")
 
 func verify_impact_geometry(id: int,bindings: RefCounted,library: RefCounted,textures: RefCounted,primary: RefCounted,impacts: RefCounted) -> void:
 	# A contact-event diagnostic on an actually fired projectile. It verifies

@@ -7,6 +7,7 @@ const GeometryDetail = preload("res://src/presentation/geometry_detail.gd")
 const Frames = preload("res://src/simulation/frame_clock.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Library = preload("res://src/content/library.gd")
+const Readonly = preload("res://src/simulation/readonly_state.gd")
 var error := ""
 var _clock := {}
 var _counter := 0
@@ -43,10 +44,10 @@ func configure_selectors(bindings: RefCounted, selectors: Dictionary) -> bool:
 		var selector: Variant = selectors[key]
 		if not (key is int or key is String) or not (selector is Detail or selector is GeometryDetail) or not selector.has_alternates():return reject("Invalid geometry detail selector")
 		staged[key]=selector.fork_for_frame()
-	_clock=bindings.lod_refresh.duplicate(true)
+	_clock=Readonly.freeze(bindings.lod_refresh.duplicate(true))
 	_counter=int(_clock.initial_milliseconds)
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
-	_selectors=staged
+	_max_ms=Frames.simulation_limit(bindings)
+	_selectors=Readonly.freeze(staged)
 	_base=bindings.base_content_id
 	_binding=bindings.binding_id
 	return true
@@ -70,14 +71,20 @@ func refresh(positions: Dictionary, reference: Variant, detail: Variant) -> bool
 	if _selectors.is_empty(): return reject("Configure ship detail group before refreshing")
 	if not reference is Vector3 or not reference.is_finite() or positions.size()!=_selectors.size(): return reject("Invalid LOD reference or ship position set")
 	var staged := {}
+	var selectors := {}
 	for key in _selectors:
 		var position: Variant = positions.get(key)
 		if not position is Vector3 or not position.is_finite(): return reject("Invalid LOD position for ship %s" % key)
 		var displacement: Vector3 = position-reference
-		var selected: Dictionary = _selectors[key].select(displacement.length_squared(),detail)
-		if selected.is_empty(): return reject(_selectors[key].error)
+		# Selection can change its selector's error state. Detach only at the
+		# source refresh point; ordinary frame forks retain the unchanged set.
+		var selector: RefCounted = _selectors[key].fork_for_frame()
+		var selected: Dictionary = selector.select(displacement.length_squared(),detail)
+		if selected.is_empty(): return reject(selector.error)
 		staged[key]=selected
-	_selections=staged
+		selectors[key]=selector
+	_selectors=Readonly.freeze(selectors)
+	_selections=Readonly.freeze(staged)
 	# Immediate refreshes leave the periodic accumulator unchanged.
 	return true
 
@@ -90,11 +97,13 @@ func clear() -> void:
 
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted = get_script().new()
-	copy._clock = _clock.duplicate(true)
+	copy._clock = _clock
 	copy._counter = _counter
 	copy._max_ms = _max_ms
-	for key in _selectors: copy._selectors[key] = _selectors[key].fork_for_frame()
-	copy._selections = _selections.duplicate(true)
+	# Refresh replaces these private observations atomically. Public snapshots
+	# remain editable detached copies, including nested selection dictionaries.
+	copy._selectors = _selectors
+	copy._selections = _selections
 	copy._base = _base
 	copy._binding = _binding
 	return copy

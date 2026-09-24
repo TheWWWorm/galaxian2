@@ -5,6 +5,9 @@ const Geometry = preload("res://src/presentation/ship_geometry.gd")
 const Library = preload("res://src/content/library.gd")
 const Bindings = preload("res://src/content/resource_bindings.gd")
 const Visuals = preload("res://src/content/visual_library.gd")
+const Resources = preload("res://src/presentation/model_resources.gd")
+const SourceAnimation = preload("res://src/presentation/scenery_animation.gd")
+const Model = preload("res://src/presentation/imported_model.gd")
 var failures := 0
 
 func _initialize() -> void:
@@ -72,7 +75,7 @@ func verify_source(content: String, pack: String, texture_pack: String) -> void:
 	environment.environment.ambient_light_color=Color.WHITE;environment.environment.ambient_light_energy=1
 	viewport.add_child(environment)
 	var light := DirectionalLight3D.new();viewport.add_child(light)
-	for id in [2,8,10,23,37]:
+	for id in [2,8,10,23,27,37]:
 		var scene := Geometry.new();viewport.add_child(scene)
 		var built := scene.build(id,library,visuals,bindings)
 		if id==37:
@@ -98,6 +101,9 @@ func verify_source(content: String, pack: String, texture_pack: String) -> void:
 					child_count+=1
 					check(child.transform==Transform3D.IDENTITY,"LOD light acquired a placement offset")
 			check(child_count==selected.levels[level].lights.size(),"LOD light assembly mismatch")
+			if id==27 and level==0:
+				check(body.instances[0].transform==Transform3D.IDENTITY,"Detailed source hull acquired the distant LOD pose")
+			if id==27 and level>0:verify_fixed_source_pose(body)
 			if DisplayServer.get_name()!="headless":
 				await process_frame; await process_frame; await RenderingServer.frame_post_draw
 				var image := viewport.get_texture().get_image()
@@ -120,6 +126,30 @@ func verify_source(content: String, pack: String, texture_pack: String) -> void:
 		scene.free()
 	viewport.free()
 	print(library.manifest.profile.edition+": imported LOD meshes, children, detail bands and threshold boundaries verified")
+
+func verify_fixed_source_pose(body: Node3D) -> void:
+	var sampler:=SourceAnimation.new()
+	check(sampler.configure(body.surfaces),sampler.error)
+	if failures:return
+	check(sampler.snapshot().range=={"start_ms":13333,"end_ms":13333},"Source minimum positive and final integer key should coincide")
+	var retained: Transform3D=body.instances[0].transform
+	for time_ms in [0,3333,6666,9999,13332,13333,26666]:
+		var sampled: Dictionary=sampler.sample(time_ms,Transform3D.IDENTITY)
+		check(not sampled.is_empty() and sampled.surfaces[0].pose==retained,"Prepared LOD differs from the fixed source-clamped pose")
+	check((retained*Vector3(100,0,0)).distance_to(Vector3(100,0,0))<0.01,"Full-turn endpoint changed the distant hull orientation")
+	var copy:=Model.new();copy.copy_from(body)
+	check(copy.instances[0].transform==retained and copy.instances[0].mesh==body.instances[0].mesh and copy.materials[0]!=body.materials[0],"Instance copy lost the prepared pose or independent material")
+	copy.instances[0].position+=Vector3.ONE
+	check(body.instances[0].transform==retained,"A copied model changed the prepared source pose")
+	copy.free()
+	for channel in ["rotation","translation","scalar","uv"]:
+		var altered: Array=body.surfaces.duplicate(true)
+		match channel:
+			"rotation":altered[0].tracks.rotation[2].keys=PackedFloat32Array([0,0,6666,-PI,13333,-TAU])
+			"translation":altered[0].tracks.translation=[{"dimensions":3,"keys":PackedFloat32Array([0,0,0,0,13333,1,0,0])}]
+			"scalar":altered[0].tracks.scalar=[{"dimensions":1,"keys":PackedFloat32Array([0,100,13333,50])}]
+			"uv":altered[0].tracks.uv=[{"dimensions":1,"keys":PackedFloat32Array([0,0,13333,1])}]
+		check(Resources.fixed_surface_poses(altered).is_empty(),"Static admission accepted unsupported "+channel+" animation")
 
 func check(ok: bool,message: String) -> void:
 	if not ok:

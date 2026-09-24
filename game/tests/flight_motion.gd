@@ -21,6 +21,8 @@ func _initialize() -> void:
 	var yaw := motion.advance(pose, Vector2(0, quarter), 1, 1)
 	check(yaw.basis.z.distance_to(Vector3.RIGHT) < 0.00001, "Positive local yaw has wrong direction")
 	check(yaw.origin.distance_to(pose.origin + Vector3(2000, 0, 0)) < 0.01, "Forward displacement did not follow the updated heading")
+	var lateral := motion.advance(pose, Vector2(0, quarter), 0, 0.1, -0.5)
+	check(lateral.origin.distance_to(pose.origin + lateral.basis.x * -50.0) < 0.0001, "Lateral travel did not follow updated local heading")
 	var pitch := motion.advance(pose, Vector2(quarter, 0), 0, 1)
 	check(pitch.basis.z.distance_to(Vector3.DOWN) < 0.00001 and pitch.origin == pose.origin, "Pitch or zero-throttle rotation failed")
 	var both := motion.advance(pose, Vector2(quarter, quarter), 0, 1)

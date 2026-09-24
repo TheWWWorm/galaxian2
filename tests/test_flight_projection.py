@@ -9,13 +9,13 @@ from test_materials import arm_wide
 from test_ship_models import branch
 
 
-def fixture(mac, relocation=0):
+def fixture(mac, relocation=0, alternate=False):
     base = 0x100000 + relocation
     text = {'segment': b'__TEXT', 'name': b'__text', 'address': base, 'offset': 256, 'length': 9000}
     const = {'segment': b'__TEXT', 'name': b'__const', 'address': base+10000, 'offset': 10000, 'length': 64}
     m = SimpleNamespace(architecture='x86_64' if mac else 'armv7', text=text, sections=[text,const], slice_offset=0)
     data = bytearray(11000); prefix = 'MAC_' if mac else 'ARM_'
-    blocks = {k: expand(getattr(reader,prefix+k.upper())) for k in ['start','setter','predicate','compare','metrics']}
+    blocks = {k: expand(reader.MAC_ALTERNATES[k] if alternate and mac and k in reader.MAC_ALTERNATES else getattr(reader,prefix+k.upper())) for k in ['start','setter','predicate','compare','metrics']}
     addresses = {k:base+i*1024 for i,k in enumerate(blocks)}
     addresses.update(cursor=base+6000, other=base+7000)
     links = {('start','call_61' if mac else 'call_60'):'setter',('start','call_14' if mac else 'call_18'):'predicate',
@@ -23,6 +23,8 @@ def fixture(mac, relocation=0):
              ('setter','call_ab' if mac else 'call_bc'):'metrics'}
     jumps = {'start':{'jump_1b':0x27,'jump_25':0x4b},'compare':{'jump_9':0x14},'setter':{'jump_2f':0x3a,'jump_35':0xcf,'jump_bd':0xcf},'metrics':{'jump_2d':0x38,'jump_33':0x167}} if mac else {
              'start':{'jump_1e':0x3a,'jump_38':0x3e},'setter':{'jump_36':0x3a,'jump_38':0xd4,'jump_ca':0xd4},'metrics':{'jump_4c':0x50,'jump_4e':0x186}}
+    if alternate and mac:
+        jumps['metrics']['jump_33'] = 0x176
     def relative(site,target,size,kind):
         if mac: return int(target-site-size).to_bytes(size,'little',signed=True)
         delta=target-site-4
@@ -65,6 +67,19 @@ def fixture(mac, relocation=0):
 
 @unittest.skipUnless(importlib.util.find_spec('capstone'),'optional static-reader dependency')
 class FlightProjection(unittest.TestCase):
+    def test_alternate_mac_stack_and_projection_context(self):
+        for relocation in (0, 0x90000):
+            m, blocks, addresses, _ = fixture(True, relocation, alternate=True)
+            result = reader.extract_flight_projection(m)
+            self.assertEqual([result[k] for k in ['vertical_fov_radians', 'near', 'far', 'matching_location_early_far']], [1, 32, 120000, 240000])
+            for key, position in [('setter', 0x52 + 4), ('metrics', blocks['metrics'][1]['jump_33'][0])]:
+                original = m.data
+                data = bytearray(original)
+                data[256 + addresses[key] - m.text['address'] + position] ^= 4
+                m.data = bytes(data)
+                self.assertFalse(reader.extract_flight_projection(m), key)
+                m.data = original
+
     def test_relocated_changed_parameters(self):
         for mac in [True,False]:
             for relocation in [0,0x90000]:

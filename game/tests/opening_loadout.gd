@@ -61,7 +61,7 @@ func _initialize() -> void:
 		# and mission start are not inferred from a loadout declaration.
 		check(driver.configure(bindings, catalogues, catalogues.content_id, state.ship_id, [], state.equipment_ids, 0.5, Transform3D.IDENTITY), driver.error)
 		var event := InputEventKey.new()
-		event.physical_keycode = KEY_D
+		event.physical_keycode = KEY_RIGHT
 		event.pressed = true
 		driver.accept(event)
 		driver.step(0, 1.0)

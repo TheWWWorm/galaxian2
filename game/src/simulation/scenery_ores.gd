@@ -6,6 +6,7 @@ const Definitions = preload("res://src/content/scenery_resource_definitions.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Library = preload("res://src/content/library.gd")
 const Generator = preload("res://src/simulation/seeded_random.gd")
+const Population = preload("res://src/simulation/scenery_population.gd")
 const MAX_ATTEMPTS := 100000
 var error := ""
 var _identity := {}
@@ -26,11 +27,17 @@ func configure(bindings: RefCounted, catalogues: RefCounted, station_id: Variant
 	var stations: Variant = catalogues.tables.get("stations")
 	var systems: Variant = catalogues.tables.get("systems")
 	var items: Variant = catalogues.tables.get("items")
-	if not stations is Array or not systems is Array or not items is Array or not station_id is int or station_id<0 or station_id>=stations.size():return reject("Scenery station is outside its catalogue")
-	var system_id: Variant = stations[station_id].get("system_id")
-	if not Numbers.integer(system_id,0,systems.size()-1):return reject("Scenery station system is unavailable")
-	var here: Variant = map_position(systems[int(system_id)],data)
-	if here==null:return reject("Scenery system map position is unavailable")
+	if not stations is Array or not systems is Array or not items is Array or not station_id is int:return reject("Scenery station is outside its catalogue")
+	var old_void: bool=station_id==-1 and campaign_cursor in [25,29] and location_match and load("res://src/content/post_sahi_definitions.gd").portal_available(bindings.mido_travel,campaign_cursor)
+	var crystal_void: bool=station_id==-1 and campaign_cursor==33 and location_match and not special_ore_flag and not Population.void_crystal_field(bindings).is_empty()
+	var void_world:=old_void or crystal_void
+	var here: Variant=null
+	if not void_world:
+		if station_id<0 or station_id>=stations.size():return reject("Scenery station is outside its catalogue")
+		var system_id: Variant=stations[station_id].get("system_id")
+		if not Numbers.integer(system_id,0,systems.size()-1):return reject("Scenery station system is unavailable")
+		here=map_position(systems[int(system_id)],data)
+		if here==null:return reject("Scenery system map position is unavailable")
 	var rows := []
 	for identifier in data.ore_item_ids:
 		var id := int(identifier)

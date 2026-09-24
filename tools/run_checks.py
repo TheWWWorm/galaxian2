@@ -138,6 +138,10 @@ def main():
             env = os.environ.copy()
             env.pop('GOF2_SCENARIO_INPUT', None)
             env.pop('GOF2_SCENARIO_OUTPUT', None)
+            if args.kind == 'python':
+                # Focused discovery must not depend on another test module
+                # having inserted the reader package into sys.path first.
+                env['PYTHONPATH'] = os.pathsep.join(filter(None, (str(ROOT / 'tools'), env.get('PYTHONPATH'))))
             if args.kind == 'native':
                 if args.scenario and args.capture_scenario:
                     raise ValueError('Choose scenario capture or replay, not both')
@@ -154,6 +158,12 @@ def main():
                     env['GOF2_SCENARIO_OUTPUT'] = str(pending)
             report, output = execute(command(args), args.timeout, env, args.log)
             report['kind'] = args.kind
+            if args.kind == 'python':
+                count = re.search(r'^Ran (\d+) tests? in ', output, re.MULTILINE)
+                report['test_count'] = int(count[1]) if count else 0
+                if not report['test_count']:
+                    report['passed'] = False
+                    output += '\nNo Python tests ran; check the selected pattern.\n'
             if pending:
                 if report['passed'] and pending.is_file() and pending.stat().st_size:
                     pending.replace(args.capture_scenario)

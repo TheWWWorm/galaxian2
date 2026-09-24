@@ -91,8 +91,9 @@ func _configure_field(bindings: RefCounted, catalogues: RefCounted, unix_seconds
 	if not unix_seconds is int or unix_seconds<0 or unix_seconds>2147483647:
 		return reject("Scenery requires explicit supported Unix seconds")
 	var field:=Field.new()
-	# These supported early trips cannot enter the later special-ore override.
-	if not field.configure(bindings,catalogues,station_id,false,false,campaign_cursor):return reject(field.error)
+	# Only the source-selected Void entry uses the special-location field.
+	# Field.configure still owns capability and location admission.
+	if not field.configure(bindings,catalogues,station_id,station_id==-1 and campaign_cursor in [25,29],false,campaign_cursor):return reject(field.error)
 	var random := Generator.new()
 	random.seed_from(unix_seconds)
 	var generated := field.generate(center,random.snapshot())
@@ -213,6 +214,40 @@ func configure_alioth(bindings: RefCounted,catalogues: RefCounted,equipment: Ref
 	_departure_population=selected
 	return true
 
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,entry_conditions: Dictionary,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null) -> bool:
+	clear()
+	if not is_instance_of(equipment,load("res://src/simulation/station_equipment.gd")):return reject("Kappa scenery requires retained equipment")
+	var owned: Dictionary=equipment.snapshot();var seed: Dictionary=owned.get("loadout",{})
+	if not equipment.cargo_cache_valid() or load("res://src/simulation/equipment_slots.gd").checked_slots(bindings,catalogues,seed).is_empty():return reject("Kappa scenery requires valid current equipment")
+	var world:=WorldInitialization.new()
+	if not world.configure_kappa_rescue(bindings,catalogues,seed,context,entry_conditions):return reject(world.error)
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var selected:=population.for_departure(int(context.station_id),entry_conditions,int(context.campaign_cursor))
+	if selected.is_empty():return reject(population.error)
+	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,context.campaign_cursor,selected.center,large_display,body_resources,effect_resources):return false
+	if not _finish_world_initialization(world):
+		var message:=error;clear();return reject(message)
+	_departure_population=selected
+	return true
+
+func configure_sahi(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,entry_conditions: Dictionary,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null) -> bool:
+	clear()
+	if not is_instance_of(equipment,load("res://src/simulation/station_equipment.gd")):return reject("Sahi scenery requires retained equipment")
+	var owned: Dictionary=equipment.snapshot();var seed: Dictionary=owned.get("loadout",{})
+	if not equipment.cargo_cache_valid():return reject("Sahi scenery requires valid retained equipment")
+	var world:=WorldInitialization.new()
+	if not world.configure_sahi(bindings,catalogues,seed,context,entry_conditions):return reject(world.error)
+	var population:=Population.new()
+	if not population.configure(bindings):return reject(population.error)
+	var selected:=population.for_departure(int(context.station_id),entry_conditions,int(context.campaign_cursor))
+	if selected.is_empty():return reject(population.error)
+	if not _configure_field(bindings,catalogues,unix_seconds,selected.station_id,context.campaign_cursor,selected.center,large_display,body_resources,effect_resources):return false
+	if not _finish_world_initialization(world):
+		var message:=error;clear();return reject(message)
+	_departure_population=selected
+	return true
+
 func configure_free(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,entry_conditions: Dictionary,unix_seconds: Variant,large_display:=true,body_resources: RefCounted=null,effect_resources: RefCounted=null) -> bool:
 	clear()
 	if not load("res://src/content/free_flight_definitions.gd").available(bindings) or not is_instance_of(equipment,load("res://src/simulation/station_equipment.gd")):return reject("Ordinary scenery requires its verified equipped entry")
@@ -274,7 +309,7 @@ func arrival_motion_construction() -> Dictionary:
 	return result
 
 func snapshot() -> Dictionary:
-	_read_snapshot={}
+	# A detached observation does not change the retained read-only frame.
 	return _build_snapshot()
 
 ## Borrowed immutable state for simulation queries and presentation. A branch
@@ -424,6 +459,21 @@ func apply_escape_environment(escape: Dictionary) -> bool:
 func presentation_clock(object_index: int) -> RefCounted:
 	return null if object_index<0 or object_index>=_destruction.size() else _destruction[object_index].presentation_clock()
 
+## Applies the native planner's ordered contacts to detached body state. The
+## ordinary scenery update still owns zero-hull destruction and its effects.
+func apply_physical_contacts(operations: Array) -> bool:
+	error=""
+	var bodies: RefCounted
+	for operation in operations:
+		if operation.kind!="asteroid":continue
+		if bodies==null:
+			if _bodies==null:return reject("Physical contact requires prepared scenery bodies")
+			bodies=_bodies.fork_for_frame()
+		if not bodies.record_contact(operation.object_index,-operation.impact_vector):return reject(bodies.error)
+		if bodies.normal_hit(operation.object_index,operation.body_damage).is_empty():return reject(bodies.error)
+	if bodies!=null:_bodies=bodies;_read_snapshot={}
+	return true
+
 func evaluate_primary_contacts(primaries: RefCounted, combat: RefCounted, inventory: RefCounted, delta_ms: Variant, shared_random_state: Variant=null, display_available:=true) -> Dictionary:
 	error=""
 	if _bodies==null or not primaries is Primaries or (combat!=null and not combat is Combat):
@@ -441,6 +491,44 @@ func evaluate_primary_contacts(primaries: RefCounted, combat: RefCounted, invent
 	if result.combat!=null and result.combat.has_local_reactions():
 		next._random_state=result.combat.contact_random_state();operation.random_state=next._random_state.duplicate(true)
 	return operation
+
+## The field owns the scenery-specific recovery contract. Its physical model
+## can move after collision statistics retire; these are not NPC wreck poses.
+func recovery_observation(index: int) -> Dictionary:
+	error=""
+	if _bodies==null or index<0 or index>=_destruction.size():reject("The scenery cargo target is unavailable");return {}
+	var field: Dictionary=read_snapshot()
+	var body: Dictionary=field.bodies.objects[index]
+	var life: Dictionary=field.destruction[index].lifecycle
+	if life.actor_state not in [3,4] or not life.drop_allowed or life.cargo.is_empty():reject("This scenery no longer offers recoverable cargo");return {}
+	var model: Dictionary=field.objects[index]
+	return {"base_content_id":field.base_content_id,"binding_id":field.binding_id,
+		"actor_id":index,"target_group":"scenery","actor_kind":-1,"actor_mode":life.actor_state,
+		"hull":body.vitals.hull,"active":body.active,"statistics_exempt":true,
+		"cargo_eligible":life.drop_allowed,"cargo_model_exists":life.cargo_model_exists,
+		"cargo_model_id":life.cargo.model_id,"retire_on_transfer":true,
+		"body_pose":Transform3D(model.basis.scaled(Vector3.ONE*model.scale),model.position),
+		"cargo_pose":life.cargo.pose,"cargo_entries":[{"item_id":life.cargo.item_id,"quantity":life.cargo.quantity}],
+		"collision_centers":[],"body_motion_blocked":false,"body_motion_detached":false,
+		"friendly":false,"special_cargo":false}
+
+## The enclosing transaction has validated the tractor result and hold. This
+## branch replaces only changed owners; captured effects, RNG and counts remain.
+func _retain_recovery_frame(index: int,frame: Dictionary) -> bool:
+	var changes: Dictionary=frame.actor_changes
+	if changes.is_empty():return true
+	var death: RefCounted=_destruction[index].fork_for_frame()
+	death._retain_recovery_frame(frame)
+	var bodies: RefCounted=_bodies;var motion: RefCounted=_motion
+	if changes.has("active"):
+		var body: Dictionary=_bodies.read_snapshot().objects[index]
+		if changes.active!=body.active:
+			bodies=_bodies.fork_for_frame()
+			if not bodies.set_permissions(index,changes.active,body.damage_allowed):return reject(bodies.error)
+	if changes.has("body_pose"):
+		motion=_motion.fork_for_frame();motion._retain_recovery_frame(index,frame)
+	_read_snapshot={};_destruction[index]=death;_bodies=bodies;_motion=motion
+	return true
 
 func presentation_identity() -> RefCounted:
 	return _presentation_identity

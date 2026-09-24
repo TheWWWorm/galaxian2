@@ -1,4 +1,5 @@
 extends Node3D
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Source opening body/light presentation, driven by detached simulation state.
 ## Mac Betty departure includes its original nozzle-glow mesh. Exhaust particles,
 ## mounted equipment and the location environment have separate owners.
@@ -15,8 +16,11 @@ const ImportedModel = preload("res://src/presentation/imported_model.gd")
 const SurfaceResponse = preload("res://src/presentation/surface_response.gd")
 const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const Campaign=preload("res://src/content/free_campaign_definitions.gd")
+const EngineParticles=preload("res://src/simulation/player_engine_particles.gd")
+const ParticleGeometry=preload("res://src/presentation/opening_damage_geometry.gd")
 var error := ""
 var player: Node3D
+var engine_particles: Node3D
 var actors := {}
 var surface_materials: Array[ShaderMaterial] = []
 var _definitions := {}
@@ -50,6 +54,34 @@ func apply_surface_response(bindings: RefCounted, lighting: Dictionary, reflecti
 	for row in staged:
 		surface_materials.append(row.material)
 	return true
+
+func build_player_exhaust(owner: RefCounted,library: RefCounted,visuals: RefCounted,bindings: RefCounted) -> bool:
+	error=""
+	if player==null or engine_particles!=null or not owner is EngineParticles:return reject("Build fresh opening geometry and its player engine owner first")
+	var state: Dictionary=owner.snapshot()
+	if state.get("base_content_id")!=_content_id or state.get("binding_id")!=_binding_id or state.get("ship_id")!=player.get_meta("source_ship_id"):
+		return reject("Opening exhaust belongs to another player hull or content identity")
+	var sprites:=ParticleGeometry.new()
+	if not sprites.build(owner,library,visuals,bindings):
+		var message: String=sprites.error
+		sprites.free()
+		return reject(message)
+	add_child(sprites);engine_particles=sprites
+	return true
+
+func prepare_player_exhaust(owner: RefCounted,state: Dictionary,camera_pose: Variant) -> Dictionary:
+	error=""
+	if engine_particles==null:
+		if state.has("engine_particles"):error="Opening exhaust has no configured renderer"
+		return {}
+	if not owner is EngineParticles or not state.has("engine_particles"):
+		error="Opening exhaust requires its current engine-particle frame";return {}
+	var prepared: Dictionary=engine_particles.prepare_world(owner,state,camera_pose)
+	if prepared.is_empty():error=engine_particles.error
+	return prepared
+
+func commit_player_exhaust(prepared: Dictionary) -> void:
+	if engine_particles!=null and not prepared.is_empty():engine_particles.commit_world(prepared)
 
 func build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, quality := "high", with_detail := false) -> bool:
 	clear()
@@ -95,18 +127,22 @@ func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCoun
 	var context:=location.resolve_departure(bindings,catalogues,cache,equipment)
 	if context.is_empty():return reject(location.error)
 	var objective:=OrdinaryFlight.objective(bindings,int(context.campaign_cursor))
-	_departure_return_available=int(context.campaign_cursor) in [2,4,7,16] and not objective.is_empty()
+	_departure_return_available=int(context.campaign_cursor) in [2,4,7,16,25,26,29] and not objective.is_empty()
 	_departure_return_cursor=int(context.campaign_cursor)+1
 	if _departure_return_available:
 		_departure_return_mission={"kind":int(objective.next_kind),"station_id":int(objective.station_id),"reward":0,"bonus":0}
 		if objective.get("alioth_attack",false):_departure_return_mission.source_parameter=0
-	if Campaign.visit_at(bindings.mido_travel,context.campaign_cursor,context.station_id):
-		var visit: Dictionary=bindings.mido_travel.suttnar_visit
+		if objective.has("next_mission"):_departure_return_mission=objective.next_mission.duplicate(true)
+	var rescue:=Campaign.rescue_at(bindings.mido_travel,context.campaign_cursor,context.station_id)
+	if Campaign.visit_at(bindings.mido_travel,context.campaign_cursor,context.station_id) or rescue:
+		var mission:=Campaign.mission(bindings.mido_travel,context.campaign_cursor)
+		var visit:=Campaign.result_rules(bindings,context.campaign_cursor,mission) if rescue else Campaign.dialogue_rules(bindings,context.campaign_cursor,mission)
 		_visit_transition={"base_content_id":context.base_content_id,"binding_id":context.binding_id,
 			"from_cursor":int(context.campaign_cursor),"campaign_cursor":int(visit.next_cursor),
 			"previous_mission":Campaign.mission(bindings.mido_travel,int(context.campaign_cursor)),
 			"mission":Campaign.mission(bindings.mido_travel,int(visit.next_cursor)),
 			"station_id":int(context.station_id),"reward_credits":int(visit.reward_credits)}
+		if rescue:_visit_transition.outcome="completed"
 		_visit_system_id=int(context.system_id)
 	if (state.get("campaign_cursor")!=context.campaign_cursor and not _is_departure_return(state) and not _is_acknowledged_visit(state)) or state.get("base_content_id")!=context.base_content_id or state.get("binding_id")!=context.binding_id or state.get("actors")!=[]:
 		return reject("Departure player geometry requires its supported mining world")
@@ -203,7 +239,7 @@ func apply_arrival(staging: Dictionary, actor: Dictionary, detail: Dictionary = 
 
 func _is_departure_return(state: Dictionary) -> bool:
 	var objective: Variant=state.get("mining_objective",{})
-	return _departure_return_available and state.get("campaign_cursor")==_departure_return_cursor and objective is Dictionary and objective.get("phase")=="return_required" and objective.get("combat_objective_acknowledged",objective.get("cargo_objective_acknowledged",false)) and state.get("mission")==_departure_return_mission
+	return _departure_return_available and state.get("campaign_cursor")==_departure_return_cursor and objective is Dictionary and objective.get("phase") in ["return_required","portal_search","free_navigation"] and objective.get("combat_objective_acknowledged",objective.get("cargo_objective_acknowledged",false)) and state.get("mission")==_departure_return_mission
 
 func _is_acknowledged_visit(state: Dictionary) -> bool:
 	if _visit_transition.is_empty():return false
@@ -255,7 +291,7 @@ func apply_state(state: Dictionary, escape: Dictionary = {}) -> bool:
 	var player_pose: Transform3D=state.player_pose
 	var player_visible:=true
 	if state.has("player_model_basis"):
-		if _campaign_cursor not in [2,4,7,10,11,12,13,14,16,18,19] or not state.player_model_basis is Basis or not valid_pose(Transform3D(state.player_model_basis,Vector3.ZERO)):return reject("Invalid mining-flight visual model orientation")
+		if _campaign_cursor not in ([2,4]+FlightStages.EQUIPPED) or not state.player_model_basis is Basis or not valid_pose(Transform3D(state.player_model_basis,Vector3.ZERO)):return reject("Invalid mining-flight visual model orientation")
 		player_pose=player_pose*Transform3D(state.player_model_basis,Vector3.ZERO)
 		if not valid_pose(player_pose):return reject("First-flight visual model orientation overflowed")
 	if not escape.is_empty():
@@ -288,6 +324,7 @@ func clear() -> void:
 	for child in get_children(): child.free()
 	surface_materials.clear()
 	player = null
+	engine_particles=null
 	actors.clear()
 	_definitions.clear()
 	_content_id = ""

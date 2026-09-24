@@ -14,6 +14,7 @@ func verify(args: PackedStringArray):
 		check(not Stock.new().prepare(bindings,cat,context,rng.snapshot(),1789423200),"Older packs enabled Alioth stock")
 		return
 	verify_ships(bindings,cat)
+	verify_source_ships(bindings,cat)
 	verify_temporary_items(bindings,cat)
 	verify_reseed_order(bindings,cat)
 	verify_stock_proof(bindings,args[1])
@@ -62,32 +63,33 @@ func drawn_base(bindings: RefCounted,draws: Array) -> RefCounted:
 	return stock
 
 func verify_ships(bindings: RefCounted,cat: RefCounted):
+	var extra: Array=[[7,1]] if cat.tables.ships.size()==64 else []
 	var stock: RefCounted=drawn_base(bindings,[[6,0]])
 	stock._system=17;stock._context.supernova_owned=true
 	check(stock._sample_ships(cat).is_empty(),"An initial empty ship stock performed extra rolls")
 	finished_stock(stock,"zero ships")
-	stock=drawn_base(bindings,[[6,1],[37,0],[37,15],[37,3],[37,1]])
+	stock=drawn_base(bindings,[[6,1],[37,0],[37,15],[37,3],[37,1]]+extra)
 	check(stock._sample_ships(cat)==[{"ship_id":1,"faction_id":0,"unit_price":124146}],"Ship selection ignored exclusions, affiliation or local price adjustment")
 	finished_stock(stock,"excluded and foreign candidate rejection")
-	stock=drawn_base(bindings,[[6,2],[37,1],[100,22],[37,1],[100,22],[37,5],[100,22]])
+	stock=drawn_base(bindings,[[6,2],[37,1],[100,22],[37,1],[100,22],[37,5],[100,22]]+extra)
 	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[1,5],"Duplicate ship selection failed to repeat its source draws")
 	finished_stock(stock,"duplicate retry")
-	stock=drawn_base(bindings,[[6,2],[37,1],[100,21],[5,4],[37,1],[37,2],[37,5],[100,22]])
+	stock=drawn_base(bindings,[[6,2],[37,1],[100,21],[5,4],[37,1],[37,2],[37,5],[100,22]]+extra)
 	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[2,5],"Foreign roll21 or excluded-faction fallback failed")
 	finished_stock(stock,"foreign threshold and fallback")
-	stock=drawn_base(bindings,[[6,2],[100,0],[5,0],[37,1],[100,22]])
+	stock=drawn_base(bindings,[[6,2],[100,0],[5,0],[37,1],[100,22]]+extra)
 	stock._context.station_id=78;stock._context.campaign_cursor=16;stock._system=15
 	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[0,1],"Var Hastra's first Betty or discarded foreign draw was lost")
 	finished_stock(stock,"fixed Betty")
-	stock=drawn_base(bindings,[[6,0]])
+	stock=drawn_base(bindings,[[6,0]]+extra)
 	stock._context.station_id=41
 	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[10],"The extra fixed ship at station41 was not retained")
 	finished_stock(stock,"fixed station41 ship")
-	stock=drawn_base(bindings,[[6,1],[4,0]])
+	stock=drawn_base(bindings,[[6,1]]+([[5,1]] if cat.tables.ships.size()==64 else [])+[[4,0]])
 	stock._faction=1;stock._context.supernova_owned=true
 	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[9,54],"Vossk stock before the later campaign used an unsupported hull")
 	finished_stock(stock,"Vossk and Supernova ownership")
-	stock=drawn_base(bindings,[[6,1],[37,1],[8,0],[3,0],[3,1],[3,0]])
+	stock=drawn_base(bindings,[[6,1],[37,1]]+extra+[[8,0],[3,0],[3,1],[3,0]])
 	stock._system=17;stock._context.supernova_owned=true
 	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[1,51,42,52],"Independent system17 ship rolls or ownership order changed")
 	finished_stock(stock,"owned and system extras")
@@ -105,6 +107,40 @@ func verify_ships(bindings: RefCounted,cat: RefCounted):
 	stock=drawn_base(bindings,[]);stock._context.station_id=79;stock._system=15
 	check(stock._sample_ships(cat).is_empty(),"Mido cursor15 generated ships")
 	finished_stock(stock,"Mido early return")
+
+func verify_source_ships(bindings: RefCounted,cat: RefCounted):
+	if cat.tables.ships.size()!=64:
+		check(not bindings.early_contracts.base_station_stock.ships.has("faction_extras"),"Older source acquired another edition's ship offers")
+		return
+	# These source boundary tapes also assert that unmatched factions consume no
+	# extra roll, ownership does not gate the new hulls, and later rolls keep order.
+	for sample in [[2,8,61,1,4],[0,7,62,3,1],[1,5,63,1,9]]:
+		for owned in [false,true]:
+			for roll in [0,int(sample[1])-1]:
+				var tape: Array=[[6,1]]
+				if sample[0]!=1:tape.append([37,int(sample[4])])
+				tape.append([int(sample[1]),roll])
+				if owned and sample[0]!=2:tape.append([4 if sample[0]==1 else 8,1])
+				var stock: RefCounted=drawn_base(bindings,tape)
+				stock._faction=int(sample[0]);stock._context.supernova_owned=owned;stock._context.valkyrie_owned=owned
+				var rows: Array=stock._sample_ships(cat)
+				var ids: Array=[int(sample[4])]
+				if roll==0:ids.append(int(sample[2]))
+				check(rows.map(func(row):return row.ship_id)==ids,"Source hull offer ignored its faction, roll boundary or ownership policy")
+				if roll==0 and rows.size()==2:check(rows[1].faction_id==int(sample[3]),"Source hull received the station's faction instead of its assigned faction")
+				finished_stock(stock,"source-specific hull roll")
+	var stock: RefCounted=drawn_base(bindings,[[6,1],[37,1],[7,0],[8,0],[3,0],[3,1],[3,0]])
+	stock._system=17;stock._context.supernova_owned=true
+	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[1,62,51,42,52],"New hull roll moved after the owned or system extras")
+	finished_stock(stock,"source hull and retained extras")
+	stock=drawn_base(bindings,[[6,1],[5,0],[4,0]])
+	stock._faction=1;stock._context.supernova_owned=true
+	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[9,63,54],"Vossk source hull replaced the independent owned offer")
+	finished_stock(stock,"Vossk source and owned extras")
+	stock=drawn_base(bindings,[[6,1],[37,3]])
+	stock._faction=3
+	check(stock._sample_ships(cat).map(func(row):return row.ship_id)==[3],"Unmatched faction drew a source hull offer")
+	finished_stock(stock,"unmatched faction")
 
 func verify_temporary_items(bindings: RefCounted,cat: RefCounted):
 	for cursor in [16,17,24,25]:
@@ -150,3 +186,6 @@ func verify_stock_proof(bindings: RefCounted,pack: String):
 	var bad: Dictionary=bindings.early_contracts.duplicate(true)
 	bad.base_station_stock.ships.affiliations[0]=0
 	check(not Definitions.parameters(bad),"An altered ship faction table was accepted")
+	bad=bindings.early_contracts.duplicate(true)
+	bad.base_station_stock=BaseStock.VALUES.duplicate(true) if bad.briefing_text_base==775 else BaseStock.MAC_VALUES.duplicate(true)
+	check(not Definitions.parameters(bad),"Mixed source stock rules were accepted")

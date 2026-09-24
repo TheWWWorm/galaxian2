@@ -30,7 +30,7 @@ func verify_population(bindings: RefCounted,catalogues: RefCounted,equipment: Re
 	var clock:=LaunchClock.new()
 	check(clock.configure(bindings,construction,0),clock.error)
 	var before:=clock.snapshot()
-	for invalid in [-1,151,1.5,true]:
+	for invalid in [-1,751 if not bindings.fast_forward.is_empty() else 151,1.5,true]:
 		check(clock.advance(invalid,group.snapshot()).is_empty() and clock.snapshot()==before,"Invalid clock duration advanced station traffic")
 	var malformed: Dictionary=group.snapshot();malformed.actors[-1].binding_id="0".repeat(64)
 	check(clock.advance(100,malformed).is_empty() and clock.snapshot()==before,"A foreign later actor partly advanced the launch clock")

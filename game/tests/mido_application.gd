@@ -5,7 +5,7 @@ extends "res://tests/mido_station_departure.gd"
 var application_journey_verified:=false
 
 func run():
-	var args:=OS.get_cmdline_user_args()
+	var args:=training_arguments()
 	check(args.size() in [3,4],"Expected explicit Mac content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:verify(args.slice(0,3))
 	if is_instance_valid(training_scene):training_scene.free()
@@ -30,7 +30,7 @@ func after_training_application_reload(args: PackedStringArray):
 	check(station.set_pause("user",false,now_us),station.error)
 	for i in 10:
 		if not training_app_step():return
-	check(station.snapshot().dialogue.text_id==1747 and station.audio.snapshot().history.back().source_id==453,"Post-training narrator did not start with the original text and voice")
+	check(station.snapshot().dialogue.text_id==int(bindings.mido_travel.conversations[0].events[0].text_id) and station.audio.snapshot().history.back().source_id==453,"Post-training narrator did not start with the original text and voice")
 	if args.size()==4:await capture(args[3],"mido-app-narrator")
 	var index:=0
 	for event in bindings.mido_travel.conversations[0].events:
@@ -41,8 +41,8 @@ func after_training_application_reload(args: PackedStringArray):
 		if event.voice_event_id>=0:check(station.audio.snapshot().history.back().source_id==int(event.voice_event_id),"Local conversation used another original recording")
 		else:check(station.audio._player==null,"Silent local instruction replayed the preceding voice")
 		if index==3:
-			key(KEY_LEFT);check(station.snapshot().dialogue.text_id==1749,"Previous-line input failed in the new conversation")
-			key(KEY_ENTER);check(station.snapshot().dialogue.text_id==1750,"Returning to the current line changed its index")
+			key(KEY_LEFT);check(station.snapshot().dialogue.text_id==int(bindings.mido_travel.conversations[0].events[2].text_id),"Previous-line input failed in the new conversation")
+			key(KEY_ENTER);check(station.snapshot().dialogue.text_id==int(bindings.mido_travel.conversations[0].events[3].text_id),"Returning to the current line changed its index")
 		if index==10 and args.size()==4:await capture(args[3],"mido-app-travel-instruction")
 		key(KEY_ENTER);index+=1
 	var ready: Dictionary=station.snapshot()
@@ -84,6 +84,7 @@ func verify_yrdal_application(args: PackedStringArray,cursor: int=11):
 	check(departure.snapshot().progress==before.progress and departure.snapshot().equipment==before.equipment,"The next launch changed earned career or inventory")
 	for i in 71:
 		if not training_app_step():return
+	check(not departure.snapshot().dialogue.visible and departure.snapshot().dialogue.count==0 and departure.briefing_audio.snapshot().history.is_empty(),"The destination briefing appeared or spoke during departure")
 	check(departure.can_control() and not departure.scene.radio.visible and departure.flight_audio!=null,"The continuation failed to release its flight and sound")
 	var initial: Dictionary=departure.snapshot()
 	check(departure.scene.encounter.actors.size()==initial.encounter.combat.actors.size(),"Rendered mixed traffic lost actors")
@@ -97,7 +98,7 @@ func verify_yrdal_application(args: PackedStringArray,cursor: int=11):
 	# player's ordinary death/fade/continue owner without altering the journey.
 	var armed: Array=initial.encounter.weapons.actors.filter(func(row):return not row.get("projectiles",{}).is_empty())
 	if not armed.is_empty():verify_local_game_over(departure.flight_owner(),armed[0].projectiles.weapon)
-	key(KEY_M)
+	check(choose_keyboard_flight_action(KEY_E,"map"),"E action menu did not open the map")
 	check(departure.map_active() and host.map_panel.visible,"The continuation lost its local map")
 	var map: Dictionary=host.map_panel.snapshot()
 	check(map.station_id==int(trip.from_station_id) and map.rows.filter(func(row):return row.supported).map(func(row):return row.station_id)==[int(trip.station_id)],"The map enabled an unsupported destination or omitted Local visit")
@@ -123,6 +124,24 @@ func verify_yrdal_application(args: PackedStringArray,cursor: int=11):
 	if args.size()==4:await capture(args[3],prefix+"-entry")
 	for i in 71:
 		if not training_app_step():return
+	if cursor==11 and bindings.mido_travel.has("arrival_briefing"):
+		for i in 60:
+			if arrival.snapshot().dialogue.visible:break
+			if not training_app_step():return
+		var modal: Dictionary=arrival.snapshot()
+		check(modal.dialogue.visible and modal.dialogue.count==1 and modal.dialogue.speaker_id==0 and modal.dialogue.text_id==int(bindings.mido_travel.arrival_briefing.events[0].text_id),"Yrdal arrival omitted its original acknowledged remark")
+		check(not arrival.can_control() and arrival.scene.dialogue.visible and arrival.briefing_audio.snapshot().history.back().source_id==163,"Yrdal remark lost its modal input hold, portrait or voice")
+		if args.size()==4:
+			await capture(args[3],"yrdal-arrival-remark")
+			await capture_phone(args[3],"yrdal-arrival-remark-phone")
+		for i in 12:
+			if not training_app_step():return
+		var held: Dictionary=arrival.snapshot()
+		check(held.dialogue==modal.dialogue and held.player_pose==modal.player_pose and held.progress==modal.progress and held.cargo==modal.cargo,"Yrdal modal auto-dismissed, moved the ship or granted progress")
+		key(KEY_ENTER)
+		check(not arrival.snapshot().dialogue.visible and arrival.snapshot().progress==modal.progress and arrival.snapshot().cargo==modal.cargo,"Acknowledging the arrival remark completed the mission or changed cargo")
+	else:
+		check(not arrival.snapshot().dialogue.visible and arrival.snapshot().dialogue.count==0,"An older pack or another arrival invented the Yrdal briefing")
 	check(arrival.can_control() and arrival.snapshot().player.damage_allowed,"Local visit arrival failed to release input and damage")
 	if args.size()==4:await capture(args[3],prefix+"-flight")
 	if not arrival.action("autopilot"):check(false,arrival.error);return

@@ -18,6 +18,8 @@ var failures:=0
 func _initialize():call_deferred("run")
 func run():
 	var args:=OS.get_cmdline_user_args()
+	var captures:=OS.get_environment("GOF2_CAPTURE_DIR")
+	if args.size()==3 and not captures.is_empty() and DisplayServer.get_name()!="headless":args.append(captures)
 	check(args.size() in [3,4],"Expected Mac content, bindings, visuals and optional capture directory")
 	if args.size() in [3,4]:await verify(args)
 	print("Mining briefing: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
@@ -28,7 +30,8 @@ func verify(args: Array):
 	var briefing:=Briefing.new()
 	check(briefing.snapshot().is_empty() and not briefing.advance(0),"Unprepared briefing advanced")
 	if bindings.mining_briefing.is_empty():
-		check(not briefing.configure(bindings,lib,Construction.new(),"E"),"Legacy pack invented a briefing");return
+		check(not briefing.configure(bindings,lib,Construction.new(),"F"),"Legacy pack invented a briefing");return
+	var first_text:=1710 if lib.strings.size()==3385 else 1699
 	var source_bytes:=int(JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json"))).source_executable_bytes)
 	check(validate(bindings.mining_briefing,bindings,source_bytes).is_empty(),"Imported briefing provenance failed")
 	for key in Definitions.SPANS:
@@ -38,6 +41,9 @@ func verify(args: Array):
 		var bad: Dictionary=bindings.mining_briefing.duplicate(true);bad[key]="unverified"
 		check(not Definitions.parameters(bad),"Changed briefing declaration accepted: "+key)
 	check(not Definitions.validate(bindings.mining_briefing,source_bytes,"x86_64",bindings.arrival_staging,bindings.first_flight,bindings.station_presentation,{}).is_empty(),"Briefing accepted a missing desktop instruction mapping")
+	var foreign: Dictionary=(Definitions.VALUES if first_text==1710 else Definitions.MAC_VALUES).duplicate(true)
+	foreign.provenance=bindings.mining_briefing.provenance.duplicate(true)
+	check(not validate(foreign,bindings,source_bytes).is_empty(),"Briefing accepted text IDs from another source layout")
 	var player:=Player.new();var handoff:=Handoff.new();check(player.configure(bindings,cat),player.error)
 	var packet:=handoff.prepare(bindings,cat,Fixture.completed(bindings,player,3))
 	var arrival:=Arrival.new()
@@ -52,11 +58,11 @@ func verify(args: Array):
 	var flight:=Construction.new()
 	if not flight.prepare(bindings,cat,departure,4096,1789100000):check(false,flight.error);return
 	var prepared:=flight.snapshot()
-	check(briefing.configure(bindings,lib,flight,"E"),briefing.error)
+	check(briefing.configure(bindings,lib,flight,"F"),briefing.error)
 	var fresh:=briefing.snapshot()
 	for invalid in [-1,151,1.5,"100"]:
 		check(not briefing.advance(invalid) and briefing.snapshot()==fresh,"Invalid briefing time changed its state")
-	for key in ["","#KEY_DOCK","E\nX"]:
+	for key in ["","#KEY_DOCK","F\nX"]:
 		check(not briefing.configure(bindings,lib,flight,key) and briefing.snapshot()==fresh,"Invalid key label replaced a valid briefing")
 	check(not briefing.navigate("next") and briefing.snapshot()==fresh,"Entry acknowledged unseen briefing")
 	for i in 50:check(briefing.advance(100),briefing.error)
@@ -73,18 +79,18 @@ func verify(args: Array):
 	check(briefing.snapshot().hud_elapsed_ms==5000 and not briefing.snapshot().dialogue.visible,"Briefing appeared at the inclusive five-second boundary")
 	briefing.advance(1)
 	var opened:=briefing.snapshot()
-	check(opened.dialogue.visible and opened.dialogue.text_id==1699 and opened.world_elapsed_ms==11902 and briefing.simulation_delta_ms()==1 and opened.hud_elapsed_ms==0,"Briefing lost its opening frame")
+	check(opened.dialogue.visible and opened.dialogue.text_id==first_text and opened.world_elapsed_ms==11902 and briefing.simulation_delta_ms()==1 and opened.hud_elapsed_ms==0,"Briefing lost its opening frame")
 	for i in 200:briefing.advance(150)
 	check(briefing.snapshot()==opened and briefing.simulation_delta_ms()==0,"Modal briefing advanced simulation or auto-dismissed")
 	check(not briefing.navigate("previous") and not briefing.navigate("skip") and briefing.snapshot()==opened,"Briefing skipped or moved before its first line")
 	var clone: RefCounted=briefing.fork();clone.navigate("next")
-	check(briefing.snapshot()==opened and clone.snapshot().dialogue.text_id==1700,"Forked navigation changed the live briefing")
+	check(briefing.snapshot()==opened and clone.snapshot().dialogue.text_id==first_text+1,"Forked navigation changed the live briefing")
 	check(clone.navigate("previous") and clone.snapshot()==opened,"Previous did not restore the first line")
 	for i in 5:
 		var line: Dictionary=briefing.snapshot().dialogue
-		check(line.index==i and line.count==5 and line.text_id==1699+i and line.speaker_id==[0,2,0,2,16][i],"Briefing sequence differs from authored pairs")
+		check(line.index==i and line.count==5 and line.text_id==first_text+i and line.speaker_id==[0,2,0,2,16][i],"Briefing sequence differs from authored pairs")
 		check(line.voice_event_id==([177,178,179,180,-1][i]),"Wrong briefing recording selected")
-		if i==4:check(line.desktop_text_id==1704 and "press E" in line.desktop_text and "#KEY_" not in line.desktop_text and "tap Fire" in line.text,"Desktop mining instruction lost its active key or touch variant")
+		if i==4:check(line.desktop_text_id==first_text+5 and "press F" in line.desktop_text and "#KEY_" not in line.desktop_text and "tap Fire" in line.text,"Desktop mining instruction lost its active key or touch variant")
 		check(briefing.navigate("next"),briefing.error)
 	var done:=briefing.snapshot()
 	check(done.phase=="flight" and done.acknowledged and not done.briefing_pending and not done.dialogue.visible,"Final acknowledgement did not close the pending briefing")

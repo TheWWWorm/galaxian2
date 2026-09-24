@@ -12,6 +12,9 @@ const Speech=preload("res://src/presentation/station_audio.gd")
 const Conversations=preload("res://src/content/ordinary_flight_definitions.gd")
 const Locations=preload("res://src/simulation/lounge_cache.gd")
 const LoungeScene=preload("res://src/presentation/lounge_scene.gd")
+const SourceSky=preload("res://src/presentation/opening_sky.gd")
+const SourcePlanets=preload("res://src/presentation/opening_planet_geometry.gd")
+const PlanetLayout=preload("res://src/simulation/opening_planet_layout.gd")
 const BOUNDARIES=["launch_required","station_reload_required","station_followup_required"]
 var _polled_world: RefCounted
 var error:=""
@@ -38,6 +41,8 @@ var _visuals: RefCounted
 var _environment: WorldEnvironment
 var _hangar_environment: Environment
 var _hangar_lights: Array[Light3D]=[]
+var station_sky: Node3D
+var station_planets: Node3D
 
 static func supported(bindings: RefCounted) -> bool:
 	return bindings!=null and Definitions.parameters(bindings.station_presentation)
@@ -61,6 +66,8 @@ func configure_return(library: RefCounted, bindings: RefCounted, visuals: RefCou
 	if not location_settings.is_empty():_locations=_world.contract_owner().location_owner()
 	if Transit.available(bindings.mido_travel) and _world.contract_story_ready():
 		if not _world.begin_contract_conversation(bindings,cat,library):return fail(_world.error)
+	if _world.campaign_conversation_ready(bindings,cat,library):
+		if not _world.begin_campaign_conversation(bindings,cat,library):return fail(_world.error)
 	return _build_scene(library,bindings,visuals,cat,now_microseconds,camera_seed)
 
 func configure_reload(library: RefCounted, bindings: RefCounted, visuals: RefCounted, previous: RefCounted, now_microseconds: int, camera_seed: int=0) -> bool:
@@ -83,6 +90,8 @@ func configure_saved(library: RefCounted,bindings: RefCounted,visuals: RefCounte
 	_world=archive.restore(bindings,cat,library,data)
 	if _world==null:return fail(archive.error)
 	_locations=archive.restored_locations
+	if _world.campaign_conversation_ready(bindings,cat,library):
+		if not _world.begin_campaign_conversation(bindings,cat,library):return fail(_world.error)
 	return _build_scene(library,bindings,visuals,cat,now_microseconds,camera_seed)
 
 func _build_scene(library: RefCounted, bindings: RefCounted, visuals: RefCounted, cat: RefCounted, now_microseconds: int, camera_seed: int) -> bool:
@@ -97,6 +106,12 @@ func _build_scene(library: RefCounted, bindings: RefCounted, visuals: RefCounted
 	if selected.ship.is_empty():return fail(bindings.error)
 	geometry=Geometry.new();add_child(geometry)
 	if not geometry.build(selected,library,visuals,bindings):return fail(geometry.error)
+	station_sky=SourceSky.new();add_child(station_sky)
+	if not station_sky.build_station(library,visuals,bindings,cat,int(seed.station_id)):return fail(station_sky.error)
+	if PlanetLayout.supports_station(bindings,cat,int(seed.station_id)):
+		station_planets=SourcePlanets.new();add_child(station_planets)
+		if not station_planets.build_station(library,visuals,bindings,cat,int(seed.station_id),int(_world.snapshot().campaign_cursor)):
+			return fail(station_planets.error)
 	_motion=Motion.new()
 	if not _motion.configure(view,camera_seed):return fail(_motion.error)
 	_dialogue_delay_ms=int(view.dialogue.start_delay_ms)
@@ -107,6 +122,8 @@ func _build_scene(library: RefCounted, bindings: RefCounted, visuals: RefCounted
 	camera.keep_aspect=Camera3D.KEEP_HEIGHT
 	camera.set_perspective(rad_to_deg(projection[0]),projection[1],projection[2])
 	camera.transform=_motion.snapshot().pose
+	if not station_sky.apply_view({"pose":camera.global_transform}):return fail(station_sky.error)
+	if station_planets!=null and not station_planets.apply_view({"pose":camera.global_transform}):return fail(station_planets.error)
 	build_lighting(view.light)
 	audio=Speech.new();add_child(audio)
 	var state: Dictionary=_world.snapshot()
@@ -117,6 +134,8 @@ func _build_scene(library: RefCounted, bindings: RefCounted, visuals: RefCounted
 	elif state.get("equipment_conversation",false):
 		voice_ready=audio.configure_station_equipment(library,bindings)
 		_dialogue_started=not state.dialogue.visible
+	elif state.get("campaign_conversation",false):
+		voice_ready=audio.configure_campaign_visit(library,bindings,int(state.campaign_cursor),state.mission,true)
 	else:
 		voice_ready=audio.configure_station_return(library,bindings,int(state.campaign_cursor)) if state.get("return_visit",false) or state.get("local_conversation",false) else audio.configure(library,bindings)
 	if not voice_ready:return fail(audio.error)
@@ -169,6 +188,8 @@ func step(now_microseconds: int, commands:=Vector2.ZERO, fire_primary:=false) ->
 	if not motion.advance(milliseconds):return reject(motion.error)
 	var state: Dictionary=motion.snapshot()
 	camera.transform=state.pose
+	if not station_sky.apply_view({"pose":camera.global_transform}):return reject(station_sky.error)
+	if station_planets!=null and not station_planets.apply_view({"pose":camera.global_transform}):return reject(station_planets.error)
 	_motion=motion;_clock=clock;_generation+=1
 	if not _dialogue_started and state.elapsed_ms>=_dialogue_delay_ms:
 		_dialogue_started=true;audio.present(0)
@@ -196,6 +217,8 @@ func prepare_departure(bindings: RefCounted, catalogues: RefCounted) -> Dictiona
 		reject("Station departure is inactive");return {}
 	var packet: Dictionary=_world.prepare_contract_departure(bindings,catalogues) if _world.snapshot().campaign_cursor in [13,14] else _world.prepare_departure(bindings,catalogues)
 	if packet.is_empty():reject(_world.error)
+	var refusal_id: int=_world.departure_refusal_text_id()
+	if packet.is_empty() and refusal_id>=0 and _library!=null and refusal_id<_library.strings.size():reject(_library.strings[refusal_id])
 	var state: Dictionary=_world.snapshot()
 	if packet.is_empty() and state.get("phase")=="free_play_required" and not state.get("hangar_open",false) and state.cargo.used>state.cargo.capacity and _library!=null and _library.strings.size()>193:reject(_library.strings[193])
 	return packet
@@ -204,11 +227,22 @@ func contract_story_ready() -> bool:
 	return _world!=null and Transit.available(_bindings.mido_travel) and not _lounge_open and _world.contract_story_ready()
 
 func begin_contract_story(panel: Control) -> bool:
-	if not contract_story_ready() or not _active or is_paused() or panel==null:return reject("The earned story conversation is not ready")
+	return _begin_station_story(panel,false)
+
+func campaign_story_ready() -> bool:
+	return _world!=null and not _lounge_open and _world.campaign_conversation_ready(_bindings,_catalogues,_library)
+
+func begin_campaign_story(panel: Control) -> bool:
+	return _begin_station_story(panel,true)
+
+func _begin_station_story(panel: Control,campaign: bool) -> bool:
+	if not (campaign_story_ready() if campaign else contract_story_ready()) or not _active or is_paused() or panel==null:return reject("The station story conversation is not ready")
 	var candidate: RefCounted=_world.fork()
-	if not candidate.begin_contract_conversation(_bindings,_catalogues,_library):return reject(candidate.error)
+	if not (candidate.begin_campaign_conversation(_bindings,_catalogues,_library) if campaign else candidate.begin_contract_conversation(_bindings,_catalogues,_library)):return reject(candidate.error)
+	var state: Dictionary=candidate.snapshot()
 	var speech:=Speech.new();add_child(speech)
-	if not speech.configure_station_return(_library,_bindings,13) or not panel.present(candidate.snapshot()):
+	var prepared: bool=speech.configure_campaign_visit(_library,_bindings,int(state.campaign_cursor),state.mission,true) if campaign else speech.configure_station_return(_library,_bindings,13)
+	if not prepared or not panel.present(state):
 		var problem: String=speech.error+panel.error;speech.free();return reject(problem)
 	audio.adopt_conversation(speech);speech.free()
 	_world=candidate;_dialogue_started=false;_generation+=1
@@ -241,7 +275,8 @@ func contract_action(action: String,id: int,panel: Control) -> bool:
 	if prepared!=null:lounge_scene=prepared
 	_world=candidate;_lounge_open=opened;_generation+=1
 	if lounge_scene!=null:
-		lounge_scene.visible=opened;geometry.visible=not opened
+		lounge_scene.visible=opened;geometry.visible=not opened;station_sky.visible=not opened
+		if station_planets!=null:station_planets.visible=not opened
 		for light in _hangar_lights:light.visible=not opened
 		_environment.environment=lounge_scene.environment if opened else _hangar_environment
 		if opened:lounge_scene.camera.make_current()
@@ -303,7 +338,7 @@ func equipment_action(action: String, item_id: int, library: RefCounted, binding
 	return true
 
 func set_pause(reason: String, paused: bool, now_microseconds: int) -> bool:
-	if _clock==null or reason not in ["user","focus","hidden"] or now_microseconds<0:return reject("Invalid station pause")
+	if _clock==null or reason not in ["user","focus","hidden","map"] or now_microseconds<0:return reject("Invalid station pause")
 	if _pauses.has(reason)==paused:return true
 	if not _clock.rebase(now_microseconds):return reject(_clock.error)
 	if paused:_pauses[reason]=true
@@ -347,6 +382,6 @@ func clear() -> void:
 	_world=null;_polled_world=null;_motion=null;_clock=null;_pauses={};_active=false;_generation=0
 	_dialogue_started=false;_dialogue_delay_ms=0
 	_locations=null;_bindings=null;_catalogues=null;_library=null;_lounge_open=false
-	_visuals=null;lounge_scene=null;_environment=null;_hangar_environment=null;_hangar_lights=[]
+	_visuals=null;lounge_scene=null;station_sky=null;station_planets=null;_environment=null;_hangar_environment=null;_hangar_lights=[]
 func fail(message: String) -> bool:clear();status="error";error=message;return false
 func reject(message: String) -> bool:error=message;return false

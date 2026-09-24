@@ -248,7 +248,9 @@ func verify_lethal_branch(original: RefCounted,scene: Node3D) -> bool:
 	return failures==0
 
 func capture_view(label: String) -> void:
+	if DisplayServer.get_name()=="headless":return
 	var directory:=OS.get_environment("GOF2_CONVOY_CAPTURE_DIR")
+	if directory.is_empty():directory=OS.get_environment("GOF2_CAPTURE_DIR")
 	if directory.is_empty():return
 	if not Checkpoint.private_path(directory+"/capture.png"):check(false,"Keep captures outside engine source");return
 	DirAccess.make_dir_recursive_absolute(directory)

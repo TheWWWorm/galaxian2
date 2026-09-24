@@ -10,7 +10,8 @@ func _initialize() -> void:
 	directory = "user://tests/bindings-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	DirAccess.make_dir_recursive_absolute(directory)
 	var base := {"content_id": "a".repeat(64), "profile": {"edition": "ios-hd"},
-		"files": {MESH: {"kind": "mesh"}, TEXTURE: {"kind": "texture"}}}
+		"ship_table": {"records": 64, "record_bytes": 36}, "languages": {"gb": {"records": 3402}},
+		"files": {MESH: {"kind": "mesh"}, TEXTURE: {"kind": "texture"}, "resources/data/bin/ships.bin": {"bytes": 64 * 36}}}
 	write_fixture(base)
 	var bindings := Bindings.new()
 	check(bindings.open(directory, base), bindings.error)
@@ -68,6 +69,8 @@ func _initialize() -> void:
 		check(bindings.open(args[index + 1], library.manifest), bindings.error)
 		if bindings.records.is_empty():
 			continue
+		var imported: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[index+1].path_join("registrations.json")))
+		check(bindings.fast_forward==imported.get("fast_forward",{}),"Optional Fast Forward declaration was lost or retained from another pack")
 		check(bindings.resolve(17000, "mesh").ends_with("ship_000_midorian.aem"), "Real ship declaration failed")
 		check(bindings.resolve(34000, "texture").ends_with("ship_000_midorian_diffuse.aei"), "Real texture declaration failed")
 		var resolved := 0
@@ -86,7 +89,7 @@ func _initialize() -> void:
 				if not bindings.resolve_material(id).is_empty(): supported_materials += 1
 			print("Material descriptors: ", supported_materials, " resolved; ", bindings.materials.size() - supported_materials, " unsupported")
 		if not bindings.ship_model_resources.is_empty():
-			var expected_count := 64 if library.manifest.profile.edition == "ios-hd" else 61
+			var expected_count := int(Library.catalogue_layout(library.manifest).ships)
 			check(bindings.ship_model_resources.size() == expected_count, "Wrong edition ship table count")
 			check(bindings.resolve_ship_model(0).ends_with("ship_000_midorian.aem"), "First catalogue hull lookup failed")
 			check(bindings.resolve_ship_model(37).ends_with("v_ship_037_deep_science.aem"), "Expansion catalogue hull lookup failed")
@@ -94,6 +97,9 @@ func _initialize() -> void:
 			var supported_ships := 0
 			for id in bindings.ship_model_resources.size():
 				if not bindings.resolve_ship_model(id).is_empty(): supported_ships += 1
+			if library.manifest.profile.edition == "mac-full-hd" and expected_count == 64:
+				for id in [61, 62, 63]:
+					check(bindings.resolve_ship_model(id).get_file().begins_with("ship_%03d_" % id), "Newer Mac hull did not resolve from its own declarations")
 			print("Ship table: ", supported_ships, " hull references resolved; ", expected_count - supported_ships, " unsupported")
 		if not bindings.texture_variants.is_empty():
 			check(bindings.resolve_texture(33136).contains("/high/"), "Mac high hangar texture failed")

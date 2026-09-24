@@ -10,14 +10,15 @@ const FlightRules=preload("res://src/content/ordinary_flight_definitions.gd")
 const TrainingWeapons=preload("res://src/content/combat_training_weapon_definitions.gd")
 const Alioth=preload("res://src/content/alioth_lifecycle_definitions.gd")
 const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
+const Sahi=preload("res://src/content/sahi_encounter_definitions.gd")
 const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const GateArrival=preload("res://src/content/gate_arrival_definitions.gd")
 const IDENTITY_KEYS=["base_content_id","binding_id","ship_id","station_id","system_id","equipment_ids"]
 const POOL_KEYS=["hull","armor","shield","gamma"]
 
-static func base_cache(parameters: Dictionary, seed: Dictionary, hull: int, capacities: Dictionary, cursor: int) -> Dictionary:
+static func base_cache(parameters: Dictionary, seed: Dictionary, hull: int, capacities: Dictionary, cursor: int, void_location:=false) -> Dictionary:
 	if not Definitions.parameters(parameters) or cursor not in [0,int(parameters.arrival_cursor)]:return {}
-	if not valid_seed(seed) or not valid_capacities(hull,capacities):return {}
+	if not valid_seed(seed,void_location) or not valid_capacities(hull,capacities):return {}
 	if seed.station_id>=int(parameters.hazard_station_min) and seed.station_id<=int(parameters.hazard_station_max):return {}
 	var result:={"campaign_cursor":cursor,"values":{"hull":hull,"armor":capacities.armor,"shield":capacities.shield,"gamma":int(parameters.gamma_full)}}
 	for key in IDENTITY_KEYS:result[key]=seed[key]
@@ -46,6 +47,61 @@ static func alioth_attack_cache(parameters: Dictionary,travel: Dictionary,seed: 
 	var entry:=alioth_entry(travel)
 	if entry.is_empty():return {}
 	return _departure_cache(parameters,entry,seed,hull,capacities,reset)
+
+static func kappa_entry(travel: Dictionary) -> Dictionary:
+	if not Travel.parameters(travel) or not load("res://src/content/kappa_rescue_definitions.gd").parameters(travel.get("kappa_rescue")) or not load("res://src/content/kappa_lifecycle_definitions.gd").parameters(travel.get("kappa_lifecycle")):return {}
+	var data: Dictionary=travel.player_entry.duplicate(true)
+	for key in ["campaign_cursor","station_id","system_id"]:data[key]=int(travel.kappa_rescue[key])
+	return data
+
+static func kappa_rescue_cache(parameters: Dictionary,travel: Dictionary,seed: Dictionary,hull: int,capacities: Dictionary,reset: bool=false) -> Dictionary:
+	var entry:=kappa_entry(travel)
+	if entry.is_empty():return {}
+	return _departure_cache(parameters,entry,seed,hull,capacities,reset)
+
+static func sahi_entry(travel: Dictionary,ship_id: int,cursor:=24) -> Dictionary:
+	if not Travel.parameters(travel) or not Sahi.coherent(travel) or ship_id<0:return {}
+	var source: Dictionary
+	if cursor==24:source={"campaign_cursor":travel.sahi_visit.campaign_cursor,"station_id":travel.sahi_visit.mission.station_id,"system_id":travel.sahi_visit.system_id}
+	elif cursor==28 and load("res://src/content/thynome_expedition_definitions.gd").coherent(travel):source=travel.thynome_expedition.mission28
+	else:return {}
+	var data: Dictionary=travel.player_entry.duplicate(true)
+	for key in ["campaign_cursor","station_id","system_id"]:data[key]=int(source[key])
+	data.ship_id=ship_id
+	return data
+
+static func sahi_cache(parameters: Dictionary,travel: Dictionary,seed: Dictionary,hull: int,capacities: Dictionary,reset: bool=false,cursor:=24) -> Dictionary:
+	var entry:=sahi_entry(travel,int(seed.get("ship_id",-1)),cursor)
+	if entry.is_empty():return {}
+	return _departure_cache(parameters,entry,seed,hull,capacities,reset)
+
+static func post_sahi_entry(travel: Dictionary,cursor: int,ship_id: int) -> Dictionary:
+	var definitions=load("res://src/content/post_sahi_definitions.gd")
+	if not Travel.parameters(travel) or not definitions.portal_available(travel,cursor) or ship_id<0:return {}
+	var location: Dictionary=definitions.location(cursor)
+	if location.is_empty():return {}
+	var entry: Dictionary=travel.player_entry.duplicate(true)
+	entry.merge(location,true);entry.campaign_cursor=cursor;entry.ship_id=ship_id
+	return entry
+
+static func post_sahi_cache(parameters: Dictionary,travel: Dictionary,seed: Dictionary,hull: int,capacities: Dictionary,reset: bool,cursor: int) -> Dictionary:
+	var entry:=post_sahi_entry(travel,cursor,int(seed.get("ship_id",-1)))
+	if entry.is_empty():return {}
+	return _departure_cache(parameters,entry,seed,hull,capacities,reset,cursor in [25,29])
+
+static func capture_post_sahi(travel: Dictionary,source: Dictionary,destination: Dictionary,player: Dictionary,cursor: int) -> Dictionary:
+	var entry:=post_sahi_entry(travel,cursor,int(source.get("ship_id",-1)))
+	if entry.is_empty() or not valid_seed(source,cursor in [26,30]) or not valid_seed(destination,cursor in [25,29]):return {}
+	var from_station:=48 if cursor==25 else 91 if cursor==29 else -1
+	var from_system:=9 if cursor==25 else 18 if cursor==29 else -1
+	if source.station_id!=from_station or source.system_id!=from_system or player.get("campaign_cursor")!=cursor-1:return {}
+	for key in IDENTITY_KEYS:
+		if key in ["station_id","system_id"]:
+			if destination[key]!=entry[key]:return {}
+		elif source[key]!=destination[key]:return {}
+	var result:=_capture_arrival(travel,source,destination,player)
+	if not result.is_empty():result.campaign_cursor=cursor
+	return result
 
 static func free_flight_cache(parameters: Dictionary,travel: Dictionary,seed: Dictionary,hull: int,capacities: Dictionary,reset: bool=false,cursor: int=18) -> Dictionary:
 	var entry:=FreeFlight.player_entry(travel,int(seed.get("station_id",-1)),int(seed.get("ship_id",-1)),cursor)
@@ -84,12 +140,12 @@ static func _capture_arrival(travel: Dictionary,source: Dictionary,destination: 
 	for key in IDENTITY_KEYS:result[key]=destination[key]
 	return result.duplicate(true)
 
-static func _departure_cache(parameters: Dictionary, departure: Dictionary, seed: Dictionary, hull: int, capacities: Dictionary, reset: bool) -> Dictionary:
+static func _departure_cache(parameters: Dictionary, departure: Dictionary, seed: Dictionary, hull: int, capacities: Dictionary, reset: bool, void_location:=false) -> Dictionary:
 	for key in ["ship_id","station_id","system_id"]:
 		if seed.get(key)!=int(departure[key]):return {}
 	# Share the normal pool/identity checks without extending base_cache to
 	# arbitrary campaign cursors or allowing rescue caches on the new ship.
-	var result:=base_cache(parameters,seed,hull,capacities,0)
+	var result:=base_cache(parameters,seed,hull,capacities,0,void_location)
 	if result.is_empty():return {}
 	result.campaign_cursor=int(departure.campaign_cursor)
 	if reset:
@@ -97,7 +153,7 @@ static func _departure_cache(parameters: Dictionary, departure: Dictionary, seed
 	return result
 
 static func matches(cache: Variant, seed: Dictionary, cursor: int) -> bool:
-	if not cache is Dictionary or cache.size()!=IDENTITY_KEYS.size()+2 or not valid_seed(seed):return false
+	if not cache is Dictionary or cache.size()!=IDENTITY_KEYS.size()+2 or not valid_seed(seed,cursor in [25,29]):return false
 	if not cache.get("campaign_cursor") is int or cache.campaign_cursor!=cursor or not valid_values(cache.get("values")):return false
 	for key in IDENTITY_KEYS:
 		if typeof(cache.get(key))!=typeof(seed[key]) or cache[key]!=seed[key]:return false
@@ -141,11 +197,13 @@ static func valid_values(values: Variant) -> bool:
 		if not value is int or value < -2147483648 or value>Vitals.MAX_INTEGER:return false
 	return true
 
-static func valid_seed(seed: Dictionary) -> bool:
+static func valid_seed(seed: Dictionary,void_location:=false) -> bool:
 	for key in ["base_content_id","binding_id"]:
 		if not seed.get(key) is String or not Library.valid_hash(seed[key]):return false
 	for key in ["ship_id","station_id","system_id"]:
-		if not Vitals.integer(seed.get(key)):return false
+		if void_location and key in ["station_id","system_id"]:
+			if not seed.get(key) is int or seed[key]!=-1:return false
+		elif not Vitals.integer(seed.get(key)):return false
 	if not seed.get("equipment_ids") is Array or seed.equipment_ids.size()>4096:return false
 	for item in seed.equipment_ids:
 		if not Vitals.integer(item):return false

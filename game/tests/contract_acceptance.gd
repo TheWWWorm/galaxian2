@@ -25,6 +25,7 @@ func _initialize() -> void:
 	quit(1 if failures else 0)
 
 func after_contract_intro(bindings: RefCounted,cat: RefCounted,library: RefCounted,station: RefCounted) -> void:
+	var replacement_text:=853 if cat.tables.ships.size()==64 else 851
 	var incoming: Dictionary=station.snapshot()
 	var original: RefCounted=station.fork()
 	if not station.open_contracts(bindings,cat):check(false,station.error);return
@@ -57,7 +58,7 @@ func after_contract_intro(bindings: RefCounted,cat: RefCounted,library: RefCount
 	check(not preview.can_accept and preview.reason_text_id==326 and preview.replacement_required,"Replacement removed old cargo before checking free space")
 	check(not station.accept_contract(1,true) and station.snapshot()==accepted,"A full-hold replacement discarded the current job")
 	preview=station.contract_preview(2)
-	check(preview.can_accept and preview.replacement_text_id==851 and preview.replacement_required,"The replacement lost its source warning")
+	check(preview.can_accept and preview.replacement_text_id==replacement_text and preview.replacement_required,"The replacement lost its source warning")
 	check(not station.accept_contract(2) and station.snapshot()==accepted,"An unconfirmed replacement changed the accepted job")
 	if not station.accept_contract(2,true):check(false,station.error);return
 	var replaced: Dictionary=station.snapshot()
@@ -72,7 +73,7 @@ func after_contract_intro(bindings: RefCounted,cat: RefCounted,library: RefCount
 	verify_cargo_merge(bindings,cat,original,courier,pirate)
 	verify_rejections(bindings,cat,original)
 	if Contacts.available(bindings):verify_population(bindings,cat,library,original)
-	check(not library.strings[192].is_empty() and not library.strings[326].is_empty() and not library.strings[327].is_empty() and not library.strings[851].is_empty(),"Acceptance lost original requirement text")
+	check(not library.strings[192].is_empty() and not library.strings[326].is_empty() and not library.strings[327].is_empty() and not library.strings[replacement_text].is_empty(),"Acceptance lost original requirement text")
 	contracts_verified=true
 
 func verify_population(bindings: RefCounted,cat: RefCounted,library: RefCounted,original: RefCounted) -> void:

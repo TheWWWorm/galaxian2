@@ -1,6 +1,6 @@
 """Read flight-cache declarations for the fresh opening-to-rescue lifecycle."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 def extract_flight_player_cache(mach, opening, actors, arrival):
     arch=mach.architecture
@@ -10,12 +10,9 @@ def extract_flight_player_cache(mach, opening, actors, arrival):
         if VALUES['hazard_station_min']<=opening['station_id']<=VALUES['hazard_station_max']:return {}
         origin=opening['provenance']['declaration']
         if origin['bytes']!=(376 if arch=='x86_64' else 284):return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(section,delta,size,pattern) in LAYOUTS[arch].items():
-            found=section_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        layouts=[LAYOUTS[arch]]+([MAC_ALTERNATE] if arch=='x86_64' else [])
+        proof=recognize(mach,origin['offset'],layouts)
+        if not proof:return {}
         result=copy.deepcopy(VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,IndexError,ValueError,OverflowError):return {}
@@ -144,3 +141,60 @@ LAYOUTS = {'x86_64': {'new_game_cache': ['__text',
            'gamma_return': ['__text', -3674, 6, '10ee100af0bd'],
            'quest_type': ['__text', -413784, 4, '80687047'],
            'gamma_limit': ['__text', -330304, 4, '0000c842']}}
+
+
+# Complete alternate Mac layout; cache arithmetic and lifecycle are unchanged.
+MAC_ALTERNATE = {'new_game_cache': ['__text',
+                    401,
+                    68,
+                    '498bbe00020000e813a6fdff418986a8000000498bbe00020000e83ca6fdff418986a0000000498bbe00020000e8e3a5fdff418986a400000041c786ac00000064000000'],
+ 'opening_hull_cache': ['__text',
+                        -880736,
+                        54,
+                        '498b8768010000488b38be7f969800e8ca270800488d054fd72400488b00c780a80000007f969800498b8768010000488b00c6406201'],
+ 'restore': ['__text',
+             -548795,
+             128,
+             '488d05bec61f00488b008bb0a800000085f67816498b4660488b38e819170300488d059ec61f00488b008bb0a000000085f67816498b4660488b38e817170300488d057ec61f00488b008bb0a400000085f67816498b4660488b38e823170300488d055ec61f00488b008bb0ac00000085f6780c498b4660488b38e823170300'],
+ 'cache_refresh': ['__text',
+                   -548658,
+                   126,
+                   '488d0535c61f00488b38e877fd070083f85f0f84ae0000004c8d251dc61f00498b3c24e840fd07004889c7e8b2060600498b0c248981a8000000498b3c24e825fd07004889c7e8d3060600498b0c248981a0000000498b3c24e80afd07004889c7e872060600498b0c248981a4000000498b0424c780ac00000064000000'],
+ 'gamma_reset': ['__text',
+                 -548532,
+                 72,
+                 '498b1c244889dfe8b4fc07004889c7e860e207004189c7498b3c24e8e8fc07004889df4489fe89c2e8dd4c08000f57c90f2ec175137a11498b4660488b38be64000000e854160300'],
+ 'hull_setter': ['__text',
+                 -346242,
+                 30,
+                 '554889e589b78000000039b78c0000007d0689b78c0000005de994f8ffff'],
+ 'shield_setter': ['__text',
+                   -346212,
+                   44,
+                   '554889e5f30f2acef30f118f90000000f30f2a879c0000000f2ec87608f30f1187900000005de969f8ffff90'],
+ 'armor_setter': ['__text',
+                  -346168,
+                  32,
+                  '554889e589b7940000008b879800000039f07d068987940000005de948f8ffff'],
+ 'gamma_setter': ['__text',
+                  -346136,
+                  52,
+                  '554889e5f30f2ac6f30f100dce2b0f000f2ec10f96c081fe7f9698000f94c108c175030f28c1f30f1187c00000005de914f8ffff'],
+ 'constant_a47e6': ['__const', 648134, 4, '0000c842'],
+ 'ship_hull': ['__text',
+               -153680,
+               60,
+               '554889e5488b978800000031c04885d27424448b0231c04585c0741a488b520831c031f68d4828833cb2000f44c148ffc64439c672ee0347045dc390'],
+ 'ship_shield': ['__text', -153620, 10, '554889e58b471c5dc390'],
+ 'ship_armor': ['__text', -153690, 10, '554889e58b47205dc390'],
+ 'rescue_quest': ['__text',
+                  -22796,
+                  70,
+                  'bf98000000e82afd09004889c34889dfbe0b00000031d2b94e000000e837f6f8ff4c89f74889dee8a0fcffff498b8610020000488b4008488b0049898608020000e9a32a0000'],
+ 'gamma_context': ['__text',
+                   -4522,
+                   80,
+                   '554889e54157415653504189d789f34989fe488d059b781700488b00488bb8080200004885ff7419e8fbb3f8ff3db7000000750df30f1005f47c0a00e9b60000008d43930f57c083f8040f87a7000000'],
+ 'constant_acf46': ['__const', 682886, 4, 'cdccac3f'],
+ 'gamma_return': ['__text', -4275, 11, '4883c4085b415e415f5dc3'],
+ 'quest_type': ['__text', -482690, 9, '554889e58b47105dc3']}

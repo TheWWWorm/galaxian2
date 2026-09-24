@@ -52,7 +52,7 @@ func verify_profile(content: String, pack: String, textures: String) -> void:
 	check(not Definitions.parameters(invalid),"Impact model accepted as travelling projectile")
 	var animation: RefCounted=owner.projectile_visual_owner()
 	var initial: Dictionary=animation.snapshot()
-	for delta in [-1,151,0.5,NAN,true]:
+	for delta in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5,NAN,true]:
 		check(not animation.advance(delta) and animation.snapshot()==initial,"Invalid animation time changed the owner")
 	check(initial.models.size()==5,"Opening lost a weapon animation owner")
 	for i in initial.models.size():

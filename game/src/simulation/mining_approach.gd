@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Source first-mining approach, with independent motion and visual tilt.
 ## A ready result requests the drill owner; it never extracts ore or progresses
 ## a mission. The flight must apply camera, engine and spin changes together.
@@ -35,6 +37,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	var response:=vehicle.resolve(int(loadout.ship_id),[],loadout.equipment_ids)
 	if response.is_empty():return reject(vehicle.error)
 	_rules=bindings.mining_approach.duplicate(true)
+	_max_ms=Frames.simulation_limit(bindings,int(_rules.max_frame_ms))
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	_field_identity=construction.scenery_owner().presentation_identity()
 	# Guidance reads the ship handling getter before pilot scaling or equipment.
@@ -71,7 +74,7 @@ func start(scenery: RefCounted, selection: RefCounted, pose: Transform3D, model_
 
 func advance(scenery: RefCounted, delta_ms: Variant, paused:=false) -> bool:
 	error=""
-	if _state.is_empty() or _state.phase not in ["approach","docking"] or not Numbers.integer(delta_ms,0,int(_rules.max_frame_ms)):return reject("Mining approach requires an active, bounded frame")
+	if _state.is_empty() or _state.phase not in ["approach","docking"] or not Numbers.integer(delta_ms,0,_max_ms):return reject("Mining approach requires an active, bounded frame")
 	var body:=target_body(scenery,_state.object_index)
 	if body.is_empty():return false
 	if paused:return true
@@ -101,7 +104,8 @@ func advance(scenery: RefCounted, delta_ms: Variant, paused:=false) -> bool:
 			sample.after=pose
 			next.player_pose=pose
 			var remaining:=Vectors.added(body.position,-pose.origin)
-			if int(f32(sqrt(Vectors.dot(remaining,remaining))))<int(_rules.near_distance_limit):next.near_asteroid=true
+			sample.near_target=int(f32(sqrt(Vectors.dot(remaining,remaining))))<int(_rules.near_distance_limit)
+			if sample.near_target:next.near_asteroid=true
 		elif aligned:
 			next.phase="docking";next.spin_enabled=false
 		# The close test uses distance BEFORE movement. Reaching the threshold on
@@ -171,8 +175,9 @@ func fork_for_frame() -> RefCounted:
 	copy._rules=_rules;copy._identity=_identity;copy._field_identity=_field_identity;copy._gain=_gain;copy._speed=_speed
 	copy._state=_state.duplicate(true);copy._aligned=_aligned;copy._alignment_open=_alignment_open;copy._reference_up=_reference_up
 	copy._guidance_sample=_guidance_sample.duplicate(true)
-	return copy
+	copy._max_ms=_max_ms;return copy
 func clear() -> void:
+	_max_ms=0
 	error="";_rules={};_identity={};_field_identity=null;_gain=0;_speed=0;_state={};_aligned=false;_alignment_open=false;_reference_up=Vector3.ZERO
 	_guidance_sample={}
 func reject(message: String) -> bool:error=message;return false

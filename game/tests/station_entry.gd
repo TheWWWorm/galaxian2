@@ -26,6 +26,7 @@ func verify(args: Array):
 	if bindings.station_entry.is_empty():
 		check(not station.configure(bindings,cat,lib,{}),"Legacy pack fabricated a first station");return
 	check(Definitions.validate(bindings.station_entry,source_bytes,"x86_64",bindings.arrival_staging,bindings.arrival_session).is_empty(),"Real station declaration schema failed")
+	var first_text:=1689 if lib.strings.size()==3385 else 1678
 	var player:=Player.new();var handoff:=Handoff.new()
 	check(player.configure(bindings,cat),player.error)
 	var entry:=handoff.prepare(bindings,cat,Fixture.completed(bindings,player,3))
@@ -52,15 +53,15 @@ func verify(args: Array):
 		check(initial.loadout.slots.filter(func(slot):return slot!=null).all(func(slot):return slot.category==3 and slot.quantity==1),"Starter items were assigned to the wrong slot categories")
 		check(initial.source_ship_configuration==8 and initial.display_ship_configuration==3,"Source ship configuration parameters were discarded")
 		check(initial.campaign_cursor==1 and initial.progress==before.rescue_entry.progress and initial.reward_credits==0 and not initial.mining_completed,"Entering the station fabricated progression or rewards")
-		check(initial.dialogue.text_id==1678 and initial.dialogue.speaker_id==0 and initial.dialogue.count==19,"Station conversation began with the wrong source line")
+		check(initial.dialogue.text_id==first_text and initial.dialogue.speaker_id==0 and initial.dialogue.count==19,"Station conversation began with the wrong source line")
 		check(not station.previous() and station.snapshot()==initial,"First line allowed backwards underflow")
 		for i in 19:
 			var line:=station.snapshot()
-			check(line.dialogue.text_id==1678+i and line.dialogue.text==lib.strings[1678+i],"Station reordered or invented a dialogue line")
+			check(line.dialogue.text_id==first_text+i and line.dialogue.text==lib.strings[first_text+i],"Station reordered or invented a dialogue line")
 			check(line.campaign_cursor==1 and not line.acknowledged,"Story progressed before the final acknowledgement")
 			if i==1:
-				check(station.previous() and station.snapshot().dialogue.text_id==1678,"Previous line did not restore the source text")
-				check(station.acknowledge() and station.snapshot().dialogue.text_id==1679,"Revisiting a line skipped a conversation step")
+				check(station.previous() and station.snapshot().dialogue.text_id==first_text,"Previous line did not restore the source text")
+				check(station.acknowledge() and station.snapshot().dialogue.text_id==first_text+1,"Revisiting a line skipped a conversation step")
 				line=station.snapshot()
 				check(line.dialogue.speaker_name=="Gunant Breh","Speaker name came from another content binding")
 			check(station.acknowledge(),station.error)
@@ -88,6 +89,9 @@ func verify(args: Array):
 	for key in Definitions.SPANS:
 		var data: Dictionary=bindings.station_entry.duplicate(true);data.provenance[key].offset+=1
 		check(not Definitions.validate(data,source_bytes,"x86_64",bindings.arrival_staging,bindings.arrival_session).is_empty(),"Invalid source span accepted: "+key)
+	var foreign: Dictionary=(Definitions.VALUES if first_text==1689 else Definitions.MAC_VALUES).duplicate(true)
+	foreign.provenance=bindings.station_entry.provenance.duplicate(true)
+	check(not Definitions.validate(foreign,source_bytes,"x86_64",bindings.arrival_staging,bindings.arrival_session).is_empty(),"Station accepted another layout's conversation IDs")
 	for kind in ["text","speaker","reward","cursor","boolean","extra"]:
 		var altered: Dictionary=bindings.station_entry.duplicate(true)
 		match kind:
@@ -107,7 +111,7 @@ func verify(args: Array):
 		check(lib.select_language(language) and station.configure(bindings,cat,lib,packet),lib.error+station.error)
 		for i in 19:
 			var line:=station.snapshot()
-			check(line.language==language and line.dialogue.text==lib.strings[1678+i],"Station used another language's text")
+			check(line.language==language and line.dialogue.text==lib.strings[first_text+i],"Station used another language's text")
 			check(station.acknowledge(),station.error)
 		seen.append(language)
 	print("Verified Mac languages: ",seen)

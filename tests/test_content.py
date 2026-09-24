@@ -87,6 +87,20 @@ class ContentTests(unittest.TestCase):
         second, _ = install(archive(self.root / 'b.zip', files=files), self.cache)
         self.assertNotEqual(first, second)
 
+    def test_newer_mac_layout_is_separate_and_remains_unverified_gameplay(self):
+        files = fixture('mac')
+        files['Contents/Resources/data/bin/ships.bin'] = bytes(64 * 36)
+        files['Contents/Resources/gb.lang'] = b'\0\x03row' * 3385
+        dest, manifest = install(archive(self.root / 'newer.zip', 'mac', files=files), self.cache)
+        self.assertEqual(manifest['ship_table']['records'], 64)
+        self.assertEqual(manifest['languages']['gb']['records'], 3385)
+        self.assertEqual(manifest['profile']['edition'], 'mac-full-hd')
+        self.assertEqual(manifest['support']['campaign'], 'unsupported')
+        self.assertEqual(verify_cache(dest), manifest)
+        files['Contents/Resources/gb.lang'] = b'\0\x03row' * 3402
+        with self.assertRaisesRegex(ContentError, 'language record count'):
+            install(archive(self.root / 'mixed.zip', 'mac', files=files), self.cache)
+
     def test_cancel_cleans_staging_and_preserves_installed_cache(self):
         source = archive(self.root / 'a.zip')
         dest, expected = install(source, self.cache)
@@ -100,6 +114,22 @@ class ContentTests(unittest.TestCase):
             install(source, self.cache, cancel)
         self.assertEqual(verify_cache(dest), expected)
         self.assertEqual(list(self.cache.iterdir()), [dest])
+
+    def test_layout_metadata_cannot_relabel_a_verified_cache(self):
+        dest, manifest = install(archive(self.root / 'mac.zip', 'mac'), self.cache)
+        for field, value in [('records', 64), ('records', 61.5), ('record_bytes', 40)]:
+            changed = json.loads(json.dumps(manifest))
+            changed['ship_table'][field] = value
+            (dest / 'manifest.json').write_text(json.dumps(changed))
+            with self.assertRaisesRegex(ContentError, 'content layout'):
+                verify_cache(dest)
+        changed = json.loads(json.dumps(manifest))
+        changed['languages']['gb']['records'] = 3385
+        (dest / 'manifest.json').write_text(json.dumps(changed))
+        with self.assertRaisesRegex(ContentError, 'content layout'):
+            verify_cache(dest)
+        (dest / 'manifest.json').write_text(json.dumps(manifest))
+        self.assertEqual(verify_cache(dest), manifest)
 
     def test_write_failure_does_not_activate(self):
         source = archive(self.root / 'a.zip')

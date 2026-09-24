@@ -1,5 +1,5 @@
 extends RefCounted
-## Shared original atlas artwork and bitmap glyphs. No replacement UI artwork.
+## Shared original atlas artwork and bitmap glyphs, with native focus outlines.
 const Atlas=preload("res://src/content/atlas_region.gd")
 const Metrics=preload("res://src/content/image_font.gd")
 var error:=""
@@ -21,7 +21,7 @@ func configure(library: RefCounted,bindings: RefCounted,visuals: RefCounted) -> 
 	sprites=loaded;font=prepared;styles={}
 	for mobile in [false,true]:
 		var height:=44 if mobile else 30
-		var selected:={"panel":panel_style(sprites,rules,1.0 if mobile else 0.5)}
+		var selected:={"panel":panel_style(sprites,rules,1.0 if mobile else 0.5),"focus":focus_style(mobile)}
 		for pressed in [false,true]:
 			var ids: Array=rules.pressed_button_images if pressed else rules.button_images
 			selected["pressed" if pressed else "normal"]=button_style(sprites,ids,height)
@@ -33,10 +33,23 @@ func configure(library: RefCounted,bindings: RefCounted,visuals: RefCounted) -> 
 
 func apply_button(button: Button,mobile: bool,back:=false) -> void:
 	var prefix:="back_" if back else ""
-	for state in ["normal","hover","disabled","focus"]:button.add_theme_stylebox_override(state,styles[mobile][prefix+"normal"])
+	for state in ["normal","hover","disabled"]:button.add_theme_stylebox_override(state,styles[mobile][prefix+"normal"])
 	for state in ["pressed","hover_pressed"]:button.add_theme_stylebox_override(state,styles[mobile][prefix+"pressed"])
+	button.add_theme_stylebox_override("focus",styles[mobile].focus)
 	button.add_theme_font_size_override("font_size",20 if mobile else 14)
 	button.custom_minimum_size.y=44 if mobile else 30
+
+static func focus_style(mobile: bool) -> StyleBoxFlat:
+	# Godot draws focus over the current button state. A transparent center keeps
+	# the source's blue/amber artwork visible while outlining keyboard/pad focus.
+	var style:=StyleBoxFlat.new();style.draw_center=false
+	style.border_color=Color(0.82,0.96,1.0,1.0)
+	style.set_border_width_all(3 if mobile else 2)
+	style.set_corner_radius_all(4 if mobile else 3)
+	style.anti_aliasing=false
+	for side in [SIDE_LEFT,SIDE_TOP,SIDE_RIGHT,SIDE_BOTTOM]:
+		style.set_content_margin(side,0);style.set_expand_margin(side,-2)
+	return style
 
 func reject(message: String) -> bool:error=message;return false
 
@@ -46,13 +59,18 @@ func load_sprites(library: RefCounted, bindings: RefCounted, visuals: RefCounted
 		if key.ends_with("_image_id"):ids.append(int(state.ui[key]))
 	ids.append(state.faction_image_id)
 	for row in state.ui.legend:ids.append(int(row.image_id))
+	return load_regions(library,bindings,visuals,ids,state.ui.atlas_resources)
+
+func load_regions(library: RefCounted,bindings: RefCounted,visuals: RefCounted,ids: Array,atlas_resources: Dictionary) -> Dictionary:
+	if library.manifest.get("content_id")!=bindings.base_content_id or visuals.base_content_id!=bindings.base_content_id:
+		reject("Interface artwork belongs to another content identity");return {}
 	var result:={};var pixels:={};var metadata:={};var atlas:=Atlas.new()
 	for value in ids:
 		var id:=int(value)
 		if result.has(id):continue
 		var alias: Dictionary=bindings.resolve_image_region(id)
 		if alias.is_empty():reject(bindings.error);return {}
-		var resource: String=state.ui.atlas_resources.get(str(int(alias.texture_id)),"")
+		var resource: String=atlas_resources.get(str(int(alias.texture_id)),"")
 		if resource.is_empty():reject("Map sprite has no supported display atlas");return {}
 		if not pixels.has(resource):
 			var bytes: PackedByteArray=library.read_resource(resource,Atlas.MAX_BYTES)

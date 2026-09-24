@@ -370,6 +370,20 @@ MAC_POINT = """
 f30f1045f0f30f104df4f30f1055f8f30f1155d8f30f114dd4f30f1145d0f30f104dd8f30f7e45d04883c4405dc30f1f4000
 """
 
+# Whole alternate vector helpers; curve coefficients and linked callers stay shared.
+MAC_ALTERNATES = {
+    'add': """
+554889e54883ec3048897de8488975e0488b7de8f30f1007f30f104f04f30f1016f30f105e04f30f58c2f30f58cbf30f105708f30f105e08f30f58d3488d7df0e8
+{call_50:4}
+f30f1045f0f30f104df4f30f1055f8f30f1155d8f30f114dd4f30f1145d0f30f104dd8f30f7e45d04883c4305dc3666666662e0f1f840000000000
+""",
+    'point': """
+554889e54883ec4048897de8488975e0488b7de8f30f1006f30f104e04f30f1017f30f105f040f28e0f30f59e20f28d1f30f59d3f30f58e2f30f105608f30f105f080f28eaf30f59ebf30f58e5f30f105f0cf30f58e3f30f105f100f28e8f30f59ebf30f105f140f28f1f30f59f3f30f58eef30f105f180f28f2f30f59f3f30f58eef30f105f1cf30f58ebf30f105f20f30f59c3f30f105f24f30f59cbf30f58c1f30f104f28f30f59d1f30f58c2f30f104f2cf30f58c1488d7df0f30f1145cc0f28c40f28cdf30f1055cce8
+{call_b9:4}
+f30f1045f0f30f104df4f30f1055f8f30f1155d8f30f114dd4f30f1145d0f30f104dd8f30f7e45d04883c4405dc36690
+""",
+}
+
 ARM_POINT = """
 80b56f4683b002910192019991ed000a029991ed002a20ee020a019991ed012a029991ed014a22ee042a30ee020a019991ed022a029991ed024a22ee042a30ee020a029991ed032a30ee020a019991ed002a029991ed044a22ee042a019991ed014a029991ed056a24ee064a32ee042a019991ed024a029991ed066a24ee064a32ee042a029991ed074a32ee042a019991ed004a029991ed086a24ee064a019991ed016a029991ed091a26ee016a34ee064a019991ed026a029991ed0a1a26ee016a34ee064a029991ed0b6a34ee064a10ee101a12ee102a14ee103a
 {call_dc:4}
@@ -433,7 +447,8 @@ def extract_camera_follow(mach, camera):
             name=prefix+key.upper()
             field=({'scale':'call_2b3','add':'call_2be','subtract':'call_1d0','point':'call_15a'} if mac else {'scale':'call_1a2','add':'call_1ae','subtract':'call_f2','point':'call_c8'}).get(key)
             at=target(blocks['follow'],field) if field else None
-            match(key,globals()[name],ARM_FIELDS.get(name),at)
+            spec = (globals()[name], MAC_ALTERNATES[key]) if mac and key in MAC_ALTERNATES else globals()[name]
+            match(key,spec,ARM_FIELDS.get(name),at)
         for key in ['attach','defaults','increment']:
             name=prefix+key.upper();match(key,getattr(opening,name),opening.ARM_FIELDS.get(name))
             require(provenance[key]==camera['provenance'][key])

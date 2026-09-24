@@ -4,6 +4,7 @@ extends Control
 signal action_requested(action: String,id: int)
 const Art=preload("res://src/presentation/original_ui.gd")
 const Portraits=preload("res://src/presentation/portrait_compositor.gd")
+const MAC_LABEL_IDS={614:616,753:755,841:843,847:849,848:850,850:852}
 var error:=""
 var _art: RefCounted
 var _library: RefCounted
@@ -134,6 +135,12 @@ func select_contact(id: int) -> void:
 	_refresh();_layout()
 
 func text(id: int) -> String:return _library.strings[id] if id>=0 and id<_library.strings.size() else ""
+
+func label_text(id: int) -> String:
+	# Fixed interface labels use source-specific IDs. Imported job descriptions
+	# and replacement notices already carry their own original text IDs.
+	if _bindings.early_contracts.get("briefing_text_base")==775:id=int(MAC_LABEL_IDS.get(id,id))
+	return text(id)
 func money(value: int) -> String:return str(value)+"$"
 
 func format_job(template: String,mission: Dictionary) -> String:
@@ -144,9 +151,10 @@ func format_job(template: String,mission: Dictionary) -> String:
 func _refresh() -> void:
 	if _state.is_empty() or _art==null:return
 	var pending: Dictionary=_state.pending_result
+	var show_yes:=false;var show_no:=false
 	_title.text=text(387);_balance.text=money(int(_state.credits))
-	_back.text=text(169);_no.text=text(848);_yes.text=text(847)
-	_back.visible=pending.is_empty();_no.visible=false;_yes.visible=false
+	_back.text=text(169);_no.text=label_text(848);_yes.text=label_text(847)
+	_back.visible=pending.is_empty()
 	_panel.visible=not pending.is_empty() or _selected>=0
 	_room_title.text=text(387);_room_title.visible=pending.is_empty()
 	_portrait.texture=null;_name.text="";_body.text=""
@@ -154,31 +162,32 @@ func _refresh() -> void:
 		_portrait.texture=_client_portrait
 		_title.text=text(343+int(pending.kind)) if pending.get("completed",false) else text(381)
 		_name.text=_state.accepted_contact.get("name","")
-		_body.text=text(753).replace("#C",money(int(pending.get("reward_credits",pending.get("credit_delta",0))))) if pending.get("completed",false) else text(381)
-		_yes.visible=true;_yes.text=text(180)
+		_body.text=label_text(753).replace("#C",money(int(pending.get("reward_credits",pending.get("credit_delta",0))))) if pending.get("completed",false) else text(381)
+		show_yes=true;_yes.text=text(180)
 	else:
 		var row: Dictionary=_state.offers.get(_selected,{})
 		_portrait.texture=_portraits.get(_selected)
 		for contact in _population.get("contacts",[]):
 			if contact.contact_id==_selected:_name.text=contact.name;break
 		if row.is_empty():
-			_body.text=text(614) if _selected<0 else "This contact's service is not yet available."
+			_body.text=label_text(614) if _selected<0 else "This contact's service is not yet available."
 		else:
 			var mission: Dictionary=row.offer.mission
 			_title.text=text(int(mission.title_text_id))
-			_body.text=format_job(text(int(mission.briefing_text_id)),mission)+"\n\n"+text(753).replace("#C",money(int(mission.reward)+int(mission.bonus)))
-			if row.consumed:_body.text+="\n\n"+text(841)
+			_body.text=format_job(text(int(mission.briefing_text_id)),mission)+"\n\n"+label_text(753).replace("#C",money(int(mission.reward)+int(mission.bonus)))
+			if row.consumed:_body.text+="\n\n"+label_text(841)
 			else:
 				var preview: Dictionary=_previews.get(_selected,{})
 				if preview.get("can_accept",false):
-					_yes.visible=true
+					show_yes=true
 					if _confirming:
-						_body.text=text(850)+( "\n\n"+text(int(preview.replacement_text_id)) if preview.replacement_required else "")
-						_yes.text=text(133);_no.visible=true;_no.text=text(134)
+						_body.text=label_text(850)+( "\n\n"+text(int(preview.replacement_text_id)) if preview.replacement_required else "")
+						_yes.text=text(133);show_no=true;_no.text=text(134)
 				else:
 					_body.text+="\n\n"+text(int(preview.get("reason_text_id",-1))).replace("#Q",str(maxi(int(preview.get("cargo_tons",0)),int(preview.get("passenger_places",0))))).replace("#C",money(int(preview.get("missing_credits",0))))
 					if not preview.get("unsupported_reason","").is_empty():_body.text+=preview.unsupported_reason
 	_portrait.visible=_portrait.texture!=null
+	_yes.visible=show_yes;_no.visible=show_no
 	for button in [_yes,_no,_back]:button.disabled=not _active
 
 func confirm() -> void:

@@ -7,6 +7,8 @@ const Return=preload("res://src/content/station_return_definitions.gd")
 const VALUES = {"scope":"mido_contract_world_initialization","campaign_cursor":13,"impact_models":[{"item_id":0,"resource_id":14600},{"item_id":3,"resource_id":14601},{"item_id":7,"resource_id":14603},{"item_id":19,"resource_id":14605},{"item_id":22,"resource_id":14606},{"item_id":25,"resource_id":14606}]}
 const SPANS = {"contract_world_impact_0":[1572842,4],"contract_world_impact_3":[1572854,4],"contract_world_impact_7":[1572870,4],"contract_world_impact_19":[1572918,4],"contract_world_impact_22":[1572930,4],"contract_world_impact_25":[1572942,4]}
 
+const MAC_SPANS = {"contract_world_impact_0":[1547906,4],"contract_world_impact_3":[1547918,4],"contract_world_impact_7":[1547934,4],"contract_world_impact_19":[1547982,4],"contract_world_impact_22":[1547994,4],"contract_world_impact_25":[1548006,4]}
+
 static func parameters(data: Variant) -> bool:
 	return Equal.equal_value(data,VALUES)
 

@@ -1,6 +1,6 @@
 extends Node3D
 ## Field presentation: share decoded resources, instantiate effects on demand,
-## and retain actor-owned junk after the breakup finishes. No collection/reward.
+## and show actor-owned junk through pulling and pickup. No collection/reward.
 const World = preload("res://src/simulation/opening_scenery.gd")
 const Models = preload("res://src/presentation/model_resources.gd")
 const Effect = preload("res://src/presentation/scenery_effect_geometry.gd")
@@ -91,7 +91,8 @@ func apply_world(world: RefCounted, camera: Transform3D, parent_rgba: PackedByte
 			prepared=effect.prepare_effect(world.presentation_clock(index),camera,parent_rgba,global_tint,darken)
 			if prepared.is_empty():return abort_frame(created,effect.error)
 		var cargo: Node3D=_cargo.get(index)
-		if not state.cargo.is_empty():
+		var cargo_state: Dictionary=state.cargo if state.cargo_model_exists else {}
+		if not cargo_state.is_empty():
 			if cargo==null:
 				cargo=_models.instantiate(state.cargo.resource)
 				if cargo==null:return abort_frame(created,_models.error)
@@ -99,11 +100,7 @@ func apply_world(world: RefCounted, camera: Transform3D, parent_rgba: PackedByte
 				for surface in cargo.materials.size():
 					cargo.materials[surface]=_cargo_materials[state.cargo.resource][surface]
 					cargo.instances[surface].material_override=cargo.materials[surface]
-				cargo.transform=state.cargo.pose
-				cargo.set_meta("source_item_id",state.cargo.item_id)
-				cargo.set_meta("source_quantity",state.cargo.quantity)
-				cargo.set_meta("source_resource_id",state.cargo.model_id)
-		staged.append({"effect":effect,"prepared":prepared,"cargo":cargo})
+		staged.append({"effect":effect,"prepared":prepared,"cargo":cargo,"cargo_state":cargo_state})
 	# All samplers and resources succeeded. No earlier actor is changed if a
 	# later actor fails; discarded candidates never become visible scene nodes.
 	for index in staged.size():
@@ -113,7 +110,13 @@ func apply_world(world: RefCounted, camera: Transform3D, parent_rgba: PackedByte
 		else:
 			if row.effect.get_parent()==null:add_child(row.effect)
 			row.effect.commit_effect(row.prepared);_effects[index]=row.effect
-		if row.cargo!=null:
+		if row.cargo_state.is_empty():
+			if row.cargo!=null:row.cargo.free();_cargo.erase(index)
+		else:
+			row.cargo.transform=row.cargo_state.pose
+			row.cargo.set_meta("source_item_id",row.cargo_state.item_id)
+			row.cargo.set_meta("source_quantity",row.cargo_state.quantity)
+			row.cargo.set_meta("source_resource_id",row.cargo_state.model_id)
 			if row.cargo.get_parent()==null:add_child(row.cargo)
 			_cargo[index]=row.cargo
 	intact=next_intact

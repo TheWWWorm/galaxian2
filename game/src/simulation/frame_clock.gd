@@ -2,6 +2,7 @@ extends RefCounted
 ## Ordinary source frame timing. The caller supplies monotonic microseconds and
 ## explicit simulation blocking; pause transitions rebase instead of catching up.
 const Library = preload("res://src/content/library.gd")
+const FastForward = preload("res://src/content/fast_forward_definitions.gd")
 var error := ""
 var binding_id := ""
 var base_content_id := ""
@@ -18,6 +19,20 @@ static func valid_parameters(data: Dictionary) -> bool:
 	var value: Variant = data.get("max_frame_milliseconds")
 	return data.get("time_unit") == "milliseconds" and (value is int or value is float) \
 		and is_finite(value) and value == floor(value) and value >= 1 and value <= 1000
+
+## Simulation consumers accept the scaled interval only when its independent
+## declaration is present. Sampling and campaign clocks keep the raw limit.
+static func simulation_limit(bindings: RefCounted,component_limit:=0) -> int:
+	if bindings==null:return 0
+	# Some components carry their own validated ordinary limit. Keep that
+	# boundary for their standalone fixtures and older partial capabilities.
+	var clock_valid:=valid_parameters(bindings.frame_clock)
+	var real_ms:=component_limit if component_limit>0 else (int(bindings.frame_clock.max_frame_milliseconds) if clock_valid else 0)
+	if real_ms<=0:return 0
+	var fast: Variant=bindings.get("fast_forward")
+	if clock_valid and FastForward.parameters(fast) and fast.timing.real_frame_max_ms==real_ms and bindings.frame_clock.max_frame_milliseconds==real_ms:
+		return int(fast.timing.simulation_frame_max_ms)
+	return real_ms
 
 static func validate(data: Variant, executable_bytes: int, architecture: String) -> String:
 	if not data is Dictionary: return "Invalid frame clock definition"

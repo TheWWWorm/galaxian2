@@ -1,9 +1,9 @@
 """Source-bound ordinary population declarations; no executable payloads."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_free_population(mach, arrival):
-    proof=hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'augmenta_ordinary_population',
@@ -96,3 +96,51 @@ LAYOUTS = {'free_population_counts': [-31195,
                                     325,
                                     '__text',
                                     '4d39fdc864658cfa7856df28aaaccdcd6b60a91c6467767f107133aa2a5ad092']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'free_population_counts': [-31195, 1136, '__text', '32e808745076b7569bcabde1b20f2e5b796935cb6ad9cb89d1644b4242cdc68e'],
+ 'free_population_overrides': [-30047,
+                               1080,
+                               '__text',
+                               '3c591afa5e19c0ad977d46ba1b7a05820cb54710aa0ecb5744448048a438c892'],
+ 'free_population_security': [735286, 10, '__text', 'f32e027eeae839c1e1a24a259130292f33be5892eff37718d11159fe90e98276'],
+ 'free_population_enemy_factions': [808370,
+                                    76,
+                                    '__text',
+                                    '57b315569610b9ce8830509fdf4834ade126867e97eba5694e16aee3965ee399'],
+ 'free_population_freighter_alternate': [-24536,
+                                         22,
+                                         '__text',
+                                         'f8ae9a53bdf7f0735df53c1968eed28c76518e55a14f58c1fde78632d09aae62'],
+ 'free_population_freighter_choice': [-22069,
+                                      138,
+                                      '__text',
+                                      'e0f9d3407f5c3a0030137c3cc5d17fd209c80265957219f8fb31649defece0c8'],
+ 'free_population_patrol_choice': [-24730,
+                                   83,
+                                   '__text',
+                                   'e745bf8b8398ec3010e00a9f4b6353e889c4a566a4e3960d8b7b1bc2c3e8d164'],
+ 'free_population_hostile_choice': [-19918,
+                                    79,
+                                    '__text',
+                                    '1095c75fb40b582e6b8960279d8be4bcf511d03586f1d0e03b0066768361b320'],
+ 'free_population_hostile_factory': [-19598,
+                                     174,
+                                     '__text',
+                                     '067d07baddcc1d77baaac5aacd4cb76244d3c01e9c43f07040d4abf1c69a4233'],
+ 'free_population_hostile_tail': [-19021,
+                                  77,
+                                  '__text',
+                                  '636a74b9834ce7c812fec7e14f3e291762386abeeda685526fdf2913a00df4da'],
+ 'free_population_freighter_model': [-218772,
+                                     205,
+                                     '__text',
+                                     '8428ada236074799f4d625dc4f844c260e8c1ab34ac8b76a22de61fc470d77d1'],
+ 'free_population_void_initial': [883626,
+                                  11,
+                                  '__text',
+                                  'c4e4d7de5bf66c7e8f3d9fffe9131c4cfb11bd3940b6846b95ad19c4764e3fe5'],
+ 'free_population_void_selection': [858258,
+                                    325,
+                                    '__text',
+                                    'a7b48487a3e3b5004d34cec7267e8128ec86e35a361145d650c30ec93cf8e907']}

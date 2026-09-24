@@ -19,7 +19,10 @@ var failures:=0
 func _initialize():call_deferred("run")
 func run():
 	var args:=OS.get_cmdline_user_args()
+	var captures:=OS.get_environment("GOF2_CAPTURE_DIR")
+	if args.size()==3 and not captures.is_empty() and DisplayServer.get_name()!="headless":args.append(captures)
 	check(args.size() in [3,4],"Expected Mac content/bindings/visuals and optional screenshot directory")
+	if args.size()==4:check(DirAccess.make_dir_recursive_absolute(args[3])==OK,"Could not create station capture directory")
 	if args.size() in [3,4]:await verify(args)
 	print("First station session: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
 
@@ -29,6 +32,7 @@ func verify(args: Array):
 		check(false,lib.error+bindings.error+cat.error+visuals.error);return
 	if bindings.station_presentation.is_empty():
 		check(not Station.supported(bindings),"Legacy pack fabricated station presentation");return
+	var first_text:=1689 if lib.strings.size()==3385 else 1678
 	var source_bytes:=int(JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json"))).source_executable_bytes)
 	if not bindings.desktop_text.is_empty():
 		for pair in bindings.desktop_text.pairs:
@@ -42,6 +46,9 @@ func verify(args: Array):
 	for key in PresentationDefinitions.SPANS:
 		var bad: Dictionary=bindings.station_presentation.duplicate(true);bad.provenance[key].offset+=1
 		check(not PresentationDefinitions.validate(bad,source_bytes,"x86_64",bindings.arrival_staging,bindings.station_entry).is_empty(),"Station accepted a disconnected source declaration: "+key)
+	var foreign: Dictionary=(PresentationDefinitions.VALUES if first_text==1689 else PresentationDefinitions.MAC_VALUES).duplicate(true)
+	foreign.provenance=bindings.station_presentation.provenance.duplicate(true)
+	check(not PresentationDefinitions.validate(foreign,source_bytes,"x86_64",bindings.arrival_staging,bindings.station_entry).is_empty(),"Station accepted text IDs from another source layout")
 	var altered: Dictionary=bindings.station_presentation.duplicate(true);altered.portraits["0"].parts[0]=1
 	check(not PresentationDefinitions.parameters(altered),"Station accepted an invented Keith appearance")
 	var camera:=Camera.new();check(camera.configure(bindings.station_presentation,42),camera.error)
@@ -131,16 +138,30 @@ func verify(args: Array):
 			session.set_pause(reason,false,70000000)
 		check(session.prepare_departure(bindings,cat)==departure_packet and session.snapshot()==finished,"Resumed preparation lost its unchanged station")
 	host.present_session()
-	if bindings.station_return.is_empty():check("mining" in host.status.text,"Unsupported launch was not disclosed")
+	if bindings.station_return.is_empty():
+		check(host.status.text.contains("The next flight is still being reconstructed.") and not host._launch_button.visible,"Unsupported launch was not disclosed or remained available")
 	else:check(host._launch_button.visible and not host._launch_button.disabled,"Supported departure was unavailable after acknowledgement")
+	# Player entry replaces the developer action row with the station shell.
+	# The first rescue visit has no cargo owner yet, but must still offer Depart.
+	if not bindings.mido_travel.get("map",{}).get("ui",{}).is_empty():
+		host.set_player_mode(true);host.present_session()
+		check(host.station_shell.visible and host.station_shell._actions.menu.visible,"First Var Hastra visit lost its player interface")
+		check(host.station_shell._actions.depart.visible and not host.station_shell._actions.depart.disabled,"First Var Hastra visit hid its available departure")
+		check(not host.station_shell._cargo.visible,"First station invented cargo before its departure owner exists")
+		if args.size()==4:
+			await process_frame;await process_frame;await RenderingServer.frame_post_draw
+			root.get_texture().get_image().save_png(args[3].path_join("station-first-departure.png"))
+		host.station_shell._actions.depart.pressed.emit()
+		check(not host._launch_packet.is_empty() and host._launch_dialog.visible,"First station Depart button did not open its confirmation")
+		host.cancel_departure();host.set_player_mode(false)
 	for language in lib.manifest.languages:
 		check(lib.select_language(language),lib.error)
 		var state:=StationState.new();var panel:=DialoguePanel.new();root.add_child(panel)
 		check(state.configure(bindings,cat,lib,station_packet) and panel.configure(lib,bindings,visuals),state.error+panel.error)
 		for i in 19:
-			check(panel.present(state.snapshot()) and panel._body.text==lib.strings[bindings.desktop_text_id(1678+i)],"Station panel used another language: "+language)
+			check(panel.present(state.snapshot()) and panel._body.text==lib.strings[bindings.desktop_text_id(first_text+i)],"Station panel used another language: "+language)
 			panel.set_mobile_layout(true)
-			check(panel._body.text==lib.strings[1678+i],"Phone station text used desktop wording")
+			check(panel._body.text==lib.strings[first_text+i],"Phone station text used desktop wording")
 			panel.set_mobile_layout(false)
 			check(state.acknowledge(),state.error)
 		panel.free()

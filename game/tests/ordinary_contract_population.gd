@@ -81,8 +81,20 @@ func verify_delivery(args: PackedStringArray) -> void:
 			check(not Population.new().configure_free(bindings,cat,invalid,1),"Malformed delivery context generated traffic")
 		var missing:=context.duplicate(true);missing.erase("player_position")
 		check(not Population.new().configure_free(bindings,cat,missing,1),"Delivery pirates inferred the player's position")
-		for patch in [{"kind":4},{"kind":15},{"kind":false},{"difficulty":0},{"difficulty":10},{"station_id":56}]:
+		for patch in [{"kind":4},{"kind":15},{"kind":false},{"difficulty":0},{"difficulty":10},{"station_id":58}]:
 			var invalid:=context.duplicate(true);invalid.side_mission.merge(patch,true)
 			check(not Population.new().configure_free(bindings,cat,invalid,1),"An unsupported job, difficulty or destination entered delivery construction")
 		check(owner.generate(incoming).is_empty() and owner.snapshot()==actual,"Delivery factory generated twice")
 		if failures>0:return
+	if Delivery.available(bindings):
+		check(Delivery.delivery_mission(bindings,{"kind":0,"difficulty":1,"story":false,"station_id":56})==bindings.mido_travel.has("suttnar_visit"),"Delivery destinations lost their source capability boundary")
+		var travel=preload("res://src/content/mido_travel_definitions.gd")
+		var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
+		for key in Delivery.SPANS:
+			var bad:=bindings.mido_travel.duplicate(true);bad.provenance.erase(key)
+			check(not travel.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Missing delivery proof was accepted: "+key)
+		var mixed:=bindings.mido_travel.duplicate(true)
+		var other: Dictionary=Delivery.SPANS if travel._alternate(mixed) else Delivery.MAC_SPANS
+		var key:="ordinary_contracts_side_slot"
+		mixed.provenance[key]={"offset":int(bindings.arrival_staging.provenance.actor.offset)+int(other[key][0]),"bytes":int(other[key][1])}
+		check(not travel.validate(mixed,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Another source supplied ordinary delivery evidence")

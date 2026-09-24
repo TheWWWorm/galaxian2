@@ -24,7 +24,10 @@ const Alioth=preload("res://src/content/alioth_arrival_definitions.gd")
 const AliothReturn=preload("res://src/content/alioth_return_definitions.gd")
 const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
 const FreeNavigation=preload("res://src/content/free_navigation_definitions.gd")
+const CampaignVisit=preload("res://src/simulation/campaign_visit.gd")
+const CampaignPreparation=preload("res://src/simulation/campaign_preparation.gd")
 var error := ""
+var _departure_refusal:=-1
 var _state := {}
 var _lines := []
 var _rules := {}
@@ -37,6 +40,8 @@ var _local_rules:={}
 var _local_exchange: RefCounted
 var _contracts: RefCounted
 var _contract_followup: RefCounted
+var _campaign_visit: RefCounted
+var _campaign_bindings: RefCounted
 
 func configure(bindings: RefCounted, catalogues: RefCounted, library: RefCounted, packet: Dictionary) -> bool:
 	clear()
@@ -77,6 +82,7 @@ func configure_return(bindings: RefCounted, catalogues: RefCounted, library: Ref
 	if current.get("boundary")=="convoy_arrival_transition_required":return _configure_convoy_return(bindings,catalogues,library,flight,current,location_settings,unix_seconds)
 	var packet: Dictionary=flight.prepare_station()
 	if packet.is_empty():return fail(flight.error)
+	if packet.get("departure_return",false):return _configure_departure_return(bindings,catalogues,flight,current,packet)
 	if ContractWorld.supports(bindings,packet.get("campaign_cursor")) or (FreeFlight.Campaign.supported(bindings.mido_travel,packet.get("campaign_cursor")) and FreeFlight.available(bindings)):return _configure_contract_return(bindings,catalogues,library,flight,current,packet)
 	var rules:=OrdinaryFlight.station_return(bindings,packet.get("campaign_cursor"))
 	if rules.is_empty():return fail("This pack has no supported conversation for the accepted station return")
@@ -132,6 +138,29 @@ func configure_return(bindings: RefCounted, catalogues: RefCounted, library: Ref
 		_state.station_response_flags=packet.station_response_flags.duplicate(true)
 	return true
 
+func _configure_departure_return(bindings: RefCounted,catalogues: RefCounted,flight: RefCounted,current: Dictionary,packet: Dictionary) -> bool:
+	var previous: RefCounted=flight.departure_station_owner()
+	var equipment: RefCounted=flight.equipment_owner()
+	if previous==null or equipment==null or current.get("boundary")!="station_transition_required":return fail("Return docking lost its acknowledged departure")
+	var origin: Dictionary=previous.snapshot();var owned: Dictionary=equipment.snapshot()
+	var rules:=OrdinaryFlight.departure_docking(bindings,int(origin.campaign_cursor))
+	if rules.is_empty() or packet.get("base_content_id")!=bindings.base_content_id or packet.get("binding_id")!=bindings.binding_id or packet.get("campaign_cursor")!=origin.campaign_cursor or packet.get("source_state")!=int(rules.source_state):return fail("Return docking changed its content or story")
+	if packet.mission!=origin.mission or packet.docking.station_id!=origin.loadout.station_id or owned.loadout.station_id!=origin.loadout.station_id:return fail("Return docking must keep the unfinished travel destination")
+	for key in ["cargo","progress","mission","player","equipment"]:
+		if packet.get(key)!=current.get(key):return fail("Return docking differs from its accepted flight: "+key)
+	if packet.equipment!=owned or packet.loadout!=owned.loadout or packet.cargo!=owned.cargo or packet.player_cache!=Cache.station_arrival_cache(rules,owned.loadout,packet.player):return fail("Return docking lost its retained inventory or live pools")
+	_state=previous._state;_lines=previous._lines;_rules=previous._rules;_progress_rules=previous._progress_rules
+	_return_rules=previous._return_rules;_local_rules=previous._local_rules
+	_equipment_rules=previous._equipment_rules;_equipment_lines=previous._equipment_lines
+	_equipment=equipment;_contracts=null;_local_exchange=null;_contract_followup=null
+	_campaign_visit=null;_campaign_bindings=null
+	_state.merge({"loadout":owned.loadout,"cargo":owned.cargo,"progress":packet.progress.duplicate(true),
+		"player_cache":packet.player_cache.duplicate(true),"arrival_player":retained_player_state(packet.player),
+		"docking":packet.docking.duplicate(true),"flight_elapsed_ms":packet.world_elapsed_ms},true)
+	# Reuse the existing acknowledged save phase and conversation history. No
+	# destination dialogue, reward, exchange or campaign step is repeated here.
+	return not prepare_departure(bindings,catalogues).is_empty()
+
 func _configure_convoy_return(bindings: RefCounted,catalogues: RefCounted,library: RefCounted,flight: RefCounted,current: Dictionary,location_settings: Dictionary,unix_seconds: Variant) -> bool:
 	if not Alioth.available(bindings):return fail("This pack has no supported Alioth arrival")
 	var packet: Dictionary=flight.prepare_convoy_station()
@@ -185,21 +214,26 @@ func _configure_contract_return(bindings: RefCounted,catalogues: RefCounted,libr
 	var seed: Dictionary=owned.loadout
 	var rules:=FreeFlight.docking(bindings,int(seed.station_id),packet.campaign_cursor) if free_flight else ContractWorld.docking(bindings,int(seed.station_id),packet.campaign_cursor)
 	if rules.is_empty() or current.get("boundary")!="station_transition_required" or packet.get("source_state")!=int(rules.source_state):return fail("Station contracts require actual accepted docking")
-	if packet.get("base_content_id")!=bindings.base_content_id or packet.get("binding_id")!=bindings.binding_id or packet.get("contracts")!=contracts.snapshot():return fail("The station lost its accepted contract owner")
+	var career: Dictionary=contracts.snapshot()
+	if packet.get("base_content_id")!=bindings.base_content_id or packet.get("binding_id")!=bindings.binding_id or packet.get("contracts")!=career:return fail("The station lost its accepted contract owner")
 	if packet.get("equipment")!=owned or current.get("equipment")!=owned or packet.get("loadout")!=seed or packet.get("source_ship_configuration")!=int(bindings.station_entry.source_ship_configuration):return fail("Station contracts changed the arriving ship")
 	for key in ["cargo","progress","mission","player","station_response_flags"]:
 		if packet.get(key)!=current.get(key):return fail("Station entry differs from its accepted flight: "+key)
-	var story_valid:=FreeNavigation.ordinary_departure_at(bindings,packet.campaign_cursor,packet.mission,int(seed.station_id)) if free_flight else Travel.navigation_mission(bindings.mido_travel,packet.campaign_cursor,packet.mission)
+	var story_valid: bool=FreeNavigation.ordinary_departure_at(bindings,packet.campaign_cursor,packet.mission,int(seed.station_id)) if free_flight else Travel.navigation_mission(bindings.mido_travel,packet.campaign_cursor,packet.mission)
 	var flags_valid:=FreeFlight.response_flags(bindings,packet.station_response_flags) if free_flight else ContractWorld.response_flags(bindings,packet.station_response_flags)
-	if packet.progress!=contracts.snapshot().progress or not story_valid or not flags_valid:return fail("Station entry changed the retained story or career")
+	if packet.progress!=career.progress or not story_valid or not flags_valid:return fail("Station entry changed the retained story or career")
 	if packet.docking.station_id!=seed.station_id or not Cache.matches(packet.get("player_cache"),seed,packet.campaign_cursor) or packet.player_cache!=Cache.station_arrival_cache(rules,seed,packet.player):return fail("Station entry changed current flight vitals or docking location")
+	var mission: Dictionary=packet.mission.duplicate(true)
+	var cached: Dictionary=packet.player_cache.duplicate(true)
+	if career.get("location_generation_pending",false) and not contracts.retain_locations(contracts.location_owner()):return fail(contracts.error)
 	if not contracts.rebase_station(equipment,bindings if free_flight else null):return fail(contracts.error)
-	var career: Dictionary=contracts.snapshot()
+	if not contracts.apply_campaign_station_entry(bindings,catalogues,equipment,mission):return fail(contracts.error)
+	career=contracts.snapshot()
 	var state:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"language":library.active_language,
-		"campaign_cursor":packet.campaign_cursor,"phase":"free_play_required" if free_flight else ("contracts_required" if packet.campaign_cursor==13 else "convoy_departure_required"),"line_index":0,"loadout":seed,
+		"campaign_cursor":career.campaign_cursor,"phase":"free_play_required" if free_flight else ("contracts_required" if packet.campaign_cursor==13 else "convoy_departure_required"),"line_index":0,"loadout":seed,
 		"source_ship_configuration":packet.source_ship_configuration,"display_ship_configuration":int(bindings.station_entry.display_ship_configuration),
-		"source_marked_item_ids":[],"progress":career.progress.duplicate(true),"mission":packet.mission.duplicate(true),
-		"cargo":packet.cargo.duplicate(true),"player_cache":packet.player_cache.duplicate(true),"arrival_player":packet.player.duplicate(true),
+		"source_marked_item_ids":[],"progress":career.progress.duplicate(true),"mission":mission,
+		"cargo":packet.cargo.duplicate(true),"player_cache":cached,"arrival_player":retained_player_state(packet.player),
 		"docking":packet.docking.duplicate(true),"flight_elapsed_ms":packet.world_elapsed_ms,"station_response_flags":packet.station_response_flags.duplicate(true),
 		"return_visit":true,"local_visit":true,"contract_station":true,"local_visit_acknowledged":true,
 		"completed_side_missions":career.completed_side_missions,"acknowledged":true,"reward_credits":0,"mining_completed":false}
@@ -208,6 +242,13 @@ func _configure_contract_return(bindings: RefCounted,catalogues: RefCounted,libr
 	_state=state;_lines=[];_rules=bindings.station_entry.duplicate(true);_return_rules=rules;_progress_rules=bindings.opening_handoff.duplicate(true)
 	_equipment=equipment;_contracts=contracts;_equipment_rules={};_equipment_lines=[];_local_rules={};_local_exchange=null;_contract_followup=null
 	return true
+
+static func retained_player_state(player: Dictionary) -> Dictionary:
+	var result:=player.duplicate(true)
+	# The flight needs its original pursuit spawn pose to join the encounter.
+	# After docking, that constructor transform is not durable player state.
+	if result.has("sahi_context"):result.sahi_context.erase("player_pose")
+	return result
 
 func configure_reload(bindings: RefCounted, catalogues: RefCounted, library: RefCounted, previous: RefCounted) -> bool:
 	error=""
@@ -286,6 +327,7 @@ func begin_contract_conversation(bindings: RefCounted,catalogues: RefCounted,lib
 func acknowledge() -> bool:
 	error=""
 	if _state.is_empty() or _state.phase!="conversation":return fail("No station conversation awaits acknowledgement")
+	if _campaign_visit!=null:return _navigate_campaign("next")
 	if _state.line_index<_lines.size()-1:
 		_state.line_index+=1
 		return true
@@ -511,11 +553,48 @@ func close_equipment() -> bool:
 func previous() -> bool:
 	error=""
 	if _state.is_empty() or _state.phase!="conversation" or _state.line_index==0:return fail("No previous station line is available")
+	if _campaign_visit!=null:return _navigate_campaign("previous")
 	_state.line_index-=1
 	return true
 
-func prepare_departure(bindings: RefCounted, catalogues: RefCounted) -> Dictionary:
+func campaign_conversation_ready(bindings: RefCounted,catalogues: RefCounted,library: RefCounted) -> bool:
+	if _state.get("phase")!="free_play_required" or not _state.get("acknowledged",false) or _state.get("hangar_open",false) or _contracts==null or _equipment==null or _contracts.result_pending():return false
+	if FreeFlight.Campaign.dialogue_rules(bindings,_state.get("campaign_cursor"),_state.get("mission"),true).is_empty():return false
+	var visit:=CampaignVisit.new()
+	if not visit.configure_station(bindings,library,catalogues,_state.campaign_cursor,_state.mission) or not visit.poll_station(_state.loadout,true):return false
+	return visit.snapshot().dialogue.visible
+
+func begin_campaign_conversation(bindings: RefCounted,catalogues: RefCounted,library: RefCounted) -> bool:
 	error=""
+	if not campaign_conversation_ready(bindings,catalogues,library):return fail("The campaign station conversation is not ready")
+	var owned: Dictionary=_equipment.snapshot();var career: Dictionary=_contracts.snapshot()
+	if owned.loadout!=_state.loadout or owned.cargo!=_state.cargo or career.progress!=_state.progress or career.campaign_cursor!=_state.campaign_cursor or career.station_id!=_state.loadout.station_id:return fail("The campaign station lost its retained equipment or career")
+	var visit:=CampaignVisit.new()
+	if not visit.configure_station(bindings,library,catalogues,_state.campaign_cursor,_state.mission) or not visit.poll_station(owned.loadout,true):return fail(visit.error)
+	_campaign_visit=visit;_campaign_bindings=bindings
+	_state.phase="conversation";_state.campaign_conversation=true;_state.acknowledged=false;_state.line_index=0
+	return true
+
+func _navigate_campaign(action: String) -> bool:
+	var visit: RefCounted=_campaign_visit.fork()
+	if not visit.navigate(action):return fail(visit.error)
+	var receipt: Dictionary=visit.transition()
+	if receipt.is_empty():
+		_campaign_visit=visit;_state.line_index=int(visit.snapshot().dialogue.index)
+		return true
+	if _contracts==null or _equipment==null or _campaign_bindings==null:return fail("The campaign conversation lost its retained owners")
+	var career: RefCounted=_contracts.acknowledge_station_campaign(_campaign_bindings,_equipment,_state.mission,visit)
+	if career==null:return fail(_contracts.error)
+	_contracts=career;_state.progress=career.snapshot().progress
+	_state.campaign_cursor=receipt.campaign_cursor;_state.player_cache.campaign_cursor=receipt.campaign_cursor
+	_state.mission=receipt.mission.duplicate(true);_state.reward_credits=receipt.reward_credits
+	_state.phase="free_play_required";_state.acknowledged=true;_state.campaign_conversation=false
+	if receipt.has("next_course") and not receipt.next_course.is_empty():_state.next_course=receipt.next_course.duplicate(true)
+	_campaign_visit=null;_campaign_bindings=null;_state.line_index=0
+	return true
+
+func prepare_departure(bindings: RefCounted, catalogues: RefCounted) -> Dictionary:
+	error="";_departure_refusal=-1
 	if _state.get("hangar_open",false):fail("Close the hangar before departing");return {}
 	# Preparation is read-only. The scene owner must obtain the source departure
 	# confirmation and successfully prepare the flight before replacing station.
@@ -584,21 +663,33 @@ func _prepare_alioth_departure(bindings: RefCounted,catalogues: RefCounted) -> D
 
 func _prepare_free_departure(bindings: RefCounted,catalogues: RefCounted) -> Dictionary:
 	if not FreeFlight.available(bindings) or catalogues==null or catalogues.content_id!=bindings.base_content_id or not Departure.parameters(bindings.station_departure):fail("The ordinary departure is unavailable");return {}
-	if not FreeFlight.Campaign.supported(bindings.mido_travel,_state.get("campaign_cursor")) or not _state.get("acknowledged",false) or not _state.get("alioth_return_acknowledged",false):fail("Acknowledge the complete Alioth return before ordinary departure");return {}
+	var rescue: bool=FreeFlight.Campaign.Outcome.selected(bindings,_state.get("campaign_cursor"),_state.get("mission")) and _state.get("loadout",{}).get("station_id")==_state.get("mission",{}).get("station_id")
+	if (not FreeFlight.Campaign.supported(bindings.mido_travel,_state.get("campaign_cursor")) and not rescue) or not _state.get("acknowledged",false) or not _state.get("alioth_return_acknowledged",false):fail("Acknowledge the complete Alioth return before ordinary departure");return {}
 	if _contracts==null or _equipment==null:fail("Ordinary departure lost its retained career or equipment");return {}
 	var career: Dictionary=_contracts.snapshot();var owned: Dictionary=_equipment.snapshot()
 	var station_id: int=owned.loadout.station_id
 	if owned.cargo.used>owned.cargo.capacity:fail("Cargo hold is overfilled. Sell cargo before departing.");return {}
-	if FreeFlight.flight(bindings,station_id,_state.campaign_cursor).is_empty() or not FreeNavigation.ordinary_departure_at(bindings,_state.campaign_cursor,_state.get("mission",{}),station_id):fail("This station selects an unsupported story encounter");return {}
+	if not rescue and (FreeFlight.flight(bindings,station_id,_state.campaign_cursor).is_empty() or not FreeNavigation.ordinary_departure_at(bindings,_state.campaign_cursor,_state.get("mission",{}),station_id)):fail("This station selects an unsupported story encounter");return {}
 	for key in ["base_content_id","binding_id"]:
 		if _state.get(key)!=bindings.get(key) or career.get(key)!=bindings.get(key):fail("Ordinary departure belongs to another content identity");return {}
-	if _rules!=bindings.station_entry or _progress_rules!=bindings.opening_handoff or career.campaign_cursor!=_state.campaign_cursor or _state.progress!=career.progress or career.station_id!=station_id or owned.loadout!=_state.loadout or owned.cargo!=_state.cargo or owned.cargo_cache_stale:fail("Ordinary departure differs from its acknowledged career, location or inventory");return {}
-	if _contracts.free_flight_context(bindings,station_id).is_empty():fail(_contracts.error);return {}
+	if _rules!=bindings.station_entry or _progress_rules!=bindings.opening_handoff or career.campaign_cursor!=_state.campaign_cursor or _state.progress!=career.progress or career.station_id!=station_id or owned.loadout!=_state.loadout or owned.cargo!=_state.cargo or not _equipment.cargo_cache_valid():fail("Ordinary departure differs from its acknowledged career, location or inventory");return {}
+	if rescue or _state.campaign_cursor==20:
+		var requirements:=CampaignPreparation.new()
+		if not requirements.configure_departure(bindings,catalogues,_state.campaign_cursor,_state.mission):fail(requirements.error);return {}
+		var allowed:=requirements.departure_equipment(owned.loadout)
+		if allowed.is_empty():fail(requirements.error);return {}
+		if not allowed.allowed:
+			_departure_refusal=allowed.text_id
+			fail("Install an EMP bomb before departing from the mission station.");return {}
+	var context: Dictionary=_contracts.campaign_flight_context(bindings,_state.mission) if rescue else _contracts.free_flight_context(bindings,station_id)
+	if context.is_empty():fail(_contracts.error);return {}
 	if owned.get("ship_affiliation")!=int(bindings.mido_travel.alioth_return.next_player_ship_affiliation):fail("Ordinary departure lost the acknowledged ship affiliation");return {}
 	if not FreeFlight.response_flags(bindings,_state.get("station_response_flags",{})):fail("Ordinary departure has unsupported station-response history");return {}
 	var packet:=_career_departure_packet(bindings,owned,career)
 	packet.station_response_flags=_state.get("station_response_flags",{}).duplicate(true)
 	return packet
+
+func departure_refusal_text_id() -> int:return _departure_refusal
 
 func _career_departure_packet(bindings: RefCounted,owned: Dictionary,career: Dictionary) -> Dictionary:
 	# Confirmation compares retained state without generating a flight world.
@@ -678,13 +769,15 @@ func snapshot() -> Dictionary:
 	if _equipment!=null:result.equipment=_equipment.snapshot()
 	if _contracts!=null:result.contracts=_contracts.snapshot()
 	result.dialogue={"visible":_state.phase=="conversation","index":_state.line_index,"count":_lines.size(),"previous_available":_state.phase=="conversation" and _state.line_index>0}
-	if result.dialogue.visible:result.dialogue.merge(_lines[_state.line_index].duplicate(true))
+	if _campaign_visit!=null:result.dialogue=_campaign_visit.snapshot().dialogue
+	elif result.dialogue.visible:result.dialogue.merge(_lines[_state.line_index].duplicate(true))
 	return result
 
 func clear() -> void:
-	error="";_state={};_lines=[];_rules={};_progress_rules={};_return_rules={}
+	error="";_departure_refusal=-1;_state={};_lines=[];_rules={};_progress_rules={};_return_rules={}
 	_equipment=null;_equipment_rules={};_equipment_lines=[]
 	_local_rules={};_local_exchange=null;_contracts=null;_contract_followup=null
+	_campaign_visit=null;_campaign_bindings=null
 
 func fork() -> RefCounted:
 	var result: RefCounted=get_script().new()
@@ -695,6 +788,8 @@ func fork() -> RefCounted:
 	result._local_rules=_local_rules.duplicate(true);result._local_exchange=_local_exchange.fork() if _local_exchange!=null else null
 	result._contracts=_contracts.fork() if _contracts!=null else null
 	result._contract_followup=_contract_followup.fork() if _contract_followup!=null else null
+	result._campaign_visit=_campaign_visit.fork() if _campaign_visit!=null else null
+	result._campaign_bindings=_campaign_bindings
 	return result
 
 func fail(message: String) -> bool:

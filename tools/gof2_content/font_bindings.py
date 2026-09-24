@@ -5,6 +5,7 @@ from .opening_dialogue import Declaration
 from .ship_models import section_bytes
 
 MAC_LANGUAGE = '0fbf55f689d683fa0f4889b580feffff0f87 {outside:4} 488d05 {table:4} 488b8d80feffff48630c88488d0401ffe0'
+MAC_LANGUAGE_ALTERNATE = MAC_LANGUAGE.replace('48630c88488d0401ffe0', '486314884801c2ffe2')
 ARM_LANGUAGE = 'bdf924120f295490539100f2 {outside:2} 5399dfe811f0'
 MAC_GUARDS = {'medium': '488d05 {flag:4} f600010f84 {other:4}',
               'large': '488d05 {flag:4} 8a18bf18000000e8 {allocate:4} 4989c7f6c3010f84 {other:4}'}
@@ -104,7 +105,7 @@ def language_files(mach):
     decoder.detail = True
     section = mach.text
     code = mach.data[section['offset']:section['offset'] + section['length']]
-    pattern = template(MAC_LANGUAGE if mac else ARM_LANGUAGE)
+    pattern = template((MAC_LANGUAGE, MAC_LANGUAGE_ALTERNATE) if mac else ARM_LANGUAGE)
     matches = [m for m in pattern.finditer(code) if mac or m.start() % 2 == 0]
     if len(matches) != 1: return {}
     match = matches[0]

@@ -70,7 +70,7 @@ func after_local_journeys(original: Dictionary,_initial_stock: Dictionary) -> vo
 		if app.session.snapshot().dialogue.visible:break
 		if not application_step():return
 	var opened: Dictionary=app.session.snapshot()
-	check(opened.dialogue.visible and opened.dialogue.text_id==1838 and opened.world_elapsed_ms>10000 and opened.campaign_cursor==18,"The original visit did not open at its eligible poll: "+str({"world_ms":opened.world_elapsed_ms,"hud_ms":opened.hud_elapsed_ms,"visit":opened.mining_objective.campaign_visit.phase}))
+	check(opened.dialogue.visible and opened.dialogue.text_id==int(definitions.mido_travel.suttnar_visit.events[0].text_id) and opened.world_elapsed_ms>10000 and opened.campaign_cursor==18,"The original visit did not open at its eligible poll: "+str({"world_ms":opened.world_elapsed_ms,"hud_ms":opened.hud_elapsed_ms,"visit":opened.mining_objective.campaign_visit.phase}))
 	check(not app.session.can_control() and app.session.scene.dialogue.visible,"The visit did not take ownership of flight input")
 	if failures:return
 	var frozen: Dictionary=app.session.snapshot()
@@ -158,6 +158,9 @@ func verify_saved_services(landed: Dictionary) -> void:
 func visit_gate(system_id: int,station_id: int) -> bool:
 	if not app.request_departure() or not app.enter_first_flight(now_us,4096,1789100000):check(false,app.status.text);return false
 	if not await release_application_flight():return false
+	return await follow_gate_course(system_id,station_id)
+
+func follow_gate_course(system_id: int,station_id: int) -> bool:
 	if not app.open_map() or not app.switch_map_system(system_id):check(false,app.status.text);return false
 	app.map_panel.select_station(station_id);app.map_panel.request_confirmation()
 	if not app.confirm_map_planet(station_id,now_us):check(false,app.map_panel.error);return false
@@ -169,6 +172,6 @@ func visit_gate(system_id: int,station_id: int) -> bool:
 		now_us+=100000
 		if not app.session.step(now_us):check(false,app.session.error);return false
 	if app.session.status!="gate_arrival_transition_required":check(false,"The actual gate did not complete its animation");return false
-	if not app.enter_gate_arrival(now_us,4096,1789100000):check(false,app.status.text);return false
+	if not app.enter_gate_arrival(now_us,4096,flight_world_seconds()):check(false,app.status.text);return false
 	check(app.session.snapshot().location.system_id==system_id and app.session.snapshot().location.station_id==station_id,"The gate arrived outside the selected adjacent system")
 	return failures==0

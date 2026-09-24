@@ -5,7 +5,7 @@ const Bindings=preload("res://src/content/resource_bindings.gd")
 const Visuals=preload("res://src/content/visual_library.gd")
 const Fade=preload("res://src/simulation/opening_escape_fade.gd")
 var failures:=0
-var captures:=""
+var captures:=OS.get_environment("GOF2_CAPTURE_DIR")
 
 func _initialize() -> void:call_deferred("run")
 func run() -> void:
@@ -55,6 +55,7 @@ func verify(content: String, pack: String, textures: String) -> void:
 		if not session.step(now):check(false,session.error);viewport.free();return
 		verify_radio_audio(session,bindings,voice_seen)
 	var checks:={};var fade_request_time:=-1;var before_relocation:={}
+	var shake_reached_view:=false
 	var audio_events:={}
 	var death_audio:={}
 	if session.audio!=null:
@@ -82,6 +83,25 @@ func verify(content: String, pack: String, textures: String) -> void:
 				if cue.action in ["start","start_spatial","replace_music","set_player_engine"]:audio_events[int(cue.source_id)]=true
 				check(not sound.history.is_empty() and sound.history[-1].revision==sound.revision,"Audio cue was not committed with its scene")
 		var phase:=int(escape.phase)
+		for event_id in [12,13]:
+			var label: String="radio%d_phase5"%event_id
+			if phase==5 and state.radio.visible and int(state.radio.active_event)==event_id and not checks.has(label):
+				checks[label]=true;await capture(viewport,library,label)
+		if phase==6 and escape.shake_strength>0.0:
+			var look_offset: Vector3=state.camera.view.look-state.scene.player_pose.origin
+			var source_limit: float=float(escape.shake_radius)*float(escape.shake_strength)+0.1
+			check(absf(look_offset.x)<=source_limit and absf(look_offset.y)<=source_limit and absf(look_offset.z)<=source_limit,"Escape camera exceeded the source's bounded look shake")
+			shake_reached_view=shake_reached_view or look_offset.length_squared()>0.0
+		# Capture the first authored starburst keys as well as the established
+		# 1.5-second ring. A single late sample cannot describe the whole effect.
+		if phase==7 and escape.effect.sample_time_ms>=150 and not checks.has("departure_early"):
+			checks.departure_early=true;await capture(viewport,library,"departure-effect-early")
+		if phase==7 and escape.effect.sample_time_ms>=550 and not checks.has("departure_mid"):
+			checks.departure_mid=true;await capture(viewport,library,"departure-effect-mid")
+		if phase==11 and escape.effect.sample_time_ms>=150 and not checks.has("arrival_early"):
+			checks.arrival_early=true;await capture(viewport,library,"arrival-effect-early")
+		if phase==11 and escape.effect.sample_time_ms>=550 and not checks.has("arrival_mid"):
+			checks.arrival_mid=true;await capture(viewport,library,"arrival-effect-mid")
 		if session.damage_particles!=null:
 			check(session.damage_particles.frame.elapsed_ms==state.elapsed_ms,"Damage sprite presentation missed a committed world frame")
 			if phase==12 and escape.phase_elapsed_ms>=1500 and not checks.has("damage_player"):
@@ -146,12 +166,20 @@ func verify(content: String, pack: String, textures: String) -> void:
 			check(session.step(now+9000000) and session.snapshot()==saved,"Pause advanced escape or fade")
 			if session.audio!=null:check(session.audio.snapshot().paused,"Escape pause did not reach audio")
 			check(session.set_pause("user",false,now),session.error)
-			var pivot: Vector3=session.hyperdrive._sampler._pivots[-1]
-			session.hyperdrive._sampler._pivots[-1]=Vector3(INF,0,0)
+			var sampler: RefCounted=session.hyperdrive._sampler
+			var pivot: Vector3=sampler._pivots[-1]
+			var sample_time: int=sampler._sample_time
+			var sample_result: Dictionary=sampler._sample_result
+			# This fixture changes otherwise immutable source geometry. Invalidate
+			# its retained sample so the fault reaches the final surface again.
+			sampler._pivots[-1]=Vector3(INF,0,0)
+			sampler._sample_time=-1;sampler._sample_result={}
 			var retained:=render_state(session)
 			check(not session.step(now+100000),"Invalid final animation surface was presented")
+			check(session.error.contains("Scenery animation world transform"),"Failure injection did not reach the invalid surface")
 			check(session.snapshot()==saved and render_state(session)==retained,"Failed frame committed world, fade or model state")
-			session.hyperdrive._sampler._pivots[-1]=pivot
+			sampler._pivots[-1]=pivot
+			sampler._sample_time=sample_time;sampler._sample_result=sample_result
 			check(session.present(),session.error)
 		if phase==16 and state.fade.elapsed_ms==5000:
 			check(state.fade.active and state.fade.alpha_byte==255 and escape.boundary.is_empty(),"Fade completed at equality")
@@ -177,7 +205,7 @@ func verify(content: String, pack: String, textures: String) -> void:
 			check(state.world_frame.controller.death_accounting.counter_deltas.player_kills==3,"Escape changed earned kill accounting")
 			check(session.step(now+9000000) and session.snapshot()==state,"Unsupported arrival continued advancing")
 			break
-	check(session.status=="arrival_transition_required" and checks.size()>=16,"Escape presentation did not cover every phase")
+	check(session.status=="arrival_transition_required" and checks.size()>=16 and shake_reached_view,"Escape presentation did not cover every phase or apply source shake to the final camera")
 	var owner: RefCounted=session._timeline.escape_owner()
 	var fade:=Fade.new()
 	check(not fade.configure(owner),"Fade reset after the escape began")

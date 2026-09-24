@@ -67,6 +67,22 @@ func verify_visit(bindings: RefCounted,cat: RefCounted,library: RefCounted,stati
 	if not approach.configure(bindings,cat,library,arrived,"D",1.0):check(false,approach.error);return null
 	approach=release(approach)
 	if approach==null:return null
+	if cursor==11 and bindings.mido_travel.has("arrival_briefing"):
+		for tick in 60:
+			if approach.dialogue_visible():break
+			var next: RefCounted=approach.evaluate(100)
+			if next==null:check(false,approach.error);return null
+			approach=next
+		var modal: Dictionary=approach.snapshot()
+		check(modal.dialogue.visible and modal.dialogue.count==1 and modal.dialogue.text_id==int(bindings.mido_travel.arrival_briefing.events[0].text_id) and modal.dialogue.voice_event_id==163,"Yrdal arrival omitted its original modal remark")
+		check(approach.start_station_autopilot()==null and approach.navigate("previous")==null,"The arrival modal accepted flight control or an unavailable previous line")
+		var held: RefCounted=approach.evaluate(150,Vector2.ONE,1.0,false,Vector2i.ZERO,Vector2.ZERO,true)
+		check(held!=null and held.snapshot().dialogue==modal.dialogue and held.snapshot().player_pose==modal.player_pose and held.snapshot().progress==modal.progress,"The arrival modal auto-dismissed or advanced gameplay")
+		var acknowledged: RefCounted=approach.navigate("next")
+		if acknowledged==null:check(false,approach.error);return null
+		approach=acknowledged
+		check(not approach.dialogue_visible() and approach.snapshot().mission==modal.mission and approach.snapshot().progress==modal.progress and approach.snapshot().cargo==modal.cargo,"Arrival acknowledgement completed the mission or changed inventory")
+	else:check(not approach.dialogue_visible() and approach.snapshot().dialogue.count==0,"An earlier pack or different arrival invented the Yrdal modal")
 	var guided: RefCounted=approach.start_station_autopilot()
 	if guided==null:check(false,approach.error);return null
 	for tick in 2000:

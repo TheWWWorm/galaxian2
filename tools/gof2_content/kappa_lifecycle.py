@@ -1,9 +1,9 @@
 """Original Kappa fighter lifecycle and EMP faction reactions. Constant declarations only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_kappa_lifecycle(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'kappa_ordinary_combat_lifecycle',
@@ -73,6 +73,53 @@ LAYOUTS = {'kappa_lifecycle_systems_hit': [538094,
                                           '__text',
                                           '5ccb77bbe4d362520025af9788dade711a2023976a06a95a1bdeb529dcdbee9c'],
  'kappa_lifecycle_persistent_hostility': [535624,
+                                          28,
+                                          '__text',
+                                          'b6bfcb7e235910cff0dd3613bb0d4daaad101ddbdbf2166b2708e8a5426891bb']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'kappa_lifecycle_systems_hit': [538630,
+                                 842,
+                                 '__text',
+                                 'e63488b588552ba70cfe74e9449733e1043876f7e088ed55ab28f1d51703763d'],
+ 'kappa_lifecycle_normal_hit': [539472,
+                                1846,
+                                '__text',
+                                '407b208cd78b7b7e70b5bc505bc9509f70781ad9d1af9c2b9a9f80104cd54242'],
+ 'kappa_lifecycle_systems_reputation': [808894,
+                                        16,
+                                        '__text',
+                                        '944c0fcd3a13ba5ad180f806c7a8e02ab5abec4fef7d13962ea721a98298d8e0'],
+ 'kappa_lifecycle_reputation_adjust': [808678,
+                                       184,
+                                       '__text',
+                                       '48b146881bbcd041e6fa4b24bc767946e1499bffd52f1a9994b56153fea7ecd4'],
+ 'kappa_lifecycle_current_system': [873354,
+                                    14,
+                                    '__text',
+                                    '3a5bd5e3bc2ea1531166ea66022673bcccdf556b8c56399962a2c6aeef420444'],
+ 'kappa_lifecycle_system_faction': [735296,
+                                    10,
+                                    '__text',
+                                    '89fcfb1a4e11c14ec174b815f4ca804bac72b0fb13c54f03598369d97cbb108e'],
+ 'kappa_lifecycle_actor_constructor': [-81548,
+                                       948,
+                                       '__text',
+                                       '88437b7848d85fadf366a7bec5c102e8f85b0aa6455fb37d60ea50e6c8ca5d6f'],
+ 'kappa_lifecycle_attached_actor': [-77806,
+                                    14,
+                                    '__text',
+                                    '586cc43f0184717f3c2513d92ebab30601b66aa5463ecb6a12441f6a682e6455'],
+ 'kappa_lifecycle_warning': [119652, 34, '__text', '80c5c8c7b4ab0fca2ef384204381d3c71e8fee817b4dbdeb8eeca1b55ca2b31e'],
+ 'kappa_lifecycle_response': [113780,
+                              214,
+                              '__text',
+                              'e0a9c7b348d256a49558c1ce2e91fe712a22f67f926ad7fe70a0cf5e448f546b'],
+ 'kappa_lifecycle_mission_radio_filter': [113994,
+                                          2616,
+                                          '__text',
+                                          'd396499581feca6061a89f2cb87e7e415680b571a43d8a65116204169c17d319'],
+ 'kappa_lifecycle_persistent_hostility': [536160,
                                           28,
                                           '__text',
                                           'b6bfcb7e235910cff0dd3613bb0d4daaad101ddbdbf2166b2708e8a5426891bb']}

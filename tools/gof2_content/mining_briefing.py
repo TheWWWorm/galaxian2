@@ -1,6 +1,7 @@
 """Bounded first-mining briefing declarations; original instructions never run."""
 import copy
 from .radio_audio import constant_bytes
+from .declaration_layouts import recognize
 
 
 def extract_mining_briefing(mach, arrival, flight, presentation, desktop):
@@ -9,21 +10,21 @@ def extract_mining_briefing(mach, arrival, flight, presentation, desktop):
     try:
         if flight['scope'] != 'first_mining_flight_construction' or presentation['scope'] != 'first_station_presentation':
             return {}
-        if desktop.get('scope') != 'mac_desktop_text' or [1703, 1704] not in desktop.get('pairs', []):
+        if desktop.get('scope') != 'mac_desktop_text':
             return {}
         origin = arrival['provenance']['actor']
         if origin['bytes'] != 315:
             return {}
-        anchor = mach.text['address'] + origin['offset'] - mach.slice_offset - mach.text['offset']
-        proof = {}
-        for key, (delta, size, section, pattern) in LAYOUTS.items():
-            found = constant_bytes(mach, anchor + delta, size, section.encode())
-            if found is None or found[0] != bytes.fromhex(pattern):
-                return {}
-            proof[key] = {'offset': found[1], 'bytes': size}
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=constant_bytes)
+        if not proof:return {}
+        alternate=proof['events']['offset']==origin['offset']+MAC_ALTERNATE['events'][0]
+        values=MAC_VALUES if alternate else VALUES
+        instruction=values['events'][-1]['text_id']
+        if [instruction,instruction+1] not in desktop.get('pairs',[]):return {}
         # The shared presentation reader verifies the entire voice lookup and
         # the fixed portraits. A missing text lookup has no mission actor here.
-        result = copy.deepcopy(VALUES)
+        result = copy.deepcopy(values)
         result['provenance'] = proof
         return result
     except (KeyError, TypeError, ValueError, IndexError, OverflowError):
@@ -123,3 +124,102 @@ LAYOUTS = {'count_prefix': [1554602, 12, '__const', '02000000000000000a000000'],
                    '__text',
                    '498bbc2498000000e8a020feff49c744243800000000498bbc2488000000e8de28f9ffe9afe5ffff'],
  'clear_pending': [233366, 18, '__text', '554889e5c6472d00c74730000000005dc390']}
+
+# Complete alternate Mac source layout.
+MAC_ALTERNATE = {'count_prefix': [1529586, 12, '__const', '04000000000000000a000000'],
+ 'events': [1530914,
+            40,
+            '__const',
+            '00000000ae06000002000000af06000000000000b006000002000000b106000010000000b2060000'],
+ 'voice_events': [1535330,
+                  32,
+                  '__const',
+                  'ae060000b1000000af060000b2000000b0060000b3000000b1060000b4000000'],
+ 'index_table': [-700355,
+                 60,
+                 '__text',
+                 '31c031c9488d15aa062200488d353309220031ffeb11030411033c314883c104498b9d9000000089040b498b9d98000000893c0b81f98402000075da'],
+ 'dialogue_mode': [-699520,
+                   144,
+                   '__text',
+                   '4d8967704189576883fa01743a83fa02754a4c89e7e808ce10004889c34885db74164889dfe8c09affff84c0750a4889df31f6e82e9effff4c89e7be01000000e89dca1000eb154c89e7e8d3cd10004c89e7be01000000e89aca100041c7476c000000004183feff7512488d05698f2f00488b38e8abc617004189c6458977204c89ff5b415c415e415f5de9f8030000'],
+ 'speaker_selection': [-698182,
+                       155,
+                       '__text',
+                       '498b7f70e819c71000418b4f6884c0751f83f9020f85bc04000041837f202a0f85b10400004d8d7768b810000000eb534d8d776883f9017429b81000000085c9754149634720498b9790000000418b4f6c01c9030c824863c1488d0df8022200eb1e49634720498b9798000000418b4f6c01c9030c824863c1488d0d88dd21008b0481898560fcffff4863d8488d05e5e02e00488b04d849894738'],
+ 'text_selection': [-697974,
+                    65,
+                    '__text',
+                    '418b0e85c90f859e00000049634720498b8f90000000418b576c8d5c1201031c814c63e3488d055d022200468b34a0488d05b2892f00488b384489f6e8e7bb1b00'],
+ 'line_count': [-692295,
+                60,
+                '__text',
+                '488b7b704885ff7440e815b010003c0175378b4b6883f9017422b80100000085c9756e48634320488d0d0be721008b0c8189c8c1e81f01c8d1f8eb55'],
+ 'next_line': [-692345,
+               41,
+               '__text',
+               '4889fb448b736ce81d000000ffc84139c67c0430c0eb0dff436c4889dfe85fe8ffffb0015b415e5dc3'],
+ 'previous_line': [-690934,
+                   45,
+                   '__text',
+                   '3c0175298bb3a0000000488d0577742f00488b38e8c35b00008b436c85c07e0dffc889436c4889dfe8d1e2ffff'],
+ 'acknowledgement': [-690889,
+                     56,
+                     '__text',
+                     '488b7b084489fe4489f2e8209018003c0175258bb3a0000000488d053b742f00488b38e8875b00004889dfe819faffff88c1b00184c97448'],
+ 'hud_initial': [337962,
+                 51,
+                 '__text',
+                 'c6436900c6436b0048c7435000000000c6830c01000000c6830901000000c6830801000000c6830a01000000c6830d01000000'],
+ 'hud_modal_clock_gate': [364348, 11, '__text', '41f64569010f85480b0000'],
+ 'hud_clock': [364847, 19, '__text', '41f6456b010f85140400004963454849014550'],
+ 'hud_modal_dispatch': [367826,
+                        39,
+                        '__text',
+                        '41f6456c010f853e210000498b7d60e8b4f0020085c00f8e2d21000041f64569010f859e240000'],
+ 'briefing_start': [385724,
+                    516,
+                    '__text',
+                    '554889e54156534989fe498bbe98000000e8e2acfdff3c010f85e1010000488d0579001f00488b38e8bb37070089c7e8d474efff84c0751f488d055f001f00488b38e8c13707004889c7e8d13c000084c00f85a8010000488d0540001f00488b38e8a23707004889c7e80e3b000084c00f8589010000488d0521001f00488b38e8833707004889c7e8853b000083f8080f8469010000488d0501001f00488b38e8633707004889c7e8653b00003da60000000f8447010000488d05dfff1e00488b38e8413707004889c7e8433b000085c00f8428010000488d05c0ff1e00488b38e8223707004889c7e8243b00003db70000000f8406010000488d059eff1e00488b38e8003707004889c7e8883a00003c010f85e7000000488d057fff1e00488b38e8e13607004889c7e8f13b000084c07520488d0564ff1e00488b38e8c63607004889c7e8c83a000083f80b0f84ac0000004983beb8000000007537bfb0000000e8553c11004889c3488d052dff1e00488b38e88f360700498b96900000004889df4889c631c9e8296befff49899eb8000000498b7e6031f6e819a10200498bb690000000498bbe98000000e884a6fdff498b7e6031f6e84f580300498bbe3801000031f6e809fe0700498b7e6031f6e80652030041c6865901000001498b869800000048c740080000000041c64669014c89f7e86c4effff41c6466a015b415e5dc3'],
+ 'controller_order': [378134, 24, '__text', '418a5d6b418b7548498bbd98000000e89658fcff4188456b'],
+ 'modal_update_dispatch': [377239,
+                           41,
+                           '__text',
+                           '498bbdb00000004885ff0f84c701000041f6851a010000010f85b901000041f6456a010f85ae010000'],
+ 'modal_update': [377858,
+                  51,
+                  '__text',
+                  '41f6456a010f84da090000418b7548488d05821f1f00488b38e8967af9ff418b7548498bbdb8000000e87eaaefffe9b2090000'],
+ 'final_acknowledgement': [351203,
+                           102,
+                           '__text',
+                           '41f644246a010f8404120000498bbc24b800000089de4489fae82118f0ff3c010f852120000041c6442469004c89e7e86fd7ffff41c644246a004c8d3536871f00498b3ee898be07004889c7e838c2000088c3498b3ee886be07004889c784db0f84e9010000'],
+ 'unfinished_mission': [351794,
+                        40,
+                        '__text',
+                        'e849c0000084c0751f488d0518851f00488b38e866bc07004889c7e82ec000003c010f85710f0000'],
+ 'post_briefing': [355787,
+                   40,
+                   '__text',
+                   '498bbc2498000000e8ca21feff49c744243800000000498bbc2488000000e8fc29f9ffe9afe5ffff'],
+ 'clear_pending': [233378, 18, '__text', '554889e5c6472d00c74730000000005dc390']}
+
+MAC_VALUES = {'scope': 'first_mining_briefing',
+ 'campaign_cursor': 2,
+ 'mission_kind': 154,
+ 'mode': 0,
+ 'entry_release_ms': 7001,
+ 'briefing_minimum_ms': 5001,
+ 'max_frame_ms': 150,
+ 'briefing_before_controller_update': True,
+ 'modal_stops_simulation': True,
+ 'final_acknowledgement_clears_pending': True,
+ 'final_acknowledgement_completes_mission': False,
+ 'next_text_id': 179,
+ 'final_text_id': 180,
+ 'key_token': '#KEY_DOCK',
+ 'events': [{'speaker_id': 0, 'text_id': 1710, 'voice_event_id': 177},
+            {'speaker_id': 2, 'text_id': 1711, 'voice_event_id': 178},
+            {'speaker_id': 0, 'text_id': 1712, 'voice_event_id': 179},
+            {'speaker_id': 2, 'text_id': 1713, 'voice_event_id': 180},
+            {'speaker_id': 16, 'text_id': 1714, 'voice_event_id': -1}]}

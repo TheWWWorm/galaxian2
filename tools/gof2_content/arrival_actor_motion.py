@@ -1,6 +1,6 @@
 """Recover rescue actor motion declarations; emit data and extents only."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 def extract_arrival_actor_motion(mach, arrival, actors, environment):
     arch=mach.architecture
@@ -9,12 +9,8 @@ def extract_arrival_actor_motion(mach, arrival, actors, environment):
         if arrival['campaign_cursor']!=1 or arrival['actor_kind']!=3 or arrival['actor_hull_id']!=30 or not environment or not actors['npc_initialization']['flight']:return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=(315 if arch=='x86_64' else 310):return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,pattern) in LAYOUTS[arch].items():
-            found=section_bytes(mach,anchor+delta,size,b'__text')
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        proof=recognize(mach,origin['offset'],[LAYOUTS[arch]] + ([MAC_ALTERNATE] if arch == 'x86_64' else []))
+        if not proof:return {}
         result=copy.deepcopy(VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
@@ -99,3 +95,27 @@ LAYOUTS = {'x86_64': {'initial_mode': [-80932,
            'dispatch_table': [557078,
                               20,
                               'a5000a00890eaa00de01fc017e020a00ad027703']}}
+
+# Independently verified alternate Mac compiler layout.
+MAC_ALTERNATE = {'initial_mode': [-80932, 25, '48c7432000000000c783bc00000000000000c683e500000000'],
+ 'initial_active': [535473, 7, 'c683c800000001'],
+ 'half_extent': [607752, 38, '488d054b9d1b00488b38e82bd40300b9a086010084c0b850c300000f45c14189842478010000'],
+ 'mode_setter': [-78898,
+                 44,
+                 '554889e553504889fbc783bc00000005000000488b7b0831f6e81a770900c683e5000000014883c4085b5dc3'],
+ 'sync': [612108,
+          61,
+          '498b5e08498b7e10e8f384ebff4883c3084889df4889c6e84a6f0900498b7e184885ff7418498b5e08e8d284ebff4883c3084889df4889c6e819700900'],
+ 'copy': [1230450,
+          240,
+          '554889e54883ec2048897df8488975f0488b75f8488b7df0f30f1007f30f1106488b7df0f30f104704f30f114604488b7df0f30f104708f30f114608488b7df0f30f10470cf30f11460c488b7df0f30f104710f30f114610488b7df0f30f104714f30f114614488b7df0f30f104718f30f114618488b7df0f30f10471cf30f11461c488b7df0f30f104720f30f114620488b7df0f30f104724f30f114624488b7df0f30f104728f30f114628488b7df0f30f10472cf30f11462c4889f74881c730000000488b45f0480530000000488975e84889c6e83662fdff488b75e8488945e04889f04883c4205dc30f1f440000'],
+ 'route_gate': [614974, 17, '498b7e08e8cde0feff3c010f8587070000'],
+ 'target_fallback': [616918, 26, '41c7465400000000498b7e0831f6e8c5c9feff498986a0010000'],
+ 'relative_position': [617656,
+                       86,
+                       'f3410f1086cc010000f3410f5c4648f3410f1186d8010000f3410f1086d0010000f3410f5c464cf3410f1186dc010000498d86d801000048898578f5fffff3410f1086d4010000f3410f5c4650f3410f1186e0010000'],
+ 'dispatch': [620100, 40, '418b86bc0000004883f809488b9590f5ffff0f8737200000488d0d83200000486304814801c8ffe0'],
+ 'mode_five': [620230,
+               255,
+               '498b4608f64060017428488d05836c1b00488b38e8c5a3030083f8027c14498b7e184885ff7504498b7e1031f6e8dc6bebff498b86a00100004885c00f848b1f0000f64062010f85811f0000f3410f1096d8010000418b8678010000f30f2ac00f2ec20f86641f0000f7d8f30f2ac80f2ed10f86551f0000f3410f1096dc0100000f2ec20f86431f00000f2ed10f863a1f0000f3410f1096e00100000f2ec20f86281f00000f2ed10f861f1f000041c786bc00000001000000498b7e184885ff7504498b7e10be01000000e83e6bebff498b7e08be01000000e862cbfeff41f6867f010000010f84e11e0000498b7e78be01000000e8d457f8ffe9ce1e0000'],
+ 'dispatch_table': [628454, 40, 'dfe0ffff9be6ffffadffffff15f8ffffa0fbffffe0dfffff86dfffff9be6ffffc2e2ffffefe0ffff']}

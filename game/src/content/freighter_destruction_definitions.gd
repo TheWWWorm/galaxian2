@@ -1,4 +1,5 @@
 extends RefCounted
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 ## Original early Mido freighter lifecycle. This capability grants no mission progress.
@@ -8,6 +9,8 @@ const Combat=preload("res://src/content/ambient_combat_definitions.gd")
 const Convoy=preload("res://src/content/convoy_lifecycle_definitions.gd")
 const VALUES = {"scope":"early_mido_freighter_destruction","campaign_cursor":11,"station_id":79,"system_id":15,"actor_kind":3,"subtype":1,"hull_catalogue_id":15,"animation_mode":3,"wreck_mode":4,"model_id":18300,"model_resource":"resources/data/assets/main/3d/meshes/ships/cargo_001_midorian_explosion_anim.aem","cargo_model_id":16990,"cargo_model_resource":"resources/data/assets/main/3d/meshes/misc/container_001_midorian.aem","wreck_resource":"resources/data/bin/wreck_collisions.bin","wreck_layout_id":1,"wreck_record_limit":6,"wreck_box_scale":1.100000023841858,"wreck_sphere_scale":0.6000000238418579,"initial_material_id":34700,"wreck_material_id":33352,"wreck_change_at_ms":141,"cleanup_after_ms":60000,"cargo_rotation_delta_shift":1,"cargo_angle_fraction":1.52587890625e-05,"cargo_angle_tau":6.2831854820251465,"initial_effect_scale":1.0,"final_effect_scale":6.0,"effect_type":0,"initial_sound_id":20,"effect_sound_base":18,"effect_sound_bound":2,"fragments_generated_on_death":true,"cargo_spawn_phase":"animation","cargo_initial_basis":"identity","cargo_drift":false,"animation_advances_on_entry":true,"world_movement_on_death":false,"interaction_blocked_during_animation":false,"wreck_draw_after_cleanup":true,"nonhostile_remaining_delta":-1,"pirate_kills_delta":0}
 const SPANS = {"freighter_update":[634134,4064],"death_model":[633586,336],"freighter_draw":[638262,174],"cargo_model":[-77266,246],"cargo_predicate":[-77020,46],"active_setter":[-78854,18],"wreck_reader":[-677302,398],"wreck_volumes":[-220182,888],"freighter_point":[638832,218],"effect_fragments":[-682314,482],"effect_reset":[-682904,424],"effect_scale":[-683262,358],"effect_trigger":[-681366,484],"effect_sound":[-681822,456],"hostile_death":[106510,1044],"nonhostile_death":[107650,12],"animation_mode":[1067530,112],"animation_step":[1068036,309],"wreck_box_scale":[1557770,4],"wreck_sphere_scale":[1556934,4],"effect_scales":[1588802,8],"cargo_angle_fraction":[1575014,4],"cargo_angle_tau":[1575058,4]}
+
+const MAC_SPANS = {"freighter_update":[634682,4064],"death_model":[634134,336],"freighter_draw":[638810,174],"cargo_model":[-77266,246],"cargo_predicate":[-77020,46],"active_setter":[-78854,18],"wreck_reader":[-683190,398],"wreck_volumes":[-221138,888],"freighter_point":[639380,218],"effect_fragments":[-688202,482],"effect_reset":[-688792,424],"effect_scale":[-689150,358],"effect_trigger":[-687254,484],"effect_sound":[-687710,456],"hostile_death":[106510,1044],"nonhostile_death":[107650,12],"animation_mode":[1068258,112],"animation_step":[1068764,309],"wreck_box_scale":[1532770,4],"wreck_sphere_scale":[1531934,4],"effect_scales":[1563890,8],"cargo_angle_fraction":[1550078,4],"cargo_angle_tau":[1550122,4]}
 
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.size()!=VALUES.size()+1 or not data.get("provenance") is Dictionary:return false
@@ -61,8 +64,5 @@ static func validate(data: Variant,source_bytes: int,arch: String,arrival: Dicti
 	if arch!="x86_64" or not parameters(data) or not Combat.parameters(combat):return "Unsupported freighter destruction declarations"
 	var origin: Variant=arrival.get("provenance",{}).get("actor")
 	if not Fonts.extent(origin,"offset","bytes",[315],source_bytes):return "Freighter destruction lacks its source anchor"
-	if data.provenance.size()!=SPANS.size():return "Invalid freighter destruction provenance"
-	for key in SPANS:
-		var span: Variant=data.provenance.get(key);var rule: Array=SPANS[key]
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],source_bytes) or int(span.offset)!=int(origin.offset)+int(rule[0]):return "Invalid freighter destruction extent: "+key
+	if not Layouts.matches(data.provenance,int(origin.offset),source_bytes,[SPANS,MAC_SPANS]):return "Invalid freighter destruction source layout"
 	return ""

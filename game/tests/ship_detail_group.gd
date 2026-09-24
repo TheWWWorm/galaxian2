@@ -21,6 +21,7 @@ func verify_source(content: String, pack: String, texture_pack: String) -> void:
 	check(library.open(content),library.error)
 	check(bindings.open(pack,library.manifest),bindings.error)
 	check(visuals.open(texture_pack,library.manifest),visuals.error)
+	check_forks(bindings)
 	var group := Group.new()
 	check(group.configure(bindings,{"player":10,0:2,1:23}),group.error)
 	if group.snapshot().is_empty(): return
@@ -53,7 +54,7 @@ func verify_source(content: String, pack: String, texture_pack: String) -> void:
 	for i in 5: check(group.update(150,near,Vector3.ZERO,1,false),group.error)
 	original=group.snapshot()
 	check(not group.update(150,{},Vector3.ZERO,1,false) and group.snapshot()==original,"Failed periodic refresh advanced clock")
-	for delta in [-1,151,true,NAN]:
+	for delta in [-1,751 if not bindings.fast_forward.is_empty() else 151,true,NAN]:
 		check(not group.update(delta,near,Vector3.ZERO,1,false) and group.snapshot()==original,"Invalid frame changed group")
 	check(group.refresh(far,Vector3(0,0,20000),1) and group.snapshot().selections.player.level==0,"Supplied reference was ignored")
 	var before := geometry.selection.duplicate(true)
@@ -70,6 +71,39 @@ func verify_source(content: String, pack: String, texture_pack: String) -> void:
 	bindings.lod_refresh=saved
 	geometry.free()
 	print(library.manifest.profile.edition+": scheduled and forced selections, suppression, atomic failures and renderer handoff verified")
+
+func check_forks(bindings: RefCounted) -> void:
+	var group := Group.new()
+	var near := {"player":Vector3.ZERO,0:Vector3(100,0,0),1:Vector3(0,0,100)}
+	var far := {"player":Vector3(0,0,20000),0:Vector3(80000,0,0),1:Vector3(0,0,6000)}
+	check(group.configure(bindings,{"player":10,0:2,1:23}),group.error)
+	var initial := group.fork_for_frame()
+	var unselected: Dictionary=initial.snapshot()
+	check(group.update(0,near,Vector3.ZERO,1,false),group.error)
+	check(initial.snapshot()==unselected,"Initial fork acquired another owner's first selection")
+	check(group.update(150,{},null,null,true),group.error)
+	var selected: Dictionary=group.snapshot()
+	var left := group.fork_for_frame();var right: RefCounted=left.fork_for_frame()
+	check(left.update(150,{},null,null,false) and left.snapshot().counter_ms==150,"Fork did not retain its periodic clock")
+	check(group.snapshot()==selected and right.snapshot()==selected,"Fork clock advanced another owner")
+	check(left.refresh(far,Vector3.ZERO,1) and left.snapshot().selections.player.level==1,left.error)
+	var distant: Dictionary=left.snapshot()
+	check(group.snapshot()==selected and right.snapshot()==selected,"Fork refresh changed a retained selection")
+	check(group.refresh(far,Vector3(0,0,20000),1),group.error)
+	check(left.snapshot()==distant and right.snapshot()==selected,"Original refresh changed its descendants")
+	var changed: Dictionary=group.snapshot()
+	var invalid := near.duplicate();invalid[1]=Vector3.INF
+	check(not left.refresh(invalid,Vector3.ZERO,1) and left.snapshot()==distant,"Late invalid position partially committed a fork refresh")
+	check(not right.refresh(near,Vector3.ZERO,NAN) and right.snapshot()==selected,"Invalid detail changed the sibling's retained selections")
+	check(group.snapshot()==changed and group.error.is_empty(),"Rejected descendant refresh changed the original observation or error")
+	check(left.refresh(near,Vector3.ZERO,1) and left.error.is_empty(),"Fork did not recover from a rejected refresh")
+	var exposed: Dictionary=right.snapshot();exposed.selections.player.level=2;exposed.selections.erase(0)
+	check(right.snapshot()==selected and group.snapshot()==changed,"Public fork snapshot aliases a retained selection")
+	group.clear()
+	check(right.snapshot()==selected and initial.snapshot()==unselected,"Clearing the original erased a retained fork")
+	check(initial.update(0,far,Vector3.ZERO,1,false) and initial.snapshot().selections.player.level==1,"Unselected fork lost its configured selectors")
+	check(left.configure(bindings,{0:2}) and left.refresh({0:Vector3.ZERO},Vector3.ZERO,1),left.error)
+	check(right.snapshot()==selected,"Reconfiguring a fork changed another owner's selector population")
 
 func check(ok: bool,message: String) -> void:
 	if not ok:

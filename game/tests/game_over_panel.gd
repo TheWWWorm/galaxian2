@@ -30,6 +30,7 @@ var captures:=""
 func _initialize():call_deferred("run")
 func run():
 	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
 	check(args.size() in [3,4],"Expected explicit Mac content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:await verify(args)
 	if canvas!=null:canvas.free()
@@ -101,7 +102,8 @@ func verify(args: PackedStringArray):
 		check(panel.present(death,524) and panel.snapshot().text_id==188 and panel.snapshot().text==lib.strings[188],"Mobile continuation text lost: "+language)
 		await process_frame
 		var state: Dictionary=panel.snapshot()
-		check(state.image_rect.size==Vector2(294,136) and state.prompt_rect.end.y<=800 and state.prompt_rect.end.x<=420,"Phone art/prompt exceeds its viewport: "+language)
+		var viewport:=Rect2(Vector2.ZERO,panel.size)
+		check(state.image_rect.size==Vector2(294,136) and viewport.encloses(state.image_rect) and viewport.encloses(state.prompt_rect),"Phone art/prompt exceeds its landscape viewport: "+language)
 	check(lib.select_language("ja") and panel.configure(lib,bindings,visuals,death),"Japanese capture resources unavailable")
 	canvas.size=Vector2i(800,450);panel.size=canvas.size
 	check(panel.present(death,524),panel.error);await capture("phone-japanese")

@@ -157,14 +157,16 @@ func render(lib: RefCounted, visual_path: String, directory: String, result: Dic
 		var current: RefCounted=retired if label=="mined" else flight
 		check(scene.present(current),scene.error)
 		check(scene.scenery.objects[index].visible==(label!="mined"),"First-flight scene ignored mined asteroid visibility")
+		check(scene.scenery.destruction!=null and scene.scenery.destruction.intact[index]==(label!="mined") and scene.scenery.destruction._effects.is_empty(),"Mining retirement entered combat breakup or restored the wrong intact model")
 		var visible:=0
 		for object in scene.scenery.objects:
 			if object.visible:visible+=1
 		check(visible==field.objects.size()-(1 if label=="mined" else 0),"Mining hid unrelated asteroids")
 		scene.camera.position=eye;scene.camera.look_at(target);scene.camera.near=1.0
 		for i in 3:await process_frame
-		var capture:=canvas.get_texture().get_image()
-		check(capture.get_size()==canvas.size and capture.save_png(directory.path_join(label+".png"))==OK,"Could not save mining retirement capture")
+		if DisplayServer.get_name()!="headless":
+			var capture:=canvas.get_texture().get_image()
+			check(capture.get_size()==canvas.size and capture.save_png(directory.path_join(label+".png"))==OK,"Could not save mining retirement capture")
 	check(scene.present(retired),scene.error)
 	var invalid: Dictionary=retired.snapshot().scenery.bodies.duplicate(true);invalid.objects.back().active="invalid"
 	check(not scene.scenery.apply_activity(invalid) and not scene.scenery.objects[index].visible,"Rejected activity update changed accepted visibility")

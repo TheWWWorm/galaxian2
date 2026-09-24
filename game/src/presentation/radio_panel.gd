@@ -1,16 +1,21 @@
 extends Control
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Passive native view of a radio snapshot. The mission owns simulation time,
 ## pauses and completion; native wrapping never feeds back into source timing.
 ## Speaker names/portraits must be resolved by the content owner before use.
 const Library = preload("res://src/content/library.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
+const OriginalUI = preload("res://src/presentation/original_ui.gd")
 var error := ""
 var _identity := {}
 var _speakers := {}
 var _snapshot := {}
+var _art: RefCounted
 var _mobile := false
 var _top_inset := 0.0
 var _panel: Panel
+var _background: TextureRect
+var _header_bar: TextureRect
 var _name: Label
 var _body: RichTextLabel
 var _portrait: TextureRect
@@ -21,6 +26,16 @@ func _init() -> void:
 	_panel = Panel.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_panel)
+	_background = TextureRect.new()
+	_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_background.stretch_mode = TextureRect.STRETCH_TILE
+	_panel.add_child(_background)
+	_header_bar = TextureRect.new()
+	_header_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_header_bar.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_header_bar.stretch_mode = TextureRect.STRETCH_SCALE
+	_panel.add_child(_header_bar)
 	_name = Label.new()
 	_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -44,8 +59,12 @@ func _init() -> void:
 func configure(base_content_id: String, binding_id: String, language: String, speakers := {}, campaign_cursor: int = 0) -> bool:
 	clear()
 	_identity = {}
+	_art = null
+	theme = null
+	_background.texture = null
+	_header_bar.texture = null
 	_speakers = {}
-	if not Library.valid_hash(base_content_id) or not Library.valid_hash(binding_id) or language.is_empty() or campaign_cursor not in [0, 1, 7, 10, 11, 12, 13, 14, 16, 18,19]:
+	if not Library.valid_hash(base_content_id) or not Library.valid_hash(binding_id) or language.is_empty() or campaign_cursor not in ([0,1]+FlightStages.EQUIPPED):
 		return _fail("Radio view needs a verified content, binding and language identity")
 	# Copy names and retain supplied texture resources. Never guess a portrait or
 	# derive a localization ID by adding a fixed cross-edition offset.
@@ -59,6 +78,24 @@ func configure(base_content_id: String, binding_id: String, language: String, sp
 		_speakers[int(id)] = {"name": speakers[id].name, "portrait": speakers[id].get("portrait")}
 	_identity = {"base_content_id": base_content_id, "binding_id": binding_id, "language": language}
 	if campaign_cursor != 0: _identity.campaign_cursor = campaign_cursor
+	set_mobile_layout(_mobile)
+	return true
+
+func configure_art(library: RefCounted, bindings: RefCounted, visuals: RefCounted) -> bool:
+	if _identity.is_empty() or library == null or bindings == null or visuals == null:
+		return _fail("Radio artwork needs a prepared content session")
+	if library.manifest.get("content_id") != _identity.base_content_id or bindings.base_content_id != _identity.base_content_id or visuals.base_content_id != _identity.base_content_id or bindings.binding_id != _identity.binding_id or library.active_language != _identity.language:
+		return _fail("Radio artwork belongs to another content, binding or language")
+	var art := OriginalUI.new()
+	if not art.configure(library, bindings, visuals): return _fail(art.error)
+	var rules: Dictionary = bindings.mido_travel.map.ui
+	_art = art
+	_background.texture = art.sprites[int(rules.panel_background_image_id)]
+	_header_bar.texture = art.sprites[int(rules.footer_image_id)]
+	var source_theme := Theme.new()
+	source_theme.default_font = art.font
+	theme = source_theme
+	set_mobile_layout(_mobile)
 	return true
 
 func clear() -> void:
@@ -106,18 +143,17 @@ func present(snapshot: Dictionary, resolved_speaker: Dictionary = {}) -> bool:
 func set_mobile_layout(enabled: bool) -> void:
 	_mobile = enabled
 	var scale := 1.0 if _mobile else 0.5
-	_body.add_theme_font_size_override("normal_font_size", int(28 * scale))
-	_name.add_theme_font_size_override("font_size", int(30 * scale))
-	# Native remake styling; original panel atlas bindings remain a separate
-	# content scope. Geometry/text are drawn at native resolution, never scaled.
+	_body.add_theme_font_size_override("normal_font_size", (20 if _mobile else 14) if _art != null else int(28 * scale))
+	_name.add_theme_font_size_override("font_size", (20 if _mobile else 14) if _art != null else int(30 * scale))
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.025, 0.055, 0.085, 0.96)
-	style.border_color = Color(0.24, 0.53, 0.65, 0.95)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(int(12 * scale))
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.87) if _art != null else Color(0.025, 0.055, 0.085, 0.96)
+	if _art == null:
+		style.border_color = Color(0.24, 0.53, 0.65, 0.95)
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(int(12 * scale))
 	_panel.add_theme_stylebox_override("panel", style)
-	_name.add_theme_color_override("font_color", Color(0.68, 0.86, 0.93))
-	_body.add_theme_color_override("default_color", Color(0.94, 0.97, 0.99))
+	_name.add_theme_color_override("font_color", Color.WHITE if _art != null else Color(0.68, 0.86, 0.93))
+	_body.add_theme_color_override("default_color", Color.WHITE if _art != null else Color(0.94, 0.97, 0.99))
 	_relayout()
 
 func set_top_inset(value: float) -> void:
@@ -129,14 +165,23 @@ func _relayout() -> void:
 	var scale := 1.0 if _mobile else 0.5
 	var inset := minf(24 * scale, size.x * 0.05)
 	var width := minf(760 * scale, size.x - inset * 2)
-	var padding := minf(24 * scale, width * 0.05)
-	var top := maxf(minf(48 * scale, size.y * 0.05),_top_inset)
-	var header := 38 * scale if not _name.text.is_empty() else 0.0
+	var padding := minf((8 if _art != null else 24) * scale, width * 0.05)
+	var header := (34 if _art != null else 38) * scale if not _name.text.is_empty() else 0.0
+	# Other HUD panels reserve space, but a short landscape viewport still needs
+	# one readable radio line. Keep overflow inside the native scrolling body.
+	var line_height := _body.get_theme_font("normal_font").get_height(_body.get_theme_font_size("normal_font_size"))
+	var maximum_top := maxf(0.0,size.y-inset-padding*2-header-line_height)
+	var top := minf(maxf(minf(48 * scale, size.y * 0.05),_top_inset),maximum_top)
 	var available := maxf(1, size.y - top - inset - padding * 2 - header)
-	var portrait_height := minf(150 * scale, available)
+	var portrait_height := minf((132 if _art != null else 150) * scale, available)
 	var portrait_width := portrait_height * 0.8 if _portrait.texture != null else 0.0
 	var gap := padding if portrait_width > 0 else 0.0
 	_panel.position = Vector2((size.x - width) * 0.5, top)
+	_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_background.visible = _art != null
+	_header_bar.visible = _art != null and header > 0.0
+	_header_bar.position = Vector2.ZERO
+	_header_bar.size = Vector2(width * 0.38, header)
 	_name.visible = header > 0
 	_name.position = Vector2(padding, padding)
 	_name.size = Vector2(maxf(1, width - padding * 2), header)

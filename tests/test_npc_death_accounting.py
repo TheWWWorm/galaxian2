@@ -6,8 +6,12 @@ from gof2_content import npc_death_accounting as reader
 from gof2_content.opening_npc_guidance import LAYOUTS as GUIDANCE
 
 
-def fixture(arch, shift=0):
-    layouts=reader.LAYOUTS[arch]
+def variants():
+    return [*reader.LAYOUTS.items(), ('x86_64', reader.MAC_ALTERNATE)]
+
+
+def fixture(arch, shift=0, layouts=None):
+    layouts=reader.LAYOUTS[arch] if layouts is None else layouts
     low=min(r[0] for r in layouts.values())-64
     high=max(r[0]+r[1] for r in layouts.values())+64
     offset=128;bias=4096
@@ -27,26 +31,26 @@ def fixture(arch, shift=0):
 
 class DeathAccountingTests(unittest.TestCase):
     def test_relocated_profiles(self):
-        for arch in reader.LAYOUTS:
+        for arch,layouts in variants():
             for shift in [0,0x900000]:
-                mach,actors,weapons,*_=fixture(arch,shift)
+                mach,actors,weapons,*_=fixture(arch,shift,layouts)
                 result=reader.extract_npc_death_accounting(mach,actors,weapons)
                 self.assertEqual({k:v for k,v in result.items() if k!='provenance'},reader.VALUES)
-                self.assertEqual(len(result['provenance']),len(reader.LAYOUTS[arch]))
+                self.assertEqual(len(result['provenance']),len(layouts))
                 self.assertFalse(any('pattern' in r or 'code' in r for r in result['provenance'].values()))
 
     def test_each_changed_span_and_truncation(self):
-        for arch in reader.LAYOUTS:
-            mach,actors,weapons,offset,low=fixture(arch)
-            for key,(delta,_,_) in reader.LAYOUTS[arch].items():
+        for arch,layouts in variants():
+            mach,actors,weapons,offset,low=fixture(arch,layouts=layouts)
+            for key,(delta,_,_) in layouts.items():
                 bad=copy.copy(mach);raw=bytearray(mach.data);raw[offset+delta-low]^=255;bad.data=bytes(raw)
                 self.assertFalse(reader.extract_npc_death_accounting(bad,actors,weapons),(arch,key))
             bad=copy.copy(mach);bad.data=mach.data[:offset+10]
             self.assertFalse(reader.extract_npc_death_accounting(bad,actors,weapons))
 
     def test_dependency_identity(self):
-        for arch in reader.LAYOUTS:
-            mach,actors,weapons,*_=fixture(arch)
+        for arch,layouts in variants():
+            mach,actors,weapons,*_=fixture(arch,layouts=layouts)
             for key in ['destruction','hostility','primary_weapon','guidance','provenance']:
                 bad=copy.deepcopy(actors);bad['npc_initialization'][key]={}
                 self.assertFalse(reader.extract_npc_death_accounting(mach,bad,weapons))

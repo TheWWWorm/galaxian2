@@ -61,7 +61,7 @@ func configure_empty(library: RefCounted,bindings: RefCounted) -> bool:
 
 func configure_mining_briefing(library: RefCounted, bindings: RefCounted, visuals: RefCounted, campaign_cursor:=2, ordinary_world:=false) -> bool:
 	if library==null or bindings==null or visuals==null or not Definitions.parameters(bindings.station_presentation):return reject("Mining briefing resources are unavailable")
-	var rules:=MiningStory.briefing(bindings,campaign_cursor,ordinary_world)
+	var rules:=MiningStory.briefing_presentation(bindings,campaign_cursor,ordinary_world)
 	if rules.is_empty():return reject("Mining briefing resources are unavailable for this departure")
 	return _configure_resources(library,bindings,visuals,rules)
 
@@ -71,11 +71,16 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, visua
 	if rules.is_empty():return reject("Mining return resources are unavailable for this departure")
 	return _configure_resources(library,bindings,visuals,rules)
 
-func configure_campaign_visit(library: RefCounted,bindings: RefCounted,visuals: RefCounted,cursor: int,mission: Dictionary) -> bool:
-	if library==null or bindings==null or visuals==null or not load("res://src/content/suttnar_visit_definitions.gd").selected(bindings,cursor,mission):return reject("Campaign conversation resources are unavailable")
-	var rules:=MiningStory.briefing(bindings,cursor,true)
+func configure_campaign_visit(library: RefCounted,bindings: RefCounted,visuals: RefCounted,cursor: int,mission: Dictionary,station_only:=false) -> bool:
+	if library==null or bindings==null or visuals==null:return reject("Campaign conversation resources are unavailable")
+	var rules: Dictionary=load("res://src/content/free_campaign_definitions.gd").dialogue_presentation(bindings,cursor,mission,station_only)
 	if rules.is_empty():return reject("Campaign conversation navigation is unavailable")
-	rules.events=bindings.mido_travel.suttnar_visit.events.duplicate(true)
+	return _configure_resources(library,bindings,visuals,rules)
+
+func configure_campaign_result(library: RefCounted,bindings: RefCounted,visuals: RefCounted,cursor: int,mission: Dictionary,failed:=false) -> bool:
+	if library==null or bindings==null or visuals==null:return reject("Campaign result resources are unavailable")
+	var rules: Dictionary=load("res://src/content/free_campaign_definitions.gd").result_presentation(bindings,cursor,mission,failed)
+	if rules.is_empty():return reject("Campaign result navigation is unavailable")
 	return _configure_resources(library,bindings,visuals,rules)
 
 func configure_station_return(library: RefCounted, bindings: RefCounted, visuals: RefCounted, campaign_cursor:=3) -> bool:
@@ -83,6 +88,19 @@ func configure_station_return(library: RefCounted, bindings: RefCounted, visuals
 	var rules:=StationReturn.station_conversation(bindings,campaign_cursor)
 	if rules.is_empty():return reject("Station return resources are unavailable for this visit")
 	return _configure_resources(library,bindings,visuals,rules)
+
+func configure_flight(library: RefCounted,bindings: RefCounted,visuals: RefCounted,state: Dictionary) -> bool:
+	if state.is_empty() or not state.get("player") is Dictionary:return reject("Flight conversation has no player state")
+	var cursor:=int(state.player.get("campaign_cursor",-1))
+	# Void keeps the ordinary career owner, but its modal lines belong to the
+	# Void story objective. Select that source before ordinary contract dialogue.
+	if state.has("void_environment"):return configure_mining_objective(library,bindings,visuals,cursor)
+	if state.has("kappa_rescue") or state.has("sahi_stage") or cursor==26:return configure_mining_briefing(library,bindings,visuals,cursor)
+	if state.get("mining_objective",{}).has("campaign_visit"):
+		return configure_campaign_visit(library,bindings,visuals,int(state.campaign_cursor),state.mission)
+	if state.has("mining_objective") and not state.has("contracts"):
+		return configure_mining_objective(library,bindings,visuals,cursor)
+	return configure_mining_briefing(library,bindings,visuals,cursor,state.has("contracts"))
 
 func _configure_resources(library: RefCounted, bindings: RefCounted, visuals: RefCounted, rules: Dictionary) -> bool:
 	clear();_identity={};_portraits={};_labels={};portrait_diagnostics={}

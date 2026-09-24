@@ -161,7 +161,7 @@ func verify_reader(pack: String, lib: RefCounted, header: Dictionary):
 				if changed.has("full_hold_story"):changed.full_hold_story={};changed.full_hold_appearance={};changed.full_hold_return={}
 				# Remove dependent optional capabilities when testing a pack that
 				# deliberately omits the entire second-flight construction.
-				for key in ["full_hold_particles","station_equipment","combat_training","combat_training_control","combat_training_weapons","combat_training_destruction"]:
+				for key in ["full_hold_particles","station_equipment","combat_training","combat_training_control","combat_training_weapons","combat_training_destruction","combat_training_story","combat_training_visuals","mido_travel","ambient_population","ambient_combat","ambient_lifecycle","freighter_destruction","early_contracts"]:
 					if changed.has(key):changed[key]={}
 		var serialized:=JSON.stringify(changed,"",true,true)
 		metadata.records_sha256=serialized.sha256_text();metadata.records_bytes=serialized.to_utf8_buffer().size()
@@ -170,7 +170,7 @@ func verify_reader(pack: String, lib: RefCounted, header: Dictionary):
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		var reader:=Bindings.new();check(reader.open(pack,lib.manifest),reader.error)
 		var accepted:=reader.open(directory,lib.manifest)
-		if scenario=="empty":check(accepted and reader.full_hold_flight.is_empty() and not reader.full_hold_departure.is_empty(),"Optional empty capability was not preserved")
+		if scenario=="empty":check(accepted and reader.full_hold_flight.is_empty() and not reader.full_hold_departure.is_empty(),"Optional empty capability was not preserved: "+reader.error)
 		else:check(not accepted and reader.binding_id.is_empty() and reader.full_hold_flight.is_empty() and reader.first_flight.is_empty(),"Invalid reopen exposed stale or partially staged declarations: "+scenario)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)
 

@@ -1,9 +1,9 @@
 """Original common fighter systems and target rules for Kappa. Constant declarations only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_kappa_fighters(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'kappa_shared_fighters',
@@ -56,3 +56,37 @@ LAYOUTS = {'kappa_fighters_shared_factory': [77944,
                                       255,
                                       '__text',
                                       '309bfefc706d25eff4b1682ced9c37c2de44c1388ded4870ccf316538bfa261d']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'kappa_fighters_shared_factory': [77944,
+                                   3478,
+                                   '__text',
+                                   '1edb599619eeabcc4601e757d01307eba28fc1a7bfb5ea74ea86ef4b365fcbf3'],
+ 'kappa_fighters_systems_initializer': [536244,
+                                        56,
+                                        '__text',
+                                        '7c85d69e72f18b7e78f0404ce332caeaca256f015bf3a86f9d14b7960ddcd565'],
+ 'kappa_fighters_systems_update': [613229,
+                                   60,
+                                   '__text',
+                                   'b05d3205395551ec5bd3914ba5650e27e871780d926d021b938dafcb4c71ff93'],
+ 'kappa_fighters_disabled_motion': [624991,
+                                    343,
+                                    '__text',
+                                    '5c1a959951ea584f3a76f8c2de636e11a504315b21e333a1c9fe50eec2d451dc'],
+ 'kappa_fighters_target_membership': [59038,
+                                      2050,
+                                      '__text',
+                                      '5cec2a39970c6bba7be2beaa7f36316ff243a1f731629df566750696ea854d8c'],
+ 'kappa_fighters_fire_gate': [543206,
+                              494,
+                              '__text',
+                              'ab2afd04d7dd9520eba6d7ddcf0153c984663af9c4a86c1d1d4aa9615bb2001d'],
+ 'kappa_fighters_holding_activation': [617742,
+                                       408,
+                                       '__text',
+                                       'caca46f0b2d78c03d0be2cd81fd707a15caa9873712c8e3ad173984fb67cc3e2'],
+ 'kappa_fighters_target_activation': [620230,
+                                      255,
+                                      '__text',
+                                      '2dce430c8b42b662432859e7029e1917d8c14e46735532aa09a6e66c025c8b70']}

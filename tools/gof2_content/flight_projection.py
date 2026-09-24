@@ -33,7 +33,8 @@ def extract_flight_projection(mach):
         require(i.operands[-1].type == 2); return i.operands[-1].imm
     def match(key, address=None):
         name = prefix + key.upper()
-        matches = [m for m in template(globals()[name]).finditer(code) if (mac or m.start() % 2 == 0) and (address is None or base + m.start() == address)]
+        spec = (globals()[name], MAC_ALTERNATES[key]) if mac and key in MAC_ALTERNATES else globals()[name]
+        matches = [m for m in template(spec).finditer(code) if (mac or m.start() % 2 == 0) and (address is None or base + m.start() == address)]
         require(len(matches) == 1); m = matches[0]
         if not mac:
             for field, expected in ARM_FIELDS[name].items():
@@ -58,7 +59,7 @@ def extract_flight_projection(mach):
             require(dest(start, 'ref_0') == dest(start, 'ref_27'))
             branch(compare, 'jump_9', 0x14)
             for field, offset in [('jump_2f',0x3a),('jump_35',0xcf),('jump_bd',0xcf)]: branch(setter,field,offset)
-            for field, offset in [('jump_2d',0x38),('jump_33',0x167)]: branch(metrics,field,offset)
+            for field, offset in [('jump_2d',0x38),('jump_33',0x176 if 'call_7c' in metrics.groupdict() else 0x167)]: branch(metrics,field,offset)
             fov = struct.unpack('<f', read('fov',dest(start,'ref_4b'),4,b'__const'))[0]
             near = struct.unpack('<f', read('near',dest(start,'ref_53'),4,b'__const'))[0]
             fallback = struct.unpack('<f', read('fallback',dest(start,'ref_1d'),4,b'__const'))[0]
@@ -199,6 +200,22 @@ f30f104dfcf30f1055ccf30f5ecaf30f1145c80f28c1e8
 {call_b0:4}
 f30f104dc8f30f5ec8488b45e0f30f114848488b45e0f30f104048f30f104df0f30f5e4decf30f59c8488b45e0f30f11484cf30f1045f0f30f5e45ec488b45e0f30f114050
 """
+
+# Complete alternate stack/register layouts. Arguments, branch links and
+# referenced constants are still proved by the shared reader above.
+MAC_ALTERNATES = {
+    'setter': MAC_SETTER.replace('f30f1155dcf30f1145d8f30f114dd4', 'f30f1145dcf30f114dd8f30f1155d4')
+                        .replace('f30f1045d8f30f104dd4f30f1055dc', 'f30f1045dcf30f104dd8f30f1055d4'),
+    'metrics': '''
+554889e54883ec30f30f1145fcf30f114df8f30f1155f4f30f115df0f30f1165ec48897de048817de0000000000f85
+{jump_2d:4} e9 {jump_33:4}
+48b80200000000000000f3480f2ac0f30f104dfc488b45e0f30f1108f30f104df8488b45e0f30f114804f30f104df4488b45e0f30f114808f30f104dfcf30f5ec80f28c1e8
+{call_7c:4}
+48b80200000000000000f3480f2ac8f30f1055fcf30f5ed1f30f1145d80f28c2e8
+{call_a1:4}
+48b80200000000000000f3480f2ac8f30f1055d8f30f5ed0488b45e0f30f115048488b45e0f30f104048f30f1055f0f30f5e55ecf30f59c2488b45e0f30f11404cf30f1045f0f30f5e45ec488b45e0f30f114050
+''',
+}
 
 ARM_METRICS = """
 80b56f468db043ec103bb0ee402a42ec102bb0ee404a41ec101bb0ee406a40ec100bb0ee401af86897ed023a0021

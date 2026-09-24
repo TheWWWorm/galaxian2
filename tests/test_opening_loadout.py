@@ -6,7 +6,22 @@ import unittest
 from test_ship_models import branch
 from test_materials import arm_wide
 from gof2_content.opening_loadout import (MAC, ARM, MAC_CLONE, MAC_STACK, ARM_CLONE, ARM_STACK,
-                                         MAC_INSTALL, ARM_INSTALL, extract_opening_loadout)
+                                         MAC_INSTALL, ARM_INSTALL, extract_opening_loadout, template)
+
+
+class DeclarationTemplates(unittest.TestCase):
+    def test_alternatives_are_complete_unique_layouts(self):
+        patterns = template(('aabb {value:1} ccdd', 'eeff {value:1} 1122'))
+        self.assertEqual(patterns.fullmatch(bytes.fromhex('aabb07ccdd'))['value'], b'\x07')
+        self.assertEqual(patterns.match(bytes.fromhex('eeff08112200'))['value'], b'\x08')
+        self.assertIsNone(patterns.fullmatch(bytes.fromhex('aabb071122')))
+        self.assertIsNone(patterns.match(bytes.fromhex('eeff08ccdd')))
+        self.assertIsNone(template(('aa {a:1}', 'aa {b:1}')).fullmatch(b'\xaa\x07'))
+        self.assertEqual([m.start() for m in patterns.finditer(bytes.fromhex('eeff081122aabb07ccdd'))], [0, 5])
+        data = bytes.fromhex('00aabb07ccdd00eeff081122')
+        self.assertEqual(patterns.match(data, 1, 6)['value'], b'\x07')
+        self.assertEqual(patterns.fullmatch(data, 7, 12)['value'], b'\x08')
+        self.assertEqual([m.start() for m in patterns.finditer(data, 2, 12)], [7])
 
 
 def fixture(mac, relocation=0):

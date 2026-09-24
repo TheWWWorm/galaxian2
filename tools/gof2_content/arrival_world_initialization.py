@@ -1,6 +1,6 @@
 """Recover the bounded rescue world profile; emit declarative data only."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 def extract_arrival_world_initialization(mach, arrival, actors, construction, environment):
     arch=mach.architecture
@@ -13,12 +13,8 @@ def extract_arrival_world_initialization(mach, arrival, actors, construction, en
         if shared['weapon_item_sequence']!=[0,19] or shared['weapon_effect_capacity']!=4:return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=(315 if arch=='x86_64' else 310):return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(section,delta,size,pattern) in LAYOUTS[arch].items():
-            found=section_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        proof=recognize(mach,origin['offset'],[LAYOUTS[arch]] + ([MAC_ALTERNATE] if arch == 'x86_64' else []))
+        if not proof:return {}
         result=copy.deepcopy(VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
@@ -143,3 +139,38 @@ LAYOUTS = {'x86_64': {'quest_wrapper': ['__text', 399256, 10, '554889e55de900000
                              '26981921cdf8c0b0c8f731fc41f6922a4be7'],
            'cursor_getter': ['__text', 798162, 8, 'd0f8d401704700bf'],
            'effect_model_25': ['__const', 2459150, 4, '0e390000']}}
+
+# Independently verified alternate Mac compiler layout.
+MAC_ALTERNATE = {'quest_wrapper': ['__text', 399772, 10, '554889e55de900000000'],
+ 'quest_arguments': ['__text', 399799, 12, '4189ce4189d74189f44889fb'],
+ 'quest_fields': ['__text', 399862, 28, '4489631044897b444489735048c743380000000048c7430800000000'],
+ 'quest_scripted': ['__text',
+                    400039,
+                    45,
+                    'c7838400000001000000c6839400000001c60300c6430100c6437c00c7839000000000000000c7434c00000000'],
+ 'quest_absent': ['__text', 400952, 14, '554889e5837f10ff0f94c05dc390'],
+ 'quest_scripted_getter': ['__text', 401372, 16, '554889e583bf84000000000f95c05dc3'],
+ 'world_scripted_gate': ['__text',
+                         -42348,
+                         96,
+                         '418b9e1401000083fb030f85e00000004c89ffe88cc3060084c075444c89ffe824c506003c017538418b9e1401000083fb030f85b8000000488d0587882500488b38e8b9bf0d003c010f8595000000488d05d4882500f64035010f8584000000'],
+ 'world_scripted_loader': ['__text',
+                           -42120,
+                           91,
+                           '418b9e1401000083fb0374114c89f7e86e97000041899e14010000eb3e488d05be872500488b38e820bf0d004889c7e88cc2060084c07523488d05a3872500488b38e805bf0d004889c7e815c406003c0175084c89f7e8bda30000'],
+ 'center': ['__text',
+            -35100,
+            664,
+            '4c8d3d9f6c2500498b1f498b3ee866a30d004889c7e812890d004863f04889dfe879a01100498b3fbe50000000e80ca211008d7850498bb42480010000e817610200498b3fbea0860100e8efa111004189c5498b3fbea0860100e8dfa11100898550ffffff498b3fbea0860100e8cca111004189c7498b3ee8e1a20d0088c3498b3ee839a30d0084db7425b990eefeff3d9a00000041bdd08affff440f44e94531f641bf307500004c89e3e93e01000083f8724c89e37530488d05b76b2500488b38e8b1a20d004889c7e85d880d0083f853751441bf8038010041bd307500004531f6e906010000488d05876b2500488b38e8c9a20d0083f8597527488d05736b2500488b38e8fbdb0d0084c0741441bfb03cffff41bd6079feff4531f6e9cb000000488d054c6b2500488b38e88ea20d0083f85b448bb550ffffff7530488d05316b2500488b38e82ba20d004889c7e8d7870d0083f86e751441bf50c3000041bd60ea00004531f6e980000000488d05016b2500488b38e843a20d003d91000000752d488d05eb6a2500488b38e8e5a10d004889c7e891870d0083f870751141bf7011010041bd50c300004531f6eb3d4181c5b03cffff4181c6b03cffff4181c7204e0000488d05a96a2500488b38e8eba10d0085c0751531c083bb1401000003440f44e8440f44f0440f44f8488d05816a2500488b38e8e3a10d004885c07434488d056d6a2500488b38e8cfa10d004889c7e8d1a50600b9f0d8ffff31d2be204e00003db7000000440f44ee440f44f2440f44f9488d05696a2500488b38e8399f1100f3410f2ac5f30f118550fffffff30f1145c00f57c0f3410f2ac6f30f118544fffffff30f1145c40f57c0f3410f2ac7f30f118540fffffff30f1145c8488d75c0488dbb200100004889bd30ffffffe806b01000'],
+ 'npc_weapon_enabled': ['__text', 607877, 30, '41c784242c0100000100000041c64424410141c7842408020000ffffffff'],
+ 'weapon_kind_dispatch': ['__text',
+                          57456,
+                          56,
+                          '41c78424a000000000000000498b8778010000488b40084a8b04308b40444883f80a0f8795faffff488d0dd3050000486304814801c8ffe0'],
+ 'weapon_kind_table': ['__text',
+                       58994,
+                       44,
+                       '19f4ffff73f4ffff52f4ffff3af4ffffbbf4ffffbbf4ffffbbf4ffffbbf4ffffbbf4ffff01f4ffff88f4ffff'],
+ 'rescue_weapon': ['__text', 55980, 24, '4c89e7be19000000e83f42fcff41bf921a0000e988000000'],
+ 'cursor_getter': ['__text', 858788, 12, '554889e58b87780200005dc3'],
+ 'effect_model_25': ['__const', 1548006, 4, '0e390000']}

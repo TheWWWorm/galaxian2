@@ -3,15 +3,23 @@ extends RefCounted
 const SCHEMA := 1
 const MAX_MANIFEST := 16 * 1024 * 1024
 const MAX_LANGUAGE := 4 * 1024 * 1024
+const MAX_CACHED_AUDIO_PCM := 64 * 1024 * 1024
+# Catalogue and localization extents identify independently verified layouts.
+# A bundle's version label and CPU architecture do not identify its ship set.
+const LAYOUTS := {"ios-hd": {64: 3402}, "mac-full-hd": {61: 3371, 64: 3385}}
 var error := ""
 var root := ""
 var manifest: Dictionary = {}
 var strings: Array = []
 var active_language := ""
+var _audio_pcm := {}
+var _audio_pcm_bytes := 0
 
 
 func open(directory: String) -> bool:
 	error = ""
+	_audio_pcm.clear()
+	_audio_pcm_bytes = 0
 	manifest = {}
 	strings = []
 	active_language = ""
@@ -33,6 +41,8 @@ func open(directory: String) -> bool:
 		return fail("Unsupported content profile.")
 	if value.profile.get("layout") != "gof2-bundle-v1":
 		return fail("Unsupported content layout.")
+	if catalogue_layout(value).is_empty():
+		return fail("The ship and language tables do not match a supported content layout.")
 	for kind in ["mesh", "texture", "catalogue", "audio_bank"]:
 		var count: Variant = value.counts.get(kind, 0)
 		if not count is float and not count is int:
@@ -89,7 +99,7 @@ func select_language(code: String) -> bool:
 		return fail("Language source provenance mismatch.")
 	if not value.get("strings") is Array:
 		return fail("Missing localized strings.")
-	var count := 3402 if manifest.profile.edition == "ios-hd" else 3371
+	var count := int(catalogue_layout(manifest).get("strings", 0))
 	if value.strings.size() != count or entry.get("records") != count:
 		return fail("Language record count does not match the content profile.")
 	for text in value.strings:
@@ -98,6 +108,31 @@ func select_language(code: String) -> bool:
 	strings = value.strings
 	active_language = code
 	return true
+
+
+static func catalogue_layout(value: Dictionary) -> Dictionary:
+	var profile: Variant = value.get("profile")
+	var ships: Variant = value.get("ship_table")
+	var languages: Variant = value.get("languages")
+	if not profile is Dictionary or not ships is Dictionary or not languages is Dictionary or languages.is_empty():
+		return {}
+	var edition: Variant = profile.get("edition")
+	var count: Variant = ships.get("records")
+	if not LAYOUTS.has(edition) or not (count is int or count is float) or not is_finite(count) or count < 1 or count > 256 or count != floor(count):
+		return {}
+	if not LAYOUTS[edition].has(int(count)) or ships.get("record_bytes") != 36:
+		return {}
+	var strings: int = LAYOUTS[edition][int(count)]
+	for language in languages.values():
+		if not language is Dictionary or language.get("records") != strings:
+			return {}
+	var files: Variant = value.get("files")
+	if not files is Dictionary:
+		return {}
+	var table: Variant = files.get("resources/data/bin/ships.bin")
+	if not table is Dictionary or table.get("bytes") != int(count) * 36:
+		return {}
+	return {"variant": "%s-%d" % [edition, int(count)], "ships": int(count), "strings": strings}
 
 
 func save_directory() -> String:
@@ -138,6 +173,37 @@ func read_resource(name: String, limit: int) -> PackedByteArray:
 		fail("Resource checksum mismatch")
 		return PackedByteArray()
 	return bytes
+
+
+## AudioResources re-reads and verifies each bank before asking for its PCM.
+## This cache stores only decoded samples, never a substitute for that check.
+func cached_audio_pcm(name: String, index: int, expected_bytes: int) -> PackedByteArray:
+	var key := _audio_pcm_key(name, index)
+	if key.is_empty() or expected_bytes < 1:
+		return PackedByteArray()
+	var cached: PackedByteArray = _audio_pcm.get(key, PackedByteArray())
+	return cached.duplicate() if cached.size() == expected_bytes else PackedByteArray()
+
+
+func remember_audio_pcm(name: String, index: int, pcm: PackedByteArray) -> void:
+	var key := _audio_pcm_key(name, index)
+	if key.is_empty() or pcm.is_empty() or _audio_pcm.has(key) or _audio_pcm_bytes + pcm.size() > MAX_CACHED_AUDIO_PCM:
+		return
+	_audio_pcm[key] = pcm.duplicate()
+	_audio_pcm_bytes += pcm.size()
+
+
+func cached_audio_pcm_bytes() -> int:
+	return _audio_pcm_bytes
+
+
+func _audio_pcm_key(name: String, index: int) -> String:
+	if index < 0:
+		return ""
+	var row: Variant = manifest.get("files", {}).get(name)
+	if not row is Dictionary or row.get("kind") != "audio_bank" or not valid_hash(row.get("sha256")):
+		return ""
+	return name + ":" + row.sha256 + ":" + str(index)
 
 
 func fail(message: String) -> bool:

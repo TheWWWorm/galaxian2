@@ -1,5 +1,6 @@
 """Optional Mac training destruction constants. Static import only."""
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_combat_training_destruction(mach,arrival,training,control,weapons,actors):
@@ -10,12 +11,12 @@ def extract_combat_training_destruction(mach,arrival,training,control,weapons,ac
         if not all(npc.get(k) for k in ['destruction','death_accounting','construction']):return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'combat_training_cargo_destruction',
@@ -171,6 +172,52 @@ LAYOUTS = {'npc_update': [610766,
                '__text',
                'sha256:7942a6a917f06f54d93bfa99ac27eefe9711185a46fc380abf7ee38446f81937'],
  'condition_constructor': [480642,
+                           42,
+                           '__text',
+                           'sha256:8577656fa16d43de9bddeb7924c4e7264d8f0d1498dd0da264118832eeca3aa8']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'npc_update': [611314, 17180, '__text', 'sha256:e6a3db4e2bdaf51990eddaec2e03514db9eb5bb8a89976338b28605117681d20'],
+ 'actor_constructor': [-81548,
+                       948,
+                       '__text',
+                       'sha256:88437b7848d85fadf366a7bec5c102e8f85b0aa6455fb37d60ea50e6c8ca5d6f'],
+ 'npc_constructor': [605720, 2562, '__text', 'sha256:69ffded45ed01c0720d4524c45cb78a5be444af55b84ea7c93f85df3bf003325'],
+ 'cargo_model': [-77266, 246, '__text', 'sha256:19766516b9a3016a5f6ee02277c456563061ba01343c3edf5abc260c5bc9e1f3'],
+ 'cargo_predicate': [-77020, 46, '__text', 'sha256:aed362171a1efcc1573ca914f849a0cf2e804fc570aeb6b3ee85124aae88df77'],
+ 'drift_setter': [538206, 14, '__text', 'sha256:c21ca54a5a5729ed561b7c37e7d48fbe5f1b6715d627c5b96f56760e2615edc4'],
+ 'drift_getter': [538234, 14, '__text', 'sha256:0148767f3b54b88d63f4bf6b18d51fcba08cc25f03f997cc11659b0c5046137a'],
+ 'cargo_owner': [536326, 14, '__text', 'sha256:26968fbfa51a452e226069eb4c926b694d3558589870e25056d36f2ec6980892'],
+ 'model_constructor': [-731340,
+                       430,
+                       '__text',
+                       'sha256:299e133fff7705582f236fefde425d483469329c3c956d415e4276be184c0224'],
+ 'model_position_setter': [-730044,
+                           82,
+                           '__text',
+                           'sha256:6cf25fd1d72347670c5726b57918891ccb8e9796b6ed0660524b82a2e9ef9218'],
+ 'model_rotation': [-728986, 140, '__text', 'sha256:8bf78bdf3dce8af8b6629a10a7e15b7de85ac2ddd2e60b9e2ebb77335bf6be9e'],
+ 'model_translation': [-728798,
+                       200,
+                       '__text',
+                       'sha256:74654df92df9fa741d8e8edec515fd6726ad0209c8bb61da66d30d2cf57854d5'],
+ 'effect_update': [-686346, 538, '__text', 'sha256:0feaec2d98e5c1ce718ddd457ad09564bdc6799c5c4ac9462d9dc9af5dbeef62'],
+ 'world_death': [106510, 1044, '__text', 'sha256:b2b3dd33cbc5f7ce937530800f3e23c5fa9b2e6630f92dd194b7cff902d9baab'],
+ 'retire': [-78854, 18, '__text', 'sha256:f658c35ebe2675aacd5f6b934f50394778f1d20395bdd4acce1c39b740fd452f'],
+ 'pirate_counter': [876932, 26, '__text', 'sha256:11a29b5ca7809cdcf38651ed60682e96570af8b36e0cf214cffd612573ceb052'],
+ 'drift_decay': [1557634, 4, '__const', 'sha256:6cd00ccbb89fc4145ef09d9250e8fcb9c61e06567d5cd499cb136cc0d35a4441'],
+ 'drift_cutoff': [1548846, 4, '__const', 'sha256:0b9d79ff0fc4d0a77ef398763bbe45c445501e826219f2b6a1aa709411ab631d'],
+ 'angle_fraction': [1550078, 4, '__const', 'sha256:54e347282ecf0fd46f002970fa012534725e0bf3b2ad2f4ca0efc0134d7e1d28'],
+ 'angle_tau': [1550122, 4, '__const', 'sha256:12d85026b5109a3119231704608d5991a63d8d397d2867a9fc522305810ddb76'],
+ 'training_actors': [571, 611, '__text', 'sha256:bcfd88a3be0d6af62e71c0b6149e51ed0a2799905125195804766dca3bad21aa'],
+ 'factory': [77944, 3478, '__text', 'sha256:1edb599619eeabcc4601e757d01307eba28fc1a7bfb5ea74ea86ef4b365fcbf3'],
+ 'nonhostile_counter': [107650,
+                        12,
+                        '__text',
+                        'sha256:1af7d34d1aa1e74ac404afe1770303291e5a353ea9e56208c80d45e035f47db6'],
+ 'death_predicate': [-77838, 16, '__text', 'sha256:2408009213c5e1377a02f9da45216448c38bf392c93abb7ff5cdc656da230d19'],
+ 'condition': [481528, 1170, '__text', 'sha256:914d71d12d2a226245b5a792f82d9c60dc7e24ebaa6b913c2d3e476bfbf5a966'],
+ 'condition_constructor': [481170,
                            42,
                            '__text',
                            'sha256:8577656fa16d43de9bddeb7924c4e7264d8f0d1498dd0da264118832eeca3aa8']}

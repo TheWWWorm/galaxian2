@@ -1,6 +1,7 @@
 extends Node3D
-const LOCAL_CURSORS=[10,11,12,13,14,16,18,19]
-const FACTION_CURSORS=[13,14,16,18,19]
+const FlightStages=preload("res://src/content/flight_stages.gd")
+const LOCAL_CURSORS=FlightStages.LOCAL+FlightStages.POST_SAHI
+const FACTION_CURSORS=FlightStages.FACTIONS
 ## Audio side effects are committed only after the whole opening frame validates.
 const Resources=preload("res://src/content/audio_resources.gd")
 const Definitions=preload("res://src/content/audio_definitions.gd")
@@ -10,8 +11,12 @@ const Streams=preload("res://src/presentation/audio_stream_control.gd")
 const Sequence=preload("res://src/simulation/audio_sequence.gd")
 const Death=preload("res://src/content/npc_destruction_definitions.gd")
 const WeaponAudio=preload("res://src/content/weapon_audio_definitions.gd")
+const SecondaryAudio=preload("res://src/content/secondary_ownership_definitions.gd")
+const DetonationAudio=preload("res://src/content/emp_detonation_resources.gd")
 const RadioVoice=preload("res://src/content/radio_audio_definitions.gd")
 const Dialogue=preload("res://src/content/dialogue_definitions.gd")
+const Story=preload("res://src/content/story_encounter_definitions.gd")
+const VoidProbe=preload("res://src/content/void_probe_definitions.gd")
 const EngineParameters=preload("res://src/simulation/engine_audio.gd")
 const MiningFlight=preload("res://src/simulation/first_flight_frame.gd")
 const Pirate=preload("res://src/content/full_hold_pirate_definitions.gd")
@@ -51,6 +56,7 @@ var _notification_sound:=-1
 var _notified_result_serial:=0
 var _content_identity:={}
 var _weapon_audio:={}
+var _secondary_audio:={}
 var _npc_weapon_sound:=-1
 var _npc_weapon_sounds:=[]
 var _npc_scan_sound:=-1
@@ -68,12 +74,26 @@ var _player_death_rules:={}
 var _flight_identity: RefCounted
 var _flight_serial:=-1
 var _travel_sounds: Array[int]=[]
+var _tractor_sounds: Array[int]=[]
+var _portal_sound:=-1
+var _probe_sound:=-1
 var _travel_attached:=false
 var _travel_serial:=0
+var _mining_only:=false
+var _mining_attached:=false
+var _mining_serial:=0
+var _drill_rates: Array=[]
+var _flight_music_attached:=false
 
 func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, campaign_cursor: int=0, local_combat: Dictionary={}) -> bool:
 	clear()
-	var convoy: bool=(campaign_cursor==14 and local_combat.get("actors",[]).any(func(actor):return actor.get("convoy",false))) or campaign_cursor==16
+	var dialogue: Dictionary=Dialogue.select(bindings,campaign_cursor) if bindings!=null else {}
+	var authored_radio: bool=campaign_cursor in [28,29] and Dialogue.valid_parameters(dialogue,campaign_cursor) and Story.combat_population(bindings,local_combat)
+	var story_radio: bool=(campaign_cursor==14 and local_combat.get("actors",[]).any(func(actor):return actor.get("convoy",false))) or campaign_cursor==16 or OrdinaryFlight.Kappa.combat_population(bindings,local_combat) or OrdinaryFlight.Authored.combat_population(bindings,local_combat) or authored_radio
+	if campaign_cursor==29 and not authored_radio:return reject("Authored radio requires its selected story cast")
+	if campaign_cursor==2:
+		_npc_count=0
+		if PlayerDeath.parameters(bindings.player_destruction):_player_death_rules=bindings.player_destruction.duplicate(true)
 	if campaign_cursor==4:
 		if bindings==null or not Pirate.parameters(bindings.full_hold_pirate) or not PlayerDeath.parameters(bindings.player_destruction):return reject("Second-flight audio lacks its pirate and player destruction declarations")
 		_npc_count=1;_player_death_rules=bindings.player_destruction.duplicate(true)
@@ -85,26 +105,26 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 		if bindings==null or not Travel.parameters(bindings.mido_travel) or not PlayerDeath.parameters(bindings.player_destruction):return reject("Local flight audio lacks its patrol and player destruction declarations")
 		var actors: Variant=local_combat.get("actors")
 		var empty_delivery: bool=ContractWorld.supports(bindings,campaign_cursor) and actors is Array and actors.is_empty() and local_combat.get("contract_encounter",{}).get("kind")==0
-		if not OrdinaryFlight.combat_population(bindings,local_combat) and not empty_delivery:return reject("Local flight audio requires its generated population")
+		if not OrdinaryFlight.combat_population(bindings,local_combat) and not authored_radio and not empty_delivery:return reject("Local flight audio requires its generated population")
 		for id in actors.size():
 			if not actors[id] is Dictionary or actors[id].get("actor_id")!=id or (campaign_cursor not in FACTION_CURSORS and actors[id].get("actor_kind")!=3):return reject("Unsupported local sound owner")
 		_npc_count=actors.size();_player_death_rules=bindings.player_destruction.duplicate(true)
 		_npc_scan_sound=int(bindings.opening_staging.npc_scanner.acquisition_sound_id)
-		_local_radio_rules={} if convoy else bindings.mido_travel.traffic_combat.radio.duplicate(true)
-		if not convoy:_travel_sounds=[int(bindings.mido_travel.travel.acquisition_sound_id),int(bindings.mido_travel.travel.launch_sound_id)]
-	if campaign_cursor in [11,12,13,14,16,18,19]:
+		_local_radio_rules={} if story_radio else bindings.mido_travel.traffic_combat.radio.duplicate(true)
+		if not story_radio or campaign_cursor==26:_travel_sounds=[int(bindings.mido_travel.travel.acquisition_sound_id),int(bindings.mido_travel.travel.launch_sound_id)]
+	if campaign_cursor in ([11,12,13,14,16]+FlightStages.FREE):
 		_freighter_actors=local_combat.actors.filter(func(actor):return actor.get("population_group") in ["freighter","capital"]).map(func(actor):return int(actor.actor_id))
 		if not _freighter_actors.is_empty():_freighter_audio=bindings.freighter_destruction.duplicate(true)
-	if campaign_cursor in FACTION_CURSORS and not convoy:
+	if campaign_cursor in FACTION_CURSORS and not story_radio:
 		_debris_actors=local_combat.actors.filter(func(actor):return actor.get("population_group")=="debris").map(func(actor):return int(actor.actor_id))
 		_debris_sound=int(bindings.early_contracts.junk_lifecycle.sound_id)
 		_notification_sound=int(bindings.early_contracts.delivery_results.notification_sound_id)
 	_seed_value=audio_seed
 	_random.seed=audio_seed
 	_resources=Resources.new()
-	if campaign_cursor in LOCAL_CURSORS and not convoy:
+	if campaign_cursor in LOCAL_CURSORS and not story_radio:
 		if not _resources.configure_local_traffic(library,bindings):return reject(_resources.error)
-	elif not _resources.configure(library,bindings,0 if campaign_cursor==4 else campaign_cursor):return reject(_resources.error)
+	elif not _resources.configure(library,bindings,0 if campaign_cursor in [2,4,26] else campaign_cursor):return reject(_resources.error)
 	for id in [_npc_scan_sound,_debris_sound,_notification_sound]:
 		if id>=0 and _resources.prepare(id).is_empty():return reject(_resources.error)
 	for id in _travel_sounds:
@@ -113,9 +133,9 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 	_content_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
 	for id in bindings.vehicle_response.get("audio",{}).get("event_ids",[]):_engine_ids.append(int(id))
 	_arrival_engine_id=int(bindings.opening_staging.get("escape",{}).get("arrival_engine_sound_id",-1))
-	_radio_voice=Dialogue.select(bindings,campaign_cursor).get("voice",{}) if campaign_cursor in [0,1,7] or convoy else {}
+	_radio_voice=dialogue.get("voice",{}) if campaign_cursor in [0,1,7] or story_radio else {}
 	if not _radio_voice.is_empty():
-		if not RadioVoice.parameters(_radio_voice,Dialogue.select(bindings,campaign_cursor).events.size()):return reject("Invalid radio voice capability")
+		if not RadioVoice.parameters(_radio_voice,dialogue.events.size()):return reject("Invalid radio voice capability")
 		_radio_voice=_radio_voice.duplicate(true)
 		_radio_identity=_content_identity.duplicate();_radio_identity.language=library.active_language
 		if campaign_cursor!=0:_radio_identity.campaign_cursor=campaign_cursor
@@ -127,7 +147,8 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 		_voice_displayed=[false,false]
 		for id in _local_radio_rules.warning_voice_ids+_local_radio_rules.response_voice_ids:
 			if _resources.prepare(int(id)).is_empty():return reject(_resources.error)
-	_weapon_audio=bindings.weapon_parameters.get("audio",{}) if campaign_cursor in [0,4,7,10,11,12,13,14,16,18,19] else {}
+	_secondary_audio=SecondaryAudio.VALUES.duplicate(true) if SecondaryAudio.available(bindings) else {}
+	_weapon_audio=bindings.weapon_parameters.get("audio",{}) if campaign_cursor in ([0,4]+FlightStages.EQUIPPED) else {}
 	if not _weapon_audio.is_empty():
 		if not WeaponAudio.parameters(_weapon_audio):return reject("Invalid weapon audio capability")
 		_weapon_audio=_weapon_audio.duplicate(true)
@@ -142,7 +163,7 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 			var sound:=int(_weapon_audio.npc_event_ids[actor_kind]) if actor_kind<_weapon_audio.npc_event_ids.size() else int(_weapon_audio.npc_default_event_id)
 			_npc_weapon_sounds.append(sound)
 			if _resources.prepare(sound).is_empty():return reject(_resources.error)
-	_death_audio=bindings.opening_actors.get("npc_initialization",{}).get("destruction_audio",{}) if campaign_cursor in [0,4,7,10,11,12,13,14,16,18,19] else {}
+	_death_audio=bindings.opening_actors.get("npc_initialization",{}).get("destruction_audio",{}) if campaign_cursor in ([0,4]+FlightStages.EQUIPPED) else {}
 	if not _death_audio.is_empty():
 		if not Death.audio_parameters(_death_audio):return reject("Invalid NPC destruction audio capability")
 		_death_audio=_death_audio.duplicate(true)
@@ -150,11 +171,15 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 		_death_audio.breakup_source_ids=[int(_death_audio.breakup_source_ids[0]),int(_death_audio.breakup_source_ids[1])]
 		for id in [_death_audio.initial_source_id]+_death_audio.breakup_source_ids:
 			if _resources.prepare(int(id)).is_empty():return reject(_resources.error)
-	if campaign_cursor in [4,7,10,11,12,13,14,16,18,19]:
+	var flight_sounds: Array=[]
+	if not _player_death_rules.is_empty():
+		flight_sounds=[int(_player_death_rules.breakup_sound_base),int(_player_death_rules.breakup_sound_base)+1,int(_player_death_rules.failure_sound)]
+	if campaign_cursor in ([4]+FlightStages.EQUIPPED):
 		if _weapon_audio.is_empty() or _death_audio.is_empty():return reject("Second-flight combat audio is unavailable")
-		for id in [int(_player_death_rules.breakup_sound_base),int(_player_death_rules.breakup_sound_base)+1,int(_player_death_rules.failure_sound),_npc_weapon_sound,int(_death_audio.initial_source_id)]:
-			var clip: Dictionary=_resources.prepare(id)
-			if clip.is_empty() or clip.has("unsupported"):return reject("Unsupported second-flight sound: "+str(id)+" "+str(clip.get("unsupported",_resources.error)))
+		flight_sounds.append_array([_npc_weapon_sound,int(_death_audio.initial_source_id)])
+	for id in flight_sounds:
+		var clip: Dictionary=_resources.prepare(id)
+		if clip.is_empty() or clip.has("unsupported"):return reject("Unsupported flight sound: "+str(id)+" "+str(clip.get("unsupported",_resources.error)))
 	_identity=RefCounted.new()
 	_viewport=get_viewport()
 	_previous_listener=_viewport.is_audio_listener_3d()
@@ -168,29 +193,92 @@ func configure(library: RefCounted, bindings: RefCounted, audio_seed: int=0, cam
 	return true
 
 func configure_full_hold(library: RefCounted,bindings: RefCounted,world: RefCounted,audio_seed: int=0) -> bool:
-	if not world is MiningFlight or world.destruction_owner()==null:return reject("Second-flight audio requires its native destruction owner")
+	if not world is MiningFlight:return reject("Flight audio requires its native world")
 	var state: Dictionary=world.snapshot()
+	var death: RefCounted=world.destruction_owner()
 	for key in ["base_content_id","binding_id"]:
 		if bindings==null or state.get(key)!=bindings.get(key):return reject("Second-flight audio belongs to another content identity")
+	if state.get("campaign_cursor")==2 and death==null:
+		if not state.has("mining_session") or not state.has("mining_targeting") or not state.has("mining_approach") or not state.has("world_elapsed_ms"):
+			return reject("First mining audio requires its accepted native owners")
+		if not configure(library,bindings,audio_seed,2):return false
+		_mining_only=true
+		_flight_music_attached=state.has("flight_music")
+		return configure_mining_audio(bindings,state)
+	if death==null:return reject("Second-flight audio requires its native destruction owner")
 	if not state.get("flight_audio") is Dictionary or state.flight_audio.get("serial")!=0:return reject("Register second-flight audio before advancing its world")
-	var cursor: int=world.destruction_owner().snapshot().departure_cursor
-	if cursor not in [4,7,10,11,12,13,14,16,18,19] or state.campaign_cursor!=cursor:return reject("Register ordinary-flight sound in its initial mission")
+	var cursor: int=state.player_destruction.departure_cursor
+	if cursor not in ([2,4]+FlightStages.EQUIPPED) or state.campaign_cursor!=cursor:return reject("Register ordinary-flight sound in its initial mission")
 	var travel: Variant=state.get("local_travel",{})
 	if not travel is Dictionary or (not travel.is_empty() and (cursor not in LOCAL_CURSORS or travel.get("event_serial")!=0 or travel.get("events")!=[])):return reject("Register local travel audio before its first event")
 	if not configure(library,bindings,audio_seed,cursor,state.get("encounter",{}).get("combat",{}) if cursor in LOCAL_CURSORS else {}):return false
+	if state.has("void_probe_stage")!=state.has("void_probe") or (cursor==29)!=state.has("void_probe_stage"):
+		return reject("Probe sound requires its selected stage and model")
+	if cursor==29:
+		if not VoidProbe.parameters(bindings.mido_travel.get("void_probe",{})):return reject("Original probe sound declaration is unavailable")
+		_probe_sound=int(bindings.mido_travel.void_probe.world29.probe.sound_event_id)
+		var probe_clip: Dictionary=_resources.prepare(_probe_sound)
+		if probe_clip.is_empty() or probe_clip.has("unsupported") or not probe_clip.get("spatial",false):return reject("Original probe sound is unavailable: "+str(_probe_sound))
+	if world.tractor_owner()!=null:
+		var pull: Dictionary=bindings.mido_travel.tractor_recovery.pull
+		_tractor_sounds=[int(pull.loop_sound),int(pull.pickup_sound)]
+		for id in _tractor_sounds:
+			var clip: Dictionary=_resources.prepare(id)
+			if clip.is_empty() or clip.has("unsupported"):return reject("Original tractor sound is unavailable: "+str(clip.get("unsupported",_resources.error)))
+	if state.has("sahi_stage"):
+		_portal_sound=int(bindings.mido_travel.sahi_stage.spin.sound_event_id)
+		var clip: Dictionary=_resources.prepare(_portal_sound)
+		if clip.is_empty() or clip.has("unsupported"):return reject("Original portal sound is unavailable: "+str(clip.get("unsupported",_resources.error)))
 	_notified_result_serial=int(state.get("contracts",{}).get("last_result",{}).get("serial",0))
 	_travel_attached=not travel.is_empty()
-	_flight_identity=world.destruction_owner().presentation_identity()
+	_flight_identity=death.presentation_identity()
+	_flight_music_attached=state.has("flight_music")
+	if not configure_mining_audio(bindings,state):return false
 	return true
+
+func configure_mining_audio(bindings: RefCounted,state: Dictionary) -> bool:
+	_mining_attached=state.has("mining_session")
+	if not _mining_attached:return true
+	var batch: Variant=state.get("mining_audio")
+	if not batch is Dictionary or batch.get("serial")!=0 or batch.get("events")!=[]:
+		return reject("Mining sound must attach before its first event")
+	var rates: Variant=bindings.mining_drill.get("spin_rates")
+	if not rates is Array or rates.size()!=7 or rates[0]!=5.0 or rates[-1]!=38.0:
+		return reject("Mining sound lacks the original drill-speed thresholds")
+	_drill_rates=rates.duplicate()
+	for id in [1,2,3,26]:
+		var clip: Dictionary=_resources.prepare(id)
+		if clip.is_empty() or clip.has("unsupported"):
+			return reject("Original mining sound is unavailable: "+str(id)+" "+str(clip.get("unsupported",_resources.error)))
+	return true
+
+func current_music_id() -> int:return _music
 
 func prepare_full_hold(world: RefCounted, state: Dictionary={}) -> Dictionary:
 	error=""
-	if not world is MiningFlight or _flight_identity==null or world.destruction_owner()==null or world.destruction_owner().presentation_identity()!=_flight_identity:return fail("Second-flight audio follows one configured native world")
+	if not world is MiningFlight or _identity==null:return fail("Flight audio follows one configured native world")
+	if not _mining_only:
+		var death: RefCounted=world.destruction_owner()
+		if _flight_identity==null or death==null or death.presentation_identity()!=_flight_identity:return fail("Second-flight audio follows one configured native world")
 	if state.is_empty():state=world.snapshot()
 	for key in _content_identity:
 		if state.get(key)!=_content_identity[key]:return fail("Second-flight audio frame changed content identity")
+	var mining:=prepare_mining_audio(state)
+	if mining.is_empty():return {}
+	var flight_music:=prepare_flight_music(state)
+	if flight_music.is_empty():return {}
+	if _mining_only:
+		var mining_elapsed: Variant=state.get("world_elapsed_ms")
+		if not Definitions.integer(mining_elapsed,_elapsed_ms,0x7fffffff) or state.get("campaign_cursor") not in [2,3]:return fail("First mining audio frame changed its mission or clock")
+		if _revision>=0 and mining_elapsed==_elapsed_ms and mining.serial==_mining_serial and flight_music.operations.is_empty():return {"identity":_identity,"revision":_revision,"repeat":true}
+		var mining_view:={"elapsed_ms":int(mining_elapsed),"camera":{"view":state.camera_view},"escape":{"frame":{"audio":mining.operations+flight_music.operations}}}
+		if mining.parameter!=null:mining_view.mining_drill_parameter=mining.parameter
+		var mining_frame:=prepare_frame(_revision+1,mining_view)
+		if mining_frame.is_empty():return {}
+		mining_frame.mining_serial=mining.serial
+		return mining_frame
 	var cues: Variant=state.get("flight_audio")
-	var elapsed: Variant=state.get("encounter",{}).get("elapsed_ms")
+	var elapsed: Variant=state.get("damage_particles",{}).get("elapsed_ms") if int(state.get("player_destruction",{}).get("departure_cursor",-1))==2 else state.get("encounter",{}).get("elapsed_ms")
 	if not cues is Dictionary or cues.size()!=4 or not Definitions.integer(cues.get("serial"),maxi(0,_flight_serial),_flight_serial+1) or not Definitions.integer(elapsed,_elapsed_ms,0x7fffffff):return fail("Second-flight audio frame is out of sequence")
 	var travel:=prepare_travel(state)
 	if travel.is_empty():return {}
@@ -199,7 +287,7 @@ func prepare_full_hold(world: RefCounted, state: Dictionary={}) -> Dictionary:
 	var repeated: bool=cues.serial==_flight_serial
 	if repeated:
 		if elapsed!=_elapsed_ms:return fail("Repeated second-flight sound frame changed its clock")
-		if travel.operations.is_empty() and notification.serial==_notified_result_serial:return {"identity":_identity,"revision":_revision,"repeat":true}
+		if travel.operations.is_empty() and notification.serial==_notified_result_serial and travel.attached==_travel_attached and mining.serial==_mining_serial and flight_music.operations.is_empty():return {"identity":_identity,"revision":_revision,"repeat":true}
 		if not travel.operations.is_empty() and (travel.operations.size()!=1 or travel.operations[0].source_id!=_travel_sounds[1]):return fail("A manual travel action emitted a flight acquisition cue")
 	var commands: Array[Dictionary]=[]
 	if not repeated:
@@ -207,6 +295,31 @@ func prepare_full_hold(world: RefCounted, state: Dictionary={}) -> Dictionary:
 			var prepared:=prepare_player_death(cues.get(phase),phase)
 			if prepared.is_empty():return {}
 			commands.append_array(prepared.operations)
+		var recovery:=prepare_tractor(state.get("tractor_frame",{}))
+		if recovery.is_empty():return {}
+		commands.append_array(recovery.operations)
+		for cue in state.get("sahi_stage",{}).get("frame",{}).get("cues",[]):
+			if cue.kind not in ["sound_start","sound_position"]:continue
+			if _portal_sound<0 or cue.get("event_id")!=_portal_sound:return fail("Portal sound belongs to another scene")
+			if cue.kind=="sound_start":commands.append({"action":"start","source_id":_portal_sound})
+			else:
+				if cue.get("velocity")!=Vector3.ZERO:return fail("Unsupported portal sound velocity")
+				commands.append({"action":"position","source_id":_portal_sound,"position":cue.get("position")})
+		if _probe_sound>=0:
+			var stage: Variant=state.get("void_probe_stage")
+			var probe_state: Variant=state.get("void_probe")
+			if not stage is Dictionary or not probe_state is Dictionary or stage.get("campaign_cursor")!=29 or not stage.get("phase") is int or stage.phase not in [0,1,2] or not stage.get("frame") is Dictionary or not stage.frame.get("cues") is Array:
+				return fail("Probe sound lost its native stage frame")
+			for key in _content_identity:
+				if stage.get(key)!=_content_identity[key]:return fail("Probe sound belongs to another content identity")
+			var sound_count:=0
+			for cue in stage.frame.cues:
+				if not cue is Dictionary:return fail("Invalid probe stage sound cue")
+				if cue.get("kind")!="sound_start":continue
+				sound_count+=1
+				if sound_count>1 or stage.phase!=1 or cue.get("event_id")!=_probe_sound or not cue.get("position") is Vector3 or not cue.position.is_finite() or probe_state.get("visible")!=true:
+					return fail("Probe launch sound differs from its source cue")
+				commands.append({"action":"start_spatial","source_id":_probe_sound,"position":cue.position})
 		if state.has("convoy_capture"):
 			var capture: Dictionary=state.convoy_capture
 			if capture.get("campaign_cursor")!=14:return fail("Capture audio belongs to another scene")
@@ -217,21 +330,76 @@ func prepare_full_hold(world: RefCounted, state: Dictionary={}) -> Dictionary:
 		for event in state.get("npc_scanner_events",[]):
 			if not event is Dictionary or event.get("kind")!="sound" or event.get("source_id")!=_npc_scan_sound or not Definitions.integer(event.get("actor_id"),0,_npc_count-1):return fail("Invalid training acquisition sound")
 			commands.append({"action":"start","source_id":_npc_scan_sound})
+	commands.append_array(mining.operations)
+	commands.append_array(flight_music.operations)
 	var view:={"elapsed_ms":int(elapsed),"camera":{"view":state.camera_view},"escape":{"frame":{"audio":commands}}}
+	if mining.parameter!=null:view.mining_drill_parameter=mining.parameter
 	if state.has("radio"):
 		view.radio=state.radio;view.radio_changes=[] if repeated else state.radio_events
 	var combat:={}
-	if not repeated:
+	if not repeated and state.has("encounter"):
 		combat=_content_identity.duplicate()
-		for key in ["primary_fire","primaries"]:
+		for key in ["primary_fire","primaries","secondaries","secondary_events"]:
 			if state.encounter.has(key):combat[key]=state.encounter[key]
 		combat.elapsed_ms=int(elapsed);combat.actor_events=cues.get("actors")
 	var result:=prepare_frame(_revision+1,view,combat,travel.operations+notification.operations)
 	if result.is_empty():return {}
 	result.flight_serial=int(cues.serial)
 	result.travel_serial=int(travel.serial)
+	result.travel_attached=travel.attached
 	result.contract_result_serial=int(notification.serial)
+	result.mining_serial=int(mining.serial)
 	return result
+
+func prepare_mining_audio(state: Dictionary) -> Dictionary:
+	var operations: Array[Dictionary]=[]
+	if not _mining_attached:return {"serial":0,"operations":operations,"parameter":null}
+	var batch: Variant=state.get("mining_audio")
+	if not batch is Dictionary or batch.size()!=2 or not Definitions.integer(batch.get("serial"),_mining_serial,_mining_serial+1) or not batch.get("events") is Array or batch.events.size()>4:
+		return fail("Mining sound batch is out of sequence")
+	var active: Variant=state.get("mining_session",{}).get("drill",{})
+	if not active is Dictionary:return fail("Mining sound lost its native drill state")
+	var parameter: Variant=null
+	if not active.is_empty():
+		var layer: Variant=active.get("layer_index")
+		if active.get("phase")!="drilling" or not Definitions.integer(layer,0,_drill_rates.size()-1):return fail("Mining sound has an invalid drill layer")
+		var value:=Sequence.f32(float(_drill_rates[int(layer)])-5.0)
+		value=Sequence.f32(value/33.0)
+		parameter=Sequence.f32(value*3.0)
+	for event in batch.events:
+		if not event is Dictionary or event.size()!=2 or event.get("action") not in ["start","stop"] or not Definitions.integer(event.get("source_id"),0,26):return fail("Invalid mining sound transition")
+		var id: int=int(event.source_id)
+		if (event.action=="start" and id not in [1,2,26]) or (event.action=="stop" and id not in [1,3]):return fail("Mining sound requested another source event")
+		if id==1 and event.action=="start" and parameter==null:return fail("Drill sound started without its accepted layer")
+		if int(batch.serial)==_mining_serial:continue
+		# Source acquisition26 is suppressed while its cached precursor0 plays.
+		if id==26 and _players.has(0):continue
+		var op:={"action":event.action,"source_id":id}
+		if id==1 and event.action=="start":op.parameter=parameter
+		operations.append(op)
+	if int(batch.serial)==_mining_serial+1 and batch.events.is_empty():return fail("Mining sound serial advanced without a source event")
+	return {"serial":int(batch.serial),"operations":operations,"parameter":parameter}
+
+func prepare_flight_music(state: Dictionary) -> Dictionary:
+	var operations: Array[Dictionary]=[]
+	if not _flight_music_attached:return {"operations":operations}
+	var batch: Variant=state.get("flight_music")
+	if not batch is Dictionary or batch.size()!=1 or not batch.get("operations") is Array or batch.operations.size()>1:
+		return fail("Ordinary music lost its accepted selection")
+	for event in batch.operations:
+		if not event is Dictionary or event.size()!=2 or event.get("action")!="replace_music" or event.get("source_id") not in [134,136,137,138,139,140,141,142,145,149,150,151,152]:
+			return fail("Ordinary music requested an unsupported source event")
+		if int(event.source_id)!=_music:operations.append(event.duplicate(true))
+	return {"operations":operations}
+
+func prepare_tractor(frame: Dictionary) -> Dictionary:
+	var operations: Array[Dictionary]=[]
+	for event in frame.get("events",[]):
+		if event.get("kind") not in ["sound","stop_sound"]:continue
+		if _tractor_sounds.is_empty() or event.get("source_id") not in _tractor_sounds:return fail("Unprepared tractor sound event")
+		if event.kind=="stop_sound" and event.source_id!=_tractor_sounds[0]:return fail("Only the retained tractor loop can stop")
+		operations.append({"action":"start" if event.kind=="sound" else "stop","source_id":int(event.source_id)})
+	return {"operations":operations}
 
 func prepare_contract_notification(state: Dictionary) -> Dictionary:
 	var result: Dictionary=state.get("contracts",{}).get("last_result",{})
@@ -249,8 +417,12 @@ func prepare_travel(state: Dictionary) -> Dictionary:
 	var operations: Array[Dictionary]=[]
 	var travel: Variant=state.get("local_travel",{})
 	if not travel is Dictionary:return fail("Invalid local travel audio owner")
-	if (not travel.is_empty())!=_travel_attached:return fail("Local travel audio lost its configured world owner")
-	if not _travel_attached:return {"serial":0,"operations":operations}
+	if travel.is_empty():
+		if _travel_attached:return fail("Local travel audio lost its configured world owner")
+		return {"serial":0,"operations":operations,"attached":false}
+	if not _travel_attached:
+		# Final pursuit Next enables navigation without replacing this world.
+		if state.get("encounter",{}).get("campaign_cursor")!=26 or state.get("campaign_cursor")!=27 or not state.get("mining_objective",{}).get("combat_objective_acknowledged",false) or travel.get("event_serial")!=0 or travel.get("events")!=[]:return fail("Local travel sound has no acknowledged continuation")
 	for key in _content_identity:
 		if travel.get(key)!=_content_identity[key]:return fail("Local travel sound changed its content identity")
 	var serial: Variant=travel.get("event_serial");var events: Variant=travel.get("events")
@@ -260,12 +432,12 @@ func prepare_travel(state: Dictionary) -> Dictionary:
 		if not event is Dictionary or event.size()!=2 or event.get("kind")!="sound" or not Definitions.integer(event.get("source_id"),0,19999) or not _travel_sounds.has(int(event.source_id)):return fail("Invalid local travel sound event")
 		ids.append(int(event.source_id))
 	if ids.size()==2 and ids!=_travel_sounds:return fail("Local travel sounds changed their acquisition/launch order")
-	if serial==_travel_serial:return {"serial":serial,"operations":operations}
+	if serial==_travel_serial:return {"serial":serial,"operations":operations,"attached":true}
 	if ids.is_empty() or not Definitions.integer(travel.get("acquired_station_id"),0,2147483647):return fail("Local travel sound has no acquired destination")
 	if travel.get("phase") not in ["flight","launch"] or (travel.phase=="launch" and ids.back()!=_travel_sounds[1]):return fail("Local travel sound is missing its departure transition")
 	if ids.has(_travel_sounds[1]) and (travel.get("phase")!="launch" or travel.get("launch_ms")!=0 or travel.get("destination_station_id")!=travel.acquired_station_id):return fail("Local launch sound has no new departure")
 	for id in ids:operations.append({"action":"start","source_id":id,"travel_serial":int(serial),"destination_station_id":int(travel.acquired_station_id)})
-	return {"serial":int(serial),"operations":operations}
+	return {"serial":int(serial),"operations":operations,"attached":true}
 
 func prepare_player_death(events: Variant,phase: String) -> Dictionary:
 	if not events is Dictionary:return fail("Invalid player destruction sound phase")
@@ -307,23 +479,27 @@ func prepare_frame(revision: int, state: Dictionary, world: Dictionary={}, follo
 	var layer_frames: Array[Dictionary]=[]
 	for record in _players.values()+_retiring:
 		if record.node is Layered:
-			var frame: Dictionary=record.node.prepare_step(int(elapsed)-_elapsed_ms)
+			var parameter: Variant=state.get("mining_drill_parameter") if record.clip.id==1 else null
+			var frame: Dictionary=record.node.prepare_step(int(elapsed)-_elapsed_ms,parameter)
 			if frame.is_empty():return fail(record.node.error)
 			layer_frames.append({"node":record.node,"frame":frame})
 	var commands: Variant=state.get("escape",{}).get("frame",{}).get("audio",[])
 	if not commands is Array or commands.size()>32:return fail("Invalid opening audio commands")
 	commands=commands.duplicate(true)
+	var combat_begin: int=commands.size()
 	if (not _death_audio.is_empty() or not _weapon_audio.is_empty()) and not world.is_empty():
 		var combat_frame:=prepare_combat(world,int(elapsed))
 		if combat_frame.is_empty():return {}
 		commands.append_array(combat_frame.operations)
+	var combat_end: int=commands.size()
 	var radio_frame:=prepare_radio(state)
 	if radio_frame.is_empty():return {}
 	commands.append_array(radio_frame.operations)
 	if following_audio.size()>2:return fail("Too many trailing flight sounds")
 	commands.append_array(following_audio)
 	var operations: Array[Dictionary]=[]
-	for command in commands:
+	for command_index in commands.size():
+		var command: Variant=commands[command_index]
 		if not command is Dictionary:return fail("Invalid opening audio operation")
 		var action: Variant=command.get("action")
 		if action not in ["replace_music","start","start_spatial","position","stop","stop_music","stop_player_engine","set_player_engine"]:return fail("Unsupported opening audio operation")
@@ -334,9 +510,12 @@ func prepare_frame(revision: int, state: Dictionary, world: Dictionary={}, follo
 		if action in ["start_spatial","position"]:
 			if not command.get("position") is Vector3 or not command.position.is_finite():return fail("Invalid opening sound position")
 		if command.has("pitch_raw") and (action!="start_spatial" or not Definitions.number(command.pitch_raw,0.0,1.0)):return fail("Invalid weapon sound pitch")
+		if command.has("parameter") and (action!="start" or op.source_id!=1 or not Definitions.number(command.parameter,0.0,3.0)):return fail("Invalid drill sound parameter")
+		if action=="start" and op.source_id==1 and not command.has("parameter"):return fail("Drill sound lacks its accepted parameter")
 		if action in ["replace_music","start","start_spatial","set_player_engine"]:
 			op.clip=_resources.prepare(op.source_id)
 			if op.clip.is_empty():return fail(_resources.error)
+			if op.clip.get("release_at_sample_end",false) and (command_index<combat_begin or command_index>=combat_end or action!="start_spatial" or not command.has("mount_id") or not command.has("item_id")):return fail("Continuous cannon sound lacks its verified primary owner")
 			if op.clip.get("kind")=="parameter_loop" and not ParameterLoop.valid_context(op.get("position",Vector3.ZERO),view):return fail("Invalid engine sound spatial context")
 		operations.append(op)
 	for record in _players.values()+_retiring:
@@ -449,6 +628,77 @@ func prepare_local_radio(state: Dictionary) -> Dictionary:
 	if displayed_now>0 and radio.active_event==0 and not radio.visible:return fail("Local voice has no accepted text display")
 	return {"operations":operations,"displayed":displayed}
 
+## Secondary launch sounds use their own declared events. Detonation must not
+## replay launch audio, and rejected frame preparation must remain silent.
+func prepare_secondaries(world: Dictionary) -> Dictionary:
+	var operations: Array[Dictionary]=[]
+	var events: Variant=world.get("secondary_events",[])
+	if not events is Array:return fail("Invalid secondary sound event list")
+	if not world.has("secondaries"):
+		return {"operations":operations} if events.is_empty() else fail("Secondary sound lost its launcher")
+	var owner: Variant=world.secondaries
+	if _secondary_audio.is_empty() or not owner is Dictionary or not owner.get("guns") is Array or not owner.get("loadout") is Dictionary:return fail("Secondary sound requires supported equipped ownership")
+	for key in _content_identity:
+		if owner.loadout.get(key)!=_content_identity[key]:return fail("Secondary sound belongs to another content identity")
+	var guns: Array=owner.guns
+	if guns.size()>255 or events.size()>guns.size()*2:return fail("Secondary sound event extent exceeds the equipped launchers")
+	var slots:={};var seen:={}
+	for gun in guns:
+		if not gun is Dictionary or not Definitions.integer(gun.get("slot_index"),0,1020) or slots.has(gun.slot_index) or not gun.get("equipment") is Dictionary or not gun.get("bomb") is Dictionary:return fail("Secondary sound lost its installed launcher")
+		if gun.equipment.get("item_id") not in _secondary_audio.item_ids:return fail("Unsupported secondary sound item")
+		slots[gun.slot_index]=gun
+	# Burst wrappers run in the early weapon pass, before late launch input.
+	# Keep their forward creation order, not the reverse launcher traversal.
+	var bursts:=prepare_secondary_detonations(owner)
+	if bursts.is_empty():return {}
+	operations.append_array(bursts.operations)
+	for event in events:
+		if not event is Dictionary or event.get("action") not in ["launched","detonated"] or not slots.has(event.get("slot_index")) or not event.get("audio") is Dictionary:return fail("Invalid secondary sound transition")
+		var gun: Dictionary=slots[event.slot_index]
+		if event.get("item_id")!=gun.equipment.item_id:return fail("Secondary sound changed launcher identity")
+		var key:=str(event.slot_index)+":"+str(event.action)
+		if seen.has(key):return fail("Secondary sound repeated an event in one frame")
+		seen[key]=true
+		if event.action=="detonated":
+			if not event.audio.is_empty() or event.get("ammunition_consumed")!=0:return fail("Detonation replayed launch audio or consumed ammunition")
+			continue
+		var id: int=int(_secondary_audio.launch_audio.event_ids[_secondary_audio.item_ids.find(event.item_id)])
+		var cue: Dictionary=event.audio
+		if event.get("ammunition_consumed")!=1 or cue.size()!=3 or cue.get("source_id")!=id or cue.get("pitch_raw")!=_secondary_audio.launch_audio.pitch_raw or not cue.get("position") is Vector3 or not cue.position.is_finite():return fail("Secondary launch lost its declared sound, pitch or source position")
+		operations.append({"action":"start_spatial","source_id":id,"position":cue.position,"pitch_raw":float(cue.pitch_raw),"item_id":int(event.item_id),"secondary_slot":int(event.slot_index)})
+	return {"operations":operations}
+
+## Validate emitted wrapper cues, not a guessed sound inferred from a lingering
+## effect. A same-frame relaunch can already have reset that wrapper's visuals.
+func prepare_secondary_detonations(owner: Dictionary) -> Dictionary:
+	var operations: Array[Dictionary]=[]
+	var guns: Array=owner.guns
+	var attached: bool=guns.any(func(gun):return gun.has("detonation"))
+	if not attached:
+		return {"operations":operations} if not owner.has("detonation_audio") else fail("EMP sound has no retained burst wrappers")
+	var cues: Variant=owner.get("detonation_audio")
+	if not cues is Array or cues.size()>guns.size():return fail("Invalid EMP burst sound extent")
+	var sources:={}
+	for index in range(guns.size()-1,-1,-1):
+		var gun: Dictionary=guns[index]
+		var burst: Variant=gun.get("detonation")
+		if not burst is Dictionary or burst.get("item_id")!=gun.equipment.item_id:return fail("EMP sound lost its retained burst item")
+		for key in _content_identity:
+			if burst.get(key)!=_content_identity[key]:return fail("EMP burst sound changed content identity")
+		var id: int=DetonationAudio.SOUND_IDS[DetonationAudio.ITEM_IDS.find(gun.equipment.item_id)]
+		if sources.has(id):return fail("EMP sound repeated an equipped item")
+		sources[id]={"order":guns.size()-1-index,"slot_index":int(gun.slot_index),"item_id":int(gun.equipment.item_id)}
+	var previous:=-1
+	for cue in cues:
+		if not cue is Dictionary or cue.size()!=4 or cue.get("action")!="start_spatial" or not Definitions.integer(cue.get("source_id"),0,19999) or not sources.has(cue.source_id) or cue.get("pitch_raw")!=0.0 or not cue.get("position") is Vector3 or not cue.position.is_finite():return fail("Invalid original EMP burst sound cue")
+		var source: Dictionary=sources[cue.source_id]
+		if source.order<=previous:return fail("EMP burst sounds changed wrapper order or repeated a cue")
+		previous=source.order
+		var op: Dictionary=cue.duplicate(true)
+		op.item_id=source.item_id;op.secondary_slot=source.slot_index
+		operations.append(op)
+	return {"operations":operations}
+
 func prepare_combat(world: Dictionary, elapsed_ms: int) -> Dictionary:
 	for key in _content_identity:
 		if world.get(key)!=_content_identity[key]:return fail("NPC audio belongs to another content identity")
@@ -456,10 +706,23 @@ func prepare_combat(world: Dictionary, elapsed_ms: int) -> Dictionary:
 	var events: Variant=world.get("actor_events")
 	if not events is Array or events.size()>_npc_count:return fail("Invalid NPC audio event extent")
 	var operations: Array[Dictionary]=[]
+	var secondary:=prepare_secondaries(world)
+	if secondary.is_empty():return {}
+	# Existing EMP wrappers update before late primary/secondary input. Split
+	# the validated secondary cues so their sound ordering matches that pass.
+	for operation in secondary.operations:
+		if operation.source_id in DetonationAudio.SOUND_IDS:operations.append(operation)
 	if not _weapon_audio.is_empty():
 		var primary:=prepare_primaries(world)
 		if primary.is_empty():return {}
 		operations.append_array(primary.operations)
+		# The continuous cannon handle remains active between successful shots
+		# while the trigger is held. Releasing it finishes the current sample.
+		if world.get("primary_fire",{}).is_empty():
+			for id in _players:
+				if _players[id].get("primary_weapon",false) and _players[id].clip.get("release_at_sample_end",false):operations.append({"action":"stop","source_id":id})
+	for operation in secondary.operations:
+		if operation.source_id not in DetonationAudio.SOUND_IDS:operations.append(operation)
 	var previous:=-1
 	for event in events:
 		if not event is Dictionary or not Definitions.integer(event.get("actor_id"),previous+1,_npc_count-1):return fail("Invalid NPC audio actor order")
@@ -571,7 +834,9 @@ func commit_frame(frame: Dictionary) -> void:
 	_elapsed_ms=frame.elapsed_ms;_revision=frame.revision;_listener=frame.listener
 	if frame.has("flight_serial"):_flight_serial=int(frame.flight_serial)
 	if frame.has("travel_serial"):_travel_serial=int(frame.travel_serial)
+	if frame.has("travel_attached"):_travel_attached=frame.travel_attached
 	if frame.has("contract_result_serial"):_notified_result_serial=int(frame.contract_result_serial)
+	if frame.has("mining_serial"):_mining_serial=int(frame.mining_serial)
 	_voice_displayed=frame.voice_displayed.duplicate()
 	for record in _players.values():record.age_ms+=delta_ms
 	for record in _retiring.duplicate():
@@ -619,11 +884,17 @@ func start_event(op: Dictionary,key: Variant=null) -> void:
 		var old: Dictionary=_players[key]
 		if old.node.playing or old.pending_resume:
 			if op.has("position"):old.position=op.position
-			apply_pitch(old,float(op.get("pitch_raw",0.0)))
+			apply_pitch(old,float(op.get("pitch_raw",0.0)),true)
 			return
 		old.node.stop();old.node.queue_free();_players.erase(key)
 	for old in _retiring.duplicate():
 		if old.clip.id==op.source_id:
+			if old.get("release_tail",false) and (old.node.playing or old.pending_resume):
+				_retiring.erase(old);old.erase("release_tail");old.remaining_ms=0
+				if op.has("position"):old.position=op.position
+				apply_pitch(old,float(op.get("pitch_raw",0.0)),true)
+				_players[key]=old
+				return
 			old.node.stop();old.node.queue_free();_retiring.erase(old)
 	if op.clip.get("voice",false):reserve_voice()
 	var node: Node
@@ -631,6 +902,7 @@ func start_event(op: Dictionary,key: Variant=null) -> void:
 	var category: String="Music" if op.get("action")=="replace_music" else "Voice" if clip.get("voice",false) else "FX"
 	if op.clip.get("kind")=="layered":
 		node=Layered.new();node.category=category;node.configure(op.clip,_seed_value+_start_serial);_start_serial+=1
+		if op.source_id==1:node.set_initial_parameter(float(op.parameter))
 	elif op.clip.get("kind")=="parameter_loop":
 		node=ParameterLoop.new();node.configure(op.clip)
 	else:
@@ -643,7 +915,7 @@ func start_event(op: Dictionary,key: Variant=null) -> void:
 			clip.pitch=choice.pitch;clip.playlist_index=choice.playlist_index
 			node=Streams.player(clip.stream,clip.spatial,category);node.pitch_scale=choice.pitch
 		else:node=Streams.player(clip.stream,clip.spatial,category)
-	var record:={"node":node,"clip":clip,"age_ms":0,"position":op.get("position",Vector3.ZERO),"remaining_ms":0,"stop_gain":1.0,"pending_resume":false,"resume_position":0.0}
+	var record:={"node":node,"clip":clip,"age_ms":0,"position":op.get("position",Vector3.ZERO),"remaining_ms":0,"stop_gain":1.0,"pending_resume":false,"resume_position":0.0,"primary_weapon":op.has("mount_id")}
 	if clip.get("voice",false):record.voice_serial=_voice_serial;_voice_serial+=1
 	apply_pitch(record,float(op.get("pitch_raw",0.0)))
 	add_child(node)
@@ -664,17 +936,33 @@ func reserve_voice() -> void:
 	oldest.node.stop();oldest.node.queue_free()
 	_players.erase(int(oldest.clip.id));_retiring.erase(oldest)
 
-func apply_pitch(record: Dictionary, raw: float) -> void:
+func apply_pitch(record: Dictionary, raw: float, cached:=false) -> void:
 	# FMOD Designer raw pitch has four octaves per unit. Playlist pitch is an
 	# independent sample variation; repeated cached starts retain that choice.
+	# Event variation is redrawn by each pitch setter on a live cached channel.
 	if record.node is Layered:return
-	record.node.pitch_scale=float(record.clip.get("pitch",1.0))*pow(2.0,4.0*raw)
+	var factor:=pow(2.0,4.0*raw)
+	var deviation: float=record.clip.get("event_pitch_random",0.0)
+	if deviation!=0.0:
+		# A nonzero weapon override follows the source's initial zero-pitch setter.
+		if cached and raw!=0.0:_random.randi()
+		factor=Sequence.event_pitch(raw,deviation,_random.randi()&0x7fffffff)
+	record.node.pitch_scale=float(record.clip.get("pitch",1.0))*factor
 	record.pitch_raw=raw
 
 func stop_event(id: Variant) -> void:
 	if not _players.has(id):return
 	var record: Dictionary=_players[id];_players.erase(id)
 	var fade: int=record.clip.fade_out_ms
+	if record.clip.get("release_at_sample_end",false) and (record.node.playing or record.pending_resume):
+		var sample: Dictionary=record.clip.sample
+		var end_seconds: float=float(sample.loop_end)/float(sample.rate)
+		var cursor: float=record.node.get_playback_position() if record.node.playing else 0.0
+		record.remaining_ms=maxi(1,ceili(1000.0*maxf(0.0,end_seconds-cursor)/maxf(0.001,record.node.pitch_scale)))
+		record.stop_gain=1.0 if record.clip.fade_in_ms==0 else minf(1.0,float(record.age_ms)/record.clip.fade_in_ms)
+		record.release_tail=true
+		_retiring.append(record)
+		return
 	if fade==0:record.node.stop();record.node.queue_free();return
 	record.remaining_ms=fade
 	record.stop_gain=1.0 if record.clip.fade_in_ms==0 else minf(1.0,float(record.age_ms)/record.clip.fade_in_ms)
@@ -684,7 +972,9 @@ func refresh_levels() -> void:
 	for record in _players.values():
 		var fade: float=1.0 if record.clip.fade_in_ms==0 else minf(1.0,float(record.age_ms)/record.clip.fade_in_ms)
 		apply_level(record,fade)
-	for record in _retiring:apply_level(record,record.stop_gain*float(record.remaining_ms)/record.clip.fade_out_ms)
+	for record in _retiring:
+		var fade: float=clampf(float(record.remaining_ms)/maxf(1.0,float(record.clip.fade_out_ms)),0.0,1.0) if record.get("release_tail",false) else float(record.remaining_ms)/record.clip.fade_out_ms
+		apply_level(record,record.stop_gain*fade)
 
 func apply_level(record: Dictionary, fade: float) -> void:
 	var gain: float=record.clip.gain*fade
@@ -726,7 +1016,8 @@ func clear() -> void:
 	_radio_voice={};_local_radio_rules={};_radio_identity={};_voice_displayed=[];_voice_serial=0
 	_engine_ids=[];_arrival_engine_id=-1;_engine_generation=-1;_initial_engine_id=-1
 	_npc_count=3;_player_death_rules={};_flight_identity=null;_flight_serial=-1
-	_travel_sounds=[];_travel_attached=false;_travel_serial=0
+	_travel_sounds=[];_tractor_sounds=[];_portal_sound=-1;_probe_sound=-1;_travel_attached=false;_travel_serial=0;_secondary_audio={}
+	_mining_only=false;_mining_attached=false;_mining_serial=0;_drill_rates=[];_flight_music_attached=false
 
 func reject(message: String) -> bool:
 	error=message

@@ -15,6 +15,21 @@ const Life=preload("res://src/content/contract_ship_lifecycle_definitions.gd")
 static func available(bindings: RefCounted) -> bool:
 	return Rescue.available(bindings) and Fighters.available(bindings) and Travel.parameters(bindings.mido_travel) and Ambient.parameters(bindings.ambient_combat) and ControlRules.parameters(bindings.combat_training_control)
 
+static func flight(bindings: RefCounted,station_id: int=55) -> Dictionary:
+	if not available(bindings) or not KappaLife.available(bindings) or station_id!=int(bindings.mido_travel.kappa_rescue.station_id):return {}
+	var result: Dictionary=bindings.first_flight.duplicate(true)
+	result.scope="kappa_rescue_flight"
+	for key in ["campaign_cursor","station_id","system_id","mission_kind"]:result[key]=int(bindings.mido_travel.kappa_rescue[key])
+	result.actor_count=int(bindings.mido_travel.kappa_rescue.population.actor_count)
+	return result
+
+static func prepared_entry(bindings: RefCounted,entry: Dictionary) -> bool:
+	if entry.get("campaign_cursor")!=21:return false
+	var context: Variant=entry.get("departure",{}).get("kappa_context")
+	if not context is Dictionary or not context_valid(bindings,context):return false
+	var population: Dictionary=entry.get("scenery",{}).get("world_initialization",{}).get("npc_construction",{})
+	return population.get("kappa_context") == context and not lifecycle(bindings,population).is_empty()
+
 static func context_valid(bindings: RefCounted,context: Dictionary) -> bool:
 	if not available(bindings):return false
 	for key in ["base_content_id","binding_id"]:
@@ -22,6 +37,19 @@ static func context_valid(bindings: RefCounted,context: Dictionary) -> bool:
 	for key in ["campaign_cursor","station_id","system_id","mission_kind"]:
 		if not context.get(key) is int or context[key]!=int(bindings.mido_travel.kappa_rescue[key]):return false
 	return context.get("mission_story")==true and context.get("mission_completed")==false and Numbers.integer(context.get("rank"),0,20) and context.get("difficulty") in [0.5,1.0]
+
+static func combat_population(bindings: RefCounted,combat: Dictionary) -> bool:
+	if combat.get("campaign_cursor")!=21 or flight(bindings).is_empty():return false
+	for key in ["base_content_id","binding_id"]:
+		if combat.get(key)!=bindings.get(key):return false
+	var expected: Array=bindings.mido_travel.kappa_rescue.population.actors
+	var actors: Variant=combat.get("actors")
+	if not actors is Array or actors.size()!=expected.size():return false
+	for id in actors.size():
+		if not actors[id] is Dictionary or not actors[id].get("kappa_rescue",false):return false
+		for key in ["actor_id","actor_kind","hull_catalogue_id"]:
+			if actors[id].get(key)!=int(expected[id][key]):return false
+	return true
 
 static func population(bindings: RefCounted,packet: Dictionary) -> Dictionary:
 	if not packet.get("kappa_context") is Dictionary or not context_valid(bindings,packet.kappa_context):return {}

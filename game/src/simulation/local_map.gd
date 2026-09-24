@@ -15,10 +15,11 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	var rules: Dictionary=bindings.mido_travel.map
 	var location: Dictionary=flight.get("location",{})
 	var travel: Dictionary=flight.get("local_travel",{})
+	var docked: bool=flight.get("station_map",false)
 	var cursor:=int(flight.get("campaign_cursor",-1))
 	var stations:=Definitions.navigation_stations(bindings.mido_travel,cursor,int(location.get("station_id",-1)))
-	if Definitions.free_local_navigation(bindings.mido_travel,cursor):stations=stations.filter(func(id):return id==location.get("station_id") or load("res://src/content/free_navigation_definitions.gd").ordinary_departure_at(bindings,cursor,flight.get("mission",{}),id))
-	if stations.is_empty() or location.get("system_id")!=Definitions.navigation_system(bindings.mido_travel,cursor,int(location.get("station_id",-1))) or travel.get("phase")!="flight":return reject("The local map is unavailable at this campaign boundary")
+	if Definitions.free_local_navigation(bindings.mido_travel,cursor):stations=stations.filter(func(id):return id==location.get("station_id") or load("res://src/content/free_navigation_definitions.gd").destination_supported(bindings,cursor,flight.get("mission",{}),id))
+	if stations.is_empty() or location.get("system_id")!=Definitions.navigation_system(bindings.mido_travel,cursor,int(location.get("station_id",-1))) or (not docked and travel.get("phase")!="flight"):return reject("The local map is unavailable at this campaign boundary")
 	if (Definitions.navigation_available(bindings.mido_travel,cursor) or Definitions.free_local_navigation(bindings.mido_travel,cursor)) and not Definitions.navigation_mission(bindings.mido_travel,cursor,flight.get("mission",{})):return reject("The local map lost the pending story objective")
 	# The same original system display serves both local courses and a gate's
 	# destination choice. Displaying another system never changes flight state.

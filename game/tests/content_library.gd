@@ -17,7 +17,16 @@ func _initialize() -> void:
 			continue
 		for code in library.manifest.languages:
 			check(library.select_language(code), library.error)
-			check(library.strings.size() in [3371, 3402], "Unexpected localization count")
+			check(library.strings.size() == Library.catalogue_layout(library.manifest).strings, "Unexpected localization count")
+		var malformed: Dictionary = library.manifest.duplicate(true)
+		malformed.ship_table.records = 63
+		check(Library.catalogue_layout(malformed).is_empty(), "Unknown ship extent accepted")
+		malformed = library.manifest.duplicate(true)
+		malformed.languages[malformed.languages.keys()[0]].records = 3402 if malformed.profile.edition == "mac-full-hd" else 3385
+		check(Library.catalogue_layout(malformed).is_empty(), "Another edition's language extent accepted")
+		malformed = library.manifest.duplicate(true)
+		malformed.files["resources/data/bin/ships.bin"].bytes += 36
+		check(Library.catalogue_layout(malformed).is_empty(), "Ship byte extent disagrees with its catalogue")
 		check(library.save_directory().contains(library.manifest.content_id), "Save identity is missing")
 		check(not identities.has(library.save_directory()), "Different bases share a save namespace")
 		identities[library.save_directory()] = true

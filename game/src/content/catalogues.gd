@@ -2,6 +2,7 @@ extends RefCounted
 ## Declarative source records, decoded directly from checksum-checked resources.
 ## Unknown fields stay positional. This is not mission, economy or travel state.
 const Cursor = preload("res://src/content/binary_cursor.gd")
+const Library = preload("res://src/content/library.gd")
 const MAX_TABLE_BYTES := 1024 * 1024
 const MAX_RECORDS := 4096
 const TABLES := ["ships", "items", "systems", "stations"]
@@ -25,7 +26,10 @@ func open(library: RefCounted) -> bool:
 	provenance = {}
 	if library.manifest.is_empty():
 		return fail("Open imported content before its catalogues.")
-	var counts := {"ships": 64 if library.manifest.profile.edition == "ios-hd" else 61,
+	var layout := Library.catalogue_layout(library.manifest)
+	if layout.is_empty():
+		return fail("Unsupported ship and language catalogue layout.")
+	var counts := {"ships": int(layout.ships),
 		"items": 233, "systems": 34, "stations": 135}
 	var staged := {}
 	var origins := {}

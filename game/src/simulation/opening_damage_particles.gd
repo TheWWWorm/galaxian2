@@ -1,4 +1,5 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Native fresh-opening smoke/fire owners. The weapon pass samples retained NPC
 ## roots before controller and NPC work; those later passes only change flags and
 ## the roots used next frame. Every emitter has its own random stream.
@@ -45,6 +46,19 @@ func configure_full_hold(bindings: RefCounted,combat: Dictionary,seed_seconds: V
 	if combat.get("campaign_cursor")!=4 or not valid_combat(combat):clear();return reject("Second-flight smoke/fire requires its one initialized pirate")
 	return _configure_owners(bindings,combat,seed_seconds,["npc0"],5)
 
+func configure_first_mining(bindings: RefCounted,seed_seconds: Variant) -> bool:
+	clear()
+	# General sprite manager +88 still updates in cursor two, but the source
+	# player smoke/fire registration is limited to campaign cursors zero and one.
+	# This owner preserves the empty smoke/fire managers and their clock without
+	# borrowing the second-trip pirate registration.
+	if bindings==null or bindings.source_architecture!="x86_64" or not FullHold.parameters(bindings.full_hold_particles) or not Definitions.parameters(bindings.damage_particles.get("owners",{})) or not seed_seconds is int:
+		return reject("First mining effects require verified Mac sprite owners and seed")
+	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":2}
+	_npc_count=0
+	_presentation_identity=RefCounted.new()
+	return true
+
 func configure_combat_training(bindings: RefCounted,combat: Dictionary,seed_seconds: Variant) -> bool:
 	clear()
 	if bindings==null or Training.flight(bindings).is_empty() or not FullHold.parameters(bindings.full_hold_particles) or not Definitions.parameters(bindings.damage_particles.get("owners",{})) or not seed_seconds is int:return reject("Training smoke/fire requires its ordinary particle owners and seed")
@@ -81,9 +95,9 @@ func configure_local_traffic(bindings: RefCounted,combat: Dictionary,seed_second
 	if not valid_combat(combat):clear();return reject("Local smoke/fire requires its initialized ships")
 	var keys:=[]
 	for actor in actors:
-		if combat.campaign_cursor not in [13,14,16,18,19] and actor.get("actor_kind")!=3:clear();return reject("Local smoke/fire belongs to another faction")
+		if combat.campaign_cursor not in FlightStages.FACTIONS and actor.get("actor_kind")!=3:clear();return reject("Local smoke/fire belongs to another faction")
 		if actor.get("population_group") not in ["freighter","capital","debris"]:keys.append("npc%d"%int(actor.actor_id))
-	return _configure_owners(bindings,combat,seed_seconds,keys,actors.map(func(actor):return int(actor.actor_mode) if combat.campaign_cursor in [13,14,16,18,19] else (4 if actor.get("population_group")=="travel" else 0)))
+	return _configure_owners(bindings,combat,seed_seconds,keys,actors.map(func(actor):return int(actor.actor_mode) if combat.campaign_cursor in FlightStages.FACTIONS else (4 if actor.get("population_group")=="travel" else 0)))
 
 func presentation_identity() -> RefCounted:return _presentation_identity
 
@@ -129,6 +143,7 @@ func apply_controller(escape: Dictionary) -> bool:
 
 func finish_npc_pass(before: Dictionary,after: Dictionary,events: Array,delta_ms: Variant,detail: Variant) -> bool:
 	error=""
+	if _npc_count==0 and _identity.get("campaign_cursor")==2:return reject("First mining has no NPC smoke/fire pass")
 	if _identity.is_empty() or not valid_combat(before) or not valid_combat(after) or events.size()!=_npc_count or not Numbers.integer(delta_ms,0,1000):return reject("Damage effects require the ordered NPC pass")
 	if not (detail is float or detail is int) or not is_finite(detail) or detail<0 or detail>1:return reject("Damage effects require the world detail value")
 	var next:=fork_for_frame()
@@ -164,7 +179,7 @@ func finish_npc_pass(before: Dictionary,after: Dictionary,events: Array,delta_ms
 			# The emitter attaches to the logical root. Retain that root through
 			# death spin instead of adding the visual bank to its local axes.
 			if not skipped and (death.started or _death_phases[id]=="tumble"):
-				if delta_ms>0:next._roots[id].basis=next._roots[id].basis*Vectors.local_xyz(state.spin)
+				if delta_ms>0:next._roots[id].basis=(next._roots[id].basis*Vectors.local_xyz(state.spin)).orthonormalized()
 				next._roots[id].origin=state.pose.origin
 			next._death_phases[id]=state.phase
 		elif not event.movement.is_empty():
@@ -185,7 +200,7 @@ func valid_combat(combat: Dictionary) -> bool:
 	if not actors is Array or actors.size()!=_npc_count:return false
 	for id in _npc_count:
 		var actor: Variant=actors[id]
-		var minimum_mode:=0 if _identity.get("campaign_cursor") in [10,11,12,13,14,16,18,19] or (_identity.get("campaign_cursor")==7 and id==3) else 1
+		var minimum_mode:=0 if _identity.get("campaign_cursor") in (FlightStages.LOCAL+FlightStages.POST_SAHI) or (_identity.get("campaign_cursor")==7 and id==3) else 1
 		if not actor is Dictionary or actor.get("actor_id")!=id or not Flight.rigid_pose(actor.get("pose")) or not Numbers.integer(actor.get("actor_mode"),minimum_mode,9):return false
 		if not actor.get("vitals") is Dictionary or not Numbers.integer(actor.vitals.get("hull"),0,2147483647) or not Numbers.integer(actor.get("max_hull"),1,2147483647):return false
 	return true

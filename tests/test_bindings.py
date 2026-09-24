@@ -57,6 +57,17 @@ def executable(edition='mac-full-hd', identifier=17, gap=b''):
 
 class BindingTests(unittest.TestCase):
     @unittest.skipUnless(importlib.util.find_spec('capstone'), 'Optional Capstone dependency not installed')
+    def test_catalogue_extent_is_explicit_and_edition_local(self):
+        from unittest.mock import patch
+        for edition, count in [('mac-full-hd', 61), ('mac-full-hd', 64), ('ios-hd', 64)]:
+            with patch('gof2_content.registrations.extract_ship_models', return_value={}) as models:
+                extract(executable(edition), edition, ship_count=count)
+                self.assertEqual(models.call_args.args[-1], count)
+        for edition, count in [('mac-full-hd', 63), ('ios-hd', 61), ('mac-full-hd', 64.0), ('mac-full-hd', True)]:
+            with self.assertRaisesRegex(ContentError, 'catalogue extent'):
+                extract(executable(edition), edition, ship_count=count)
+
+    @unittest.skipUnless(importlib.util.find_spec('capstone'), 'Optional Capstone dependency not installed')
     def test_both_architectures_extract_only_declarations(self):
         for edition in ('ios-hd', 'mac-full-hd'):
             source = executable(edition)
@@ -147,6 +158,9 @@ class BindingTests(unittest.TestCase):
             self.assertEqual(header['reader'], READER)
             self.assertEqual(json.loads((pack / 'registrations.json').read_text())['engine_particles'], {})
             self.assertNotIn('engine_particles', header)
+            for capability in ('engine_particle_owners', 'deep_science_stock', 'persistent_contacts'):
+                self.assertEqual(json.loads((pack / 'registrations.json').read_text())[capability], {})
+                self.assertNotIn(capability, header)
             self.assertEqual(json.loads((pack / 'registrations.json').read_text())['ambient_population'], {})
             self.assertNotIn('ambient_population', header)
             self.assertEqual(json.loads((pack / 'registrations.json').read_text())['ambient_combat'], {})

@@ -1,4 +1,5 @@
 extends RefCounted
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 ## Source dialogue and mission context for the second mining trip.
 const Equal=preload("res://src/content/opening_escape_definitions.gd")
 const Fonts=preload("res://src/content/font_definitions.gd")
@@ -8,10 +9,16 @@ const Objective=preload("res://src/content/mining_objective_definitions.gd")
 const VALUES := {"scope":"full_hold_mining_story","campaign_cursor":4,"mission_kind":154,"station_id":78,"required_cargo":25,"cursor_after_acknowledgement":5,"next_kind":11,"briefing_events":[{"speaker_id":2,"text_id":1716,"voice_event_id":188}],"completion_events":[{"speaker_id":0,"text_id":1717,"voice_event_id":431},{"speaker_id":2,"text_id":1718,"voice_event_id":432}]}
 const SPANS := {"mode0_counts":[1554602,20],"mode0_events":[1555962,8],"mode1_counts":[1555258,20],"mode1_events":[1546578,16],"briefing_voice":[1560354,8],"completion_voices":[1562298,16],"next_dispatch":[871422,4],"next_mission":[860658,43],"acknowledgement_cleanup":[352080,4033],"entry_controller":[150932,435]}
 
+const MAC_ALTERNATE := {"mode0_counts":[1529586,20],"mode0_events":[1530954,8],"mode1_counts":[1530242,20],"mode1_events":[1521562,16],"briefing_voice":[1535418,8],"completion_voices":[1537362,16],"next_dispatch":[872054,4],"next_mission":[861290,43],"acknowledgement_cleanup":[351794,4033],"entry_controller":[150932,435]}
+const MAC_VALUES := {"scope":"full_hold_mining_story","campaign_cursor":4,"mission_kind":154,"station_id":78,"required_cargo":25,"cursor_after_acknowledgement":5,"next_kind":11,"briefing_events":[{"speaker_id":2,"text_id":1727,"voice_event_id":188}],"completion_events":[{"speaker_id":0,"text_id":1728,"voice_event_id":431},{"speaker_id":2,"text_id":1729,"voice_event_id":432}]}
+
 static func parameters(data: Variant) -> bool:
-	if not data is Dictionary or data.size()!=VALUES.size()+1 or not data.get("provenance") is Dictionary:return false
-	for key in VALUES:
-		if not Equal.equal_value(data.get(key),VALUES[key]):return false
+	return _parameters(data,VALUES) or _parameters(data,MAC_VALUES)
+
+static func _parameters(data: Variant,expected: Dictionary) -> bool:
+	if not data is Dictionary or data.size()!=expected.size()+1 or not data.get("provenance") is Dictionary:return false
+	for key in expected:
+		if not Equal.equal_value(data.get(key),expected[key]):return false
 	return true
 
 static func briefing(bindings: RefCounted, cursor: Variant) -> Dictionary:
@@ -40,8 +47,7 @@ static func validate(data: Variant, source_bytes: int, arch: String, arrival: Di
 	if not Flight.parameters(flight) or not Briefing.parameters(first_briefing) or not Objective.parameters(first_objective):return "Second-trip story lacks its verified flight, dialogue or cargo context"
 	var origin: Variant=arrival.get("provenance",{}).get("actor")
 	if not Fonts.extent(origin,"offset","bytes",[315],source_bytes):return "Second-trip story lacks its source anchor"
-	if data.provenance.size()!=SPANS.size():return "Invalid second-trip story provenance"
-	for key in SPANS:
-		var span: Variant=data.provenance.get(key);var rule: Array=SPANS[key]
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],source_bytes) or int(span.offset)!=int(origin.offset)+int(rule[0]):return "Invalid second-trip story extent: "+key
-	return ""
+	var layouts: Array=[]
+	if _parameters(data,VALUES):layouts.append(SPANS)
+	if _parameters(data,MAC_VALUES):layouts.append(MAC_ALTERNATE)
+	return "" if Layouts.matches(data.provenance,int(origin.offset),source_bytes,layouts) else "Invalid full hold story extents"

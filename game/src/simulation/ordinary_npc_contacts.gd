@@ -10,6 +10,14 @@ const Vitals = preload("res://src/simulation/combat_vitals.gd")
 var error := ""
 
 func evaluate(projectiles: RefCounted, combat: RefCounted, ordered_actor_ids: Variant, bounds_selection: Variant = null) -> Dictionary:
+	return _evaluate(projectiles,combat,ordered_actor_ids,bounds_selection,false)
+
+## Only for an outer transaction that owns BOTH detached inputs and discards
+## them on any failure. Standalone callers use evaluate() for atomic isolation.
+func evaluate_staged(projectiles: RefCounted, combat: RefCounted, ordered_actor_ids: Variant, bounds_selection: Variant = null) -> Dictionary:
+	return _evaluate(projectiles,combat,ordered_actor_ids,bounds_selection,true)
+
+func _evaluate(projectiles: RefCounted, combat: RefCounted, ordered_actor_ids: Variant, bounds_selection: Variant, staged: bool) -> Dictionary:
 	error = ""
 	if projectiles==null or combat==null or projectiles.get_script()!=Projectiles or combat.get_script()!=Combat:
 		return fail("NPC contacts require ordinary projectile and opening NPC owners")
@@ -24,13 +32,13 @@ func evaluate(projectiles: RefCounted, combat: RefCounted, ordered_actor_ids: Va
 		if bounds_selection.size()!=1: return fail("Target bounds cannot contain a weapon override")
 	elif bounds_selection.get("mode")!="fixed" or bounds_selection.size()!=2 or not Vitals.integer(bounds_selection.get("half_extent")):
 		return fail("Unsupported or malformed weapon bounds override")
-	var staged_combat: RefCounted = combat.fork_for_frame()
+	var staged_combat: RefCounted = combat if staged else combat.fork_for_frame()
 	if not staged_combat.supports_weapon_hit(shots.weapon): return fail(staged_combat.error)
 	# Validate the complete list before any result is produced. Do not sort or
 	# deduplicate: source target-list append operations preserve both properties.
 	for id in ordered_actor_ids:
 		if staged_combat.collision_context(id).is_empty(): return fail(staged_combat.error)
-	var staged_shots: RefCounted = projectiles.fork_state()
+	var staged_shots: RefCounted = projectiles if staged else projectiles.fork_state()
 	var geometry := Geometry.new()
 	var contacts := []
 	var last_contact_actor_id: Variant = null

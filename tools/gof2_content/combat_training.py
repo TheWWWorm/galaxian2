@@ -2,7 +2,8 @@
 
 Static reader only: emits constants and file extents, never executable bytes.
 """
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_combat_training(mach,arrival,equipment,actors):
@@ -12,12 +13,12 @@ def extract_combat_training(mach,arrival,equipment,actors):
         if not npc['construction'] or not npc['routes'] or not npc['world_initialization']:return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=MAC_VALUES if proof['waypoints']['offset']==origin['offset']+MAC_ALTERNATE['waypoints'][0] else VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'combat_training_encounter_construction',
@@ -158,3 +159,67 @@ LAYOUTS = {'actor_dispatch': [571,
                  1046,
                  '__text',
                  'sha256:f9888874fd48b47efc6738660c865a899430cfdd540c30372ca09d04e7a0443a']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'actor_dispatch': [571, 611, '__text', 'sha256:bcfd88a3be0d6af62e71c0b6149e51ed0a2799905125195804766dca3bad21aa'],
+ 'waypoints': [1554450, 24, '__const', 'sha256:e343df0835dbe26be4a8183b1e18c3fe07a892eaeaa99619807d2bf55f348930'],
+ 'companion_x': [1520990, 4, '__const', 'sha256:7bfbc6b6592978d852ba691af28fd3a7ee782e1fb7c8623b904546a2f1d6e177'],
+ 'companion_y': [1532078, 4, '__const', 'sha256:0c05e73c2748cbfd2e38c0afaf9cb594f78e14fefa3c24190ebc121d45dbee4f'],
+ 'companion_z': [1550398, 4, '__const', 'sha256:d51bfdd72a6abbbe822a1288a316bab8713a9b743af5b427746d5639b554cbd4'],
+ 'route_constructor': [721834,
+                       378,
+                       '__text',
+                       'sha256:cc56cada952b0004770c13e0885b8afa316f1ee61dde29fcbf6f2b46b8303c83'],
+ 'route_wrapper': [721824, 10, '__text', 'sha256:aafd66af2c321a1032ffdbaea51ef446e7df7cd4b20fe53e4fdf6af362acadb2'],
+ 'route_copy': [723848, 472, '__text', 'sha256:5abfccebe5b5415fd1dcc48dbb04fcaef3db77409642d5afc0a6ae34af9badc0'],
+ 'route_point': [723058, 150, '__text', 'sha256:bf8c7a526ff2078ff7f5e79f78e70b9c6cc705d202945070ed511582c0b9fc6f'],
+ 'route_replace': [-77698, 104, '__text', 'sha256:7cbfdc0c5acc3bd38d42bf2085e6f9af2d686e827bfeaaafcabb869810df8cb8'],
+ 'route_advance': [723448, 302, '__text', 'sha256:3f453b905e5352a8bfae989e9b35ef237bc977814aa15b13b6360f0b9c2d1482'],
+ 'friendly': [536188, 28, '__text', 'sha256:29f61672e56345b7cd33246f9865630c51342b38086156ed5ac59e432e6804c6'],
+ 'hull_override': [537550, 30, '__text', 'sha256:801050060c14a0fbdc641193dc1d0fb465b799d0c6c551f2562dc16da0b35bc3'],
+ 'weapon_effect_0': [1547906, 4, '__const', 'sha256:2f71717123e07e2e209cc0dc807e9d1e48dd2e9d0cddb9e5238afa837b209770'],
+ 'weapon_effect_19': [1547982, 4, '__const', 'sha256:ba68c0bc07a4ca462026f5108537fb3a023f3095f79c0d4c205fde3e86089e80'],
+ 'weapon_effect_25': [1548006, 4, '__const', 'sha256:b18cc146d20e56ff0808059bc8ddf272dc008ee143402c5d32424175d3b54720'],
+ 'factory': [77944, 3478, '__text', 'sha256:1edb599619eeabcc4601e757d01307eba28fc1a7bfb5ea74ea86ef4b365fcbf3'],
+ 'route_and_cargo': [605720, 2070, '__text', 'sha256:9465ec13dc3e42a12689abc652190347dad3912ec48a58a6f9e15f23b769849d'],
+ 'inactive_mode': [-78898, 44, '__text', 'sha256:c1edf2d38df7afdd0b096f4c3e81bebd3df823b0046c91eb5be9dbd4689af886'],
+ 'activity': [-78836, 36, '__text', 'sha256:33a6770710bcfe46dd8328b35c5b1aeff975d9f4bae30a88cf99280058772f83'],
+ 'activity_field': [541446, 14, '__text', 'sha256:e592bbf637fe58b32fb61e9aede45c8d603d334bdfeb2c031ba9649201d0a33c'],
+ 'hostile': [536160, 28, '__text', 'sha256:b6bfcb7e235910cff0dd3613bb0d4daaad101ddbdbf2166b2708e8a5426891bb'],
+ 'position_setter': [609776, 176, '__text', 'sha256:d7f595d98dfbf167120727344ec27bdcb00027b44c1345292f575de7c9197330'],
+ 'world_order': [-44096, 2458, '__text', 'sha256:0cdaa357638444d69604f1f9989b89fcce3e2f2fcd894351d0e3b5e94608f7d6'],
+ 'weapons': [54772, 4266, '__text', 'sha256:3f2a1241cc0c6a3b727f4b1e1e83eb9328004ecc7ee2d56d85d10163057bf0d3'],
+ 'extra_story': [51826, 1046, '__text', 'sha256:1335a39e49f4f68f662e67e9c0a9ff1687c9138f7de54ec091cee8875401c351']}
+MAC_VALUES = {'scope': 'combat_training_encounter_construction',
+ 'campaign_cursor': 7,
+ 'mission_kind': 4,
+ 'station_id': 78,
+ 'system_id': 15,
+ 'actor_count': 4,
+ 'waypoints': [[-4000, -3000, 80000], [10000, 7000, 160000]],
+ 'authored_route_initial_index': 0,
+ 'authored_route_loop': False,
+ 'pirate_count': 3,
+ 'pirate_actor_kind': 8,
+ 'pirate_hull_catalogue_id': 2,
+ 'pirate_waypoint_index': 1,
+ 'pirate_mode': 5,
+ 'pirate_active': False,
+ 'pirate_targeting_blocked': True,
+ 'companion_actor_id': 3,
+ 'companion_actor_kind': 3,
+ 'companion_hull_catalogue_id': 30,
+ 'companion_position_offset': [700.0, 50.0, 6000.0],
+ 'companion_friendly': True,
+ 'companion_current_hull_override': 9999999,
+ 'companion_name_text_id': 1588,
+ 'subtype': 0,
+ 'retains_generated_cargo': True,
+ 'companion_replaces_generated_route': True,
+ 'weapon_item_sequence': [0, 19],
+ 'weapon_effect_sequence': [14600, 14605],
+ 'companion_weapon_item_sequence': [0, 25],
+ 'companion_weapon_effect_sequence': [14600, 14606],
+ 'weapon_effect_capacity': 4,
+ 'weapon_effect_random_bound': 2,
+ 'zero_means_flipped': True}

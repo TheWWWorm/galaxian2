@@ -40,6 +40,23 @@ def fixture(mac, relocation=0):
 
 @unittest.skipUnless(importlib.util.find_spec('capstone'), 'Optional Capstone dependency not installed')
 class SteeringTests(unittest.TestCase):
+    def test_new_mac_helper_preserves_linked_constants_and_rejects_a_mixed_layout(self):
+        from gof2_content.steering import MAC_HELPERS
+        for relocation in (0, 0x3400):
+            m = fixture(True, relocation)
+            data = bytearray(m.data)
+            at = 256 + 1024
+            helper = bytes.fromhex(MAC_HELPERS[1])
+            data[at:at + 45] = helper.ljust(45, b'\x90')
+            m.data = bytes(data)
+            result = extract_manual_rotation(m, {'available': True})
+            self.assertEqual(result['provenance'][-1], {'offset': 4096 + at, 'bytes': 35})
+            self.assertAlmostEqual(result['time_scale'], 0.025)
+            # Neither a mixed stack frame nor an unlinked helper is supported.
+            data[at + 7] = 0x50
+            m.data = bytes(data)
+            self.assertEqual(extract_manual_rotation(m, {'available': True}), {})
+
     def test_constants_relocation_and_profile_layout(self):
         for mac in (True, False):
             for relocation in (0, 0x3400):

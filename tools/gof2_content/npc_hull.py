@@ -1,6 +1,6 @@
 """Recognize fresh NPC hull declarations; emit data, never executable content."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {'scope': 'fresh_opening', 'rank': 0, 'campaign_cursor': 0, 'factory_subtype': 0, 'hull_catalogue_ids': [2, 23, 2], 'base_hull': 20, 'difficulty_offset': -0.5, 'percentage_scale': 100.0, 'override_raises_maximum': True}
 
@@ -14,12 +14,10 @@ def extract_npc_hull(mach, actors):
         if [a['hull_catalogue_id'] for a in actors['actors']]!=VALUES['hull_catalogue_ids']:return {}
         anchor=npc['provenance']['factory_entry']
         if anchor['bytes']!=4:return {}
-        at=mach.text['address']+anchor['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,raw) in LAYOUTS[arch].items():
-            found=section_bytes(mach,at+delta,size,b'__const' if key.endswith('_constant') else b'__text')
-            if found is None or found[0]!=bytes.fromhex(raw):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        layouts=[LAYOUTS[arch]]+([MAC_ALTERNATE] if arch=='x86_64' else [])
+        proof=recognize(mach,anchor['offset'],layouts,
+                        constants=[key for key in LAYOUTS[arch] if key.endswith('_constant')])
+        if not proof:return {}
         for key in ['hull_setter','cursor_getter']:
             if actors['provenance'][key]!=proof[key]:return {}
         result=copy.deepcopy(VALUES);result['provenance']=proof
@@ -122,3 +120,47 @@ LAYOUTS = {'x86_64': {'factory_arguments': [17,
            'rank_thresholds_constant': [2402916,
                                         84,
                                         '0000000007000000150000002a000000460000006900000093000000c4000000fc0000003b01000081010000ce010000220200007d020000df02000048030000b80300002f040000ad0400003205000072060000']}}
+
+
+# Complete alternate Mac proof set; native values keep the verified fresh context.
+MAC_ALTERNATE = {'factory_arguments': [17,
+                       38,
+                       '44894db04c89c3894db88955b48975bc48897dc0488d05b6b22300488b38e8f8e90b004189c4'],
+ 'rank_base': [166,
+               46,
+               'bb2c010000488d0530b22300488b38e884300c0083f8147f15488d051cb22300488b38e870300c006bd80e83c314'],
+ 'cursor_and_hull_modifiers': [224,
+                               129,
+                               '488d05fbb12300488b38e82de90b00428d0ca50000000084c0b8b40000000f44c101d8448b75b84183fe3374284183fe3174144183fe2c752cf30f2ac0f30f5905e1761600eb1af30f2ac0f30f5905cf761600eb0cf30f2ac0f30f59051d2f1600f30f2cc04183fc380f94c1418d5424cf83fa040f92c208cabb0e0100000f44d8'],
+ 'subtype': [399,
+             43,
+             '41bf983a0000837db401751f478d6c6d004183fe0e740b41bfc8af00008d1c9beb096bdb1941bfc8af0000'],
+ 'difficulty': [442,
+                73,
+                'f30f2ac3488d0581b12300f30f10482cf30f580de06f1600f30f59c8f30f58c8f3440f2cf14181fc9a000000751b488d05f3b02300488b38e8d3e70b00837dbc090f94c120c141d3e6'],
+ 'stats_argument': [558, 27, '4c89e789de4489f2b90100000041b8010000004531c9e8e1f50600'],
+ 'stats_wrapper': [456746, 10, '554889e55de900000000'],
+ 'initial_capacity': [456929, 12, '89938000000089938c000000'],
+ 'hull_setter': [459606, 30, '554889e589b78000000039b78c0000007d0689b78c0000005de994f8ffff'],
+ 'percentage': [457740,
+                42,
+                'f30f2a878c000000f30f2a8f80000000f30f5ec8f30f100576330f00f30f59c8f30f2cc18987a0000000'],
+ 'rank_getter': [799038, 12, '554889e58b87580200005dc3'],
+ 'rank_reset': [803428, 11, '41c7865802000001000000'],
+ 'cursor_getter': [780844, 12, '554889e58b87780200005dc3'],
+ 'cursor_predicate': [780828, 16, '554889e583bf780200002c0f9fc05dc3'],
+ 'difficulty_constant': [1470898, 4, '000000bf'],
+ 'percentage_constant': [1453982, 4, '0000c842'],
+ 'entry_rank': [256976,
+                48,
+                '488d050bc71f00488b38e81d440800bf50030000e8170412004889c34889dfbe03000000e89d2dfaff49899e90000000'],
+ 'rank_calculation': [798716,
+                      136,
+                      '554889e58b8ff40000008b87340100004863c94869f11f85eb514863c04869c8565555554989c849c1e83f4889f248c1ea3f48c1ee20c1fe0431c001d648c1e9204401c1038f50020000448b8754020000488d1526870a0001f1038ff8000000038f78020000428d0c41038f600200003b0a7c068987580200004883c204ffc083f81575eb5dc390'],
+ 'score_reset_a': [803366, 22, '41c786500200000000000041c7865402000000000000'],
+ 'score_reset_b': [803450, 11, '41c7866002000000000000'],
+ 'score_reset_c': [803863, 22, '49c786f80000000000000049c786f000000000000000'],
+ 'score_reset_d': [804316, 11, '49c7863001000000000000'],
+ 'rank_thresholds_constant': [1488762,
+                              84,
+                              '0000000007000000150000002a000000460000006900000093000000c4000000fc0000003b01000081010000ce010000220200007d020000df02000048030000b80300002f040000ad0400003205000072060000']}

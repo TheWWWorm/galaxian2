@@ -14,6 +14,9 @@ const Combat=preload("res://src/simulation/opening_combat_group.gd")
 const Guns=preload("res://src/simulation/opening_npc_weapons.gd")
 const NpcControl=preload("res://src/simulation/opening_npc_control.gd")
 const Cargo=preload("res://src/simulation/flight_cargo.gd")
+const Recovery=preload("res://src/simulation/tractor_recovery.gd")
+const RecoveryRules=preload("res://src/content/tractor_recovery_definitions.gd")
+const Encounter=preload("res://src/simulation/full_hold_encounter.gd")
 const SEED={"state":25214903913}
 var failures:=0
 var checks:=0
@@ -42,14 +45,14 @@ func verify(args: PackedStringArray):
 	verify_contract(args,lib,bindings)
 	verify_lifecycle(bindings,resources,row)
 	verify_failure(bindings,resources,row)
-	for npc_credit in [false,true]:verify_controller(bindings,cat,flight,resources,fixture,npc_credit)
+	for npc_credit in [false,true]:verify_controller(bindings,cat,flight,resources,fixture,npc_credit,lib)
 	# This Unix-second fixture produces an empty cargo list through the real
 	# field/route/actor generator, without editing the constructor's output.
 	var empty_world:=Construction.new()
 	if not empty_world.prepare(bindings,cat,fixture.packet_fixture(bindings,cat,3),4096,1789100043):check(false,empty_world.error)
 	else:
 		check(empty_world.snapshot().scenery.world_initialization.npc_construction.actors[0].cargo.is_empty(),"Natural empty-cargo fixture changed")
-		verify_controller(bindings,cat,empty_world,resources,fixture,false)
+		verify_controller(bindings,cat,empty_world,resources,fixture,false,lib)
 	fixture.free()
 
 func verify_contract(args: PackedStringArray, lib: RefCounted, bindings: RefCounted):
@@ -87,9 +90,11 @@ func verify_contract(args: PackedStringArray, lib: RefCounted, bindings: RefCoun
 func broken_up(bindings: RefCounted, resources: RefCounted, row: Dictionary) -> RefCounted:
 	var death:=Death.new();var initial:=row.duplicate(true);initial.body_pose=Transform3D.IDENTITY
 	if not death.configure_full_hold(bindings,resources,initial):check(false,death.error);return null
+	check(death.snapshot().retire_on_transfer,"The configured actor lost its original immediate-transfer retirement flag")
 	var event: Dictionary=death.advance(0,SEED)
 	if event.is_empty():check(false,death.error);return null
 	check(event.state.countdown_ms==1862 and event.random_state.state==228198391288061 and event.sound_events==[20],"Independent initial death RNG/delay changed")
+	check(not event.state.retire_on_transfer,"Entering tumble did not clear immediate-transfer retirement")
 	var random: Dictionary=event.random_state
 	for i in 18:death.advance(100,random)
 	death.advance(62,random)
@@ -108,6 +113,7 @@ func verify_lifecycle(bindings: RefCounted, resources: RefCounted, row: Dictiona
 	var clone: RefCounted=death.fork_for_frame()
 	var zero: Dictionary=clone.advance(0,random)
 	check(zero.state.cargo==initial.cargo and zero.state.statistics_pose==initial.pose and zero.random_state==random,"Zero-time mode4 moved cargo or copied the wrong statistics pose")
+	check(not zero.state.retire_on_transfer,"An active explosion armed immediate-transfer retirement")
 	# Drift is per positive update: equal update counts, different elapsed time.
 	var once: Dictionary=death.advance(1,random);var slower: Dictionary=clone.advance(150,random)
 	check(once.state.cargo.pose.origin==Vector3(8.224495887756348,-40.37480163574219,-28.411897659301758) and once.state.drift_speed==49.04899978637695,"Independent first drift sample changed")
@@ -124,6 +130,11 @@ func verify_lifecycle(bindings: RefCounted, resources: RefCounted, row: Dictiona
 		if not before.effect.active:check(event.state.effect==before.effect,"Inactive explosion kept advancing or restarted")
 	var end: Dictionary=death.snapshot()
 	check(end.drift_speed==0 and end.cargo.pose.origin==Vector3(410.8144226074219,-2016.72607421875,-1419.17822265625) and expired_count==1,"Independent 342-update drift stop changed")
+	check(not end.retire_on_transfer,"Positive cargo updates armed immediate-transfer retirement after effect expiry")
+	var stopped: RefCounted=death.fork_for_frame();var stationary: Dictionary=stopped.advance(0,random)
+	check(stationary.state.retire_on_transfer and stationary.state.phase=="explosion" and stationary.state.cargo.model_exists and not death.snapshot().retire_on_transfer,"A zero-time pass after effect expiry lost the retained transfer flag or changed its parent")
+	stationary=stopped.advance(1,random)
+	check(stationary.state.retire_on_transfer,"A later positive cargo update cleared the retained transfer flag")
 	var frozen: Transform3D=end.cargo.pose
 	while death.snapshot().cleanup_elapsed_ms<60000:
 		var dt:=mini(150,60000-int(death.snapshot().cleanup_elapsed_ms))
@@ -170,14 +181,14 @@ func verify_failure(bindings: RefCounted, resources: RefCounted, row: Dictionary
 		check(not death.configure_full_hold(bindings,resources,bad),"Invalid generated item accepted")
 	check(death.configure_full_hold(bindings,resources,row),death.error)
 	var before: Dictionary=death.snapshot()
-	for dt in [-1,151,true,null,0.5]:check(death.advance(dt,SEED).is_empty() and death.snapshot()==before,"Invalid death clock mutated cargo")
+	for dt in [-1,751 if not bindings.fast_forward.is_empty() else 151,true,null,0.5]:check(death.advance(dt,SEED).is_empty() and death.snapshot()==before,"Invalid death clock mutated cargo")
 	check(death.advance(16,{"state":-1}).is_empty() and death.snapshot()==before,"Invalid random stream consumed cargo death")
 	check(death.capture(Transform3D.IDENTITY,3e38),death.error);before=death.snapshot()
 	check(death.advance(150,SEED).is_empty() and death.snapshot()==before,"Coordinate overflow partly initialized cargo death")
 	death.clear();check(death.snapshot().is_empty() and death.fork_for_frame().snapshot().is_empty(),"Cargo death clear retained ownership")
 	check(row==snapshot,"Preparing cargo death changed original constructor records")
 
-func verify_controller(bindings: RefCounted, cat: RefCounted, flight: RefCounted, resources: RefCounted, fixture: SceneTree, npc_credit: bool):
+func verify_controller(bindings: RefCounted, cat: RefCounted, flight: RefCounted, resources: RefCounted, fixture: SceneTree, npc_credit: bool,library: RefCounted):
 	var control:=NpcControl.new();var combat:=Combat.new();var guns:=Guns.new();var hold:=Cargo.new()
 	if not control.configure_full_hold(bindings,cat,flight,.5) or not combat.configure_full_hold(bindings,cat,flight,.5) or not guns.configure_full_hold(bindings,cat,flight) or not hold.configure_departure(bindings,cat,flight):check(false,control.error+combat.error+guns.error+hold.error);return
 	var world: Dictionary=flight.snapshot();var cargo: Dictionary=hold.snapshot();var before: Dictionary=control.snapshot()
@@ -211,7 +222,9 @@ func verify_controller(bindings: RefCounted, cat: RefCounted, flight: RefCounted
 		frame=control.evaluate(combat,guns,150,player,frame.random_state)
 		if frame.is_empty():check(false,"Repeated cargo death: "+control.error);return
 		event=frame.actors[0];life=event.destruction.state
-		if event.destruction.breakup:broken+=1
+		if event.destruction.breakup:
+			broken+=1
+			if not npc_credit and life.cargo.eligible and RecoveryRules.available(bindings):verify_recovery(bindings,cat,library,flight,frame)
 		if event.destruction.expired:expired+=1
 		check(not event.has("death_accounting") and event.firing.is_empty() and event.movement.is_empty() and not frame.combat.collision_context(0).eligible,"Repeated pirate death fired, collided or granted another kill")
 		if life.phase=="retired":break
@@ -221,6 +234,96 @@ func verify_controller(bindings: RefCounted, cat: RefCounted, flight: RefCounted
 	frame=control.evaluate(combat,guns,150,player,frame.random_state)
 	check(not frame.is_empty() and frame.controller.snapshot()==before and frame.actors[0].decision.is_empty(),"Retired pirate still selected targets or advanced timers")
 	check(flight.snapshot()==world and hold.snapshot()==cargo,"Pirate death changed mission progress, construction or player cargo")
+
+func verify_recovery(bindings: RefCounted,cat: RefCounted,library: RefCounted,flight: RefCounted,frame: Dictionary) -> void:
+	var encounter:=Encounter.new()
+	if not encounter.configure(bindings,cat,library,flight,0.5):check(false,encounter.error);return
+	# Reuse the real generated actor's actual lethal/tumble/breakup path above.
+	# The detached tractor/hold below are equipment component vectors, not an
+	# earned fitting or a new career fixture. No input owner is rewritten.
+	encounter._control=frame.controller;encounter._combat=frame.combat;encounter._weapons=frame.weapons
+	verify_recovery_encounter(bindings,cat,encounter,0,flight.player_owner(),frame.random_state)
+
+func verify_recovery_encounter(bindings: RefCounted,cat: RefCounted,encounter: RefCounted,id: int,player_owner: RefCounted,world_random: Dictionary) -> void:
+	var original: Dictionary=encounter.snapshot()
+	var life: Dictionary=encounter.npc_destruction_owner(id).snapshot()
+	var actor: Dictionary=encounter.combat_snapshot().actors[id]
+	var seed:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"ship_id":0,"equipment_ids":[68,81]}
+	var player:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
+		"pose":Transform3D(Basis.IDENTITY,life.cargo.pose.origin-Vector3(0,0,1300)),"autopilot":false}
+	var observed:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
+		"actor_id":id,"actor_kind":actor.actor_kind,"actor_mode":4,"hull":0,"active":true,
+		"cargo_eligible":true,"cargo_model_exists":true,"retire_on_transfer":life.retire_on_transfer,
+		"body_pose":life.pose,"cargo_pose":life.cargo.pose,"cargo_entries":life.cargo.entries,
+		"collision_centers":[],"friendly":actor.get("friendly",false),"statistics_exempt":false,"body_motion_blocked":false,
+		"body_motion_detached":false,"special_cargo":false}
+	var freighter: bool=actor.get("population_group","")=="freighter"
+	if freighter:observed.freighter_position=encounter._control._flight[id].source_position()
+	for used in [0,25]:
+		var tractor:=Recovery.new();var hold:=Cargo.new()
+		if not tractor.configure(bindings,cat,seed):check(false,tractor.error);return
+		hold._state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
+			"ship_id":0,"capacity":25,"used":used,"entries":[] if used==0 else [{"item_id":118,"quantity":used}]}
+		hold._item_count=cat.tables.items.size();hold._recovery_cargo_ids=[116,117];hold._equipment_ids=[68,81]
+		if not hold.bind_recovery(tractor) or not tractor.queue_acquired_wreck(observed):check(false,hold.error+tractor.error);return
+		var source_hold: Dictionary=hold.snapshot();var source_tractor: Dictionary=tractor.snapshot()
+		var started: Dictionary=encounter.evaluate_cargo_recovery(tractor,hold,0,player)
+		if started.is_empty():check(false,encounter.error);return
+		check(started.frame.phase=="started" and started.encounter.snapshot()==original and started.cargo.snapshot()==source_hold,"Recovery start moved or transferred the real wreck")
+		if freighter and used==0:
+			# Detached numerical vectors deliberately separate integer origin
+			# from the visible body. None becomes a generated world or save.
+			var vector: Dictionary=observed.duplicate(true)
+			vector.freighter_position=Vector3i(17,-23,31)
+			var numeric: RefCounted=started.tractor.fork_for_frame()
+			if not numeric.advance(100,player,vector,source_hold):check(false,numeric.error);return
+			var changes: Dictionary=numeric.snapshot().frame.actor_changes
+			check(changes.body_pose.origin==Vector3(17,-23,-969) and changes.statistics_pose==changes.body_pose and changes.freighter_position==Vector3i(17,-23,-969),"Freighter pulling used the visible body's origin instead of retained integer coordinates")
+			for invalid in [Vector3(17,-23,31),Vector3i(0,0,-2147483600),Vector3i(2147483647,0,0)]:
+				vector.freighter_position=invalid
+				numeric=started.tractor.fork_for_frame()
+				var before: Dictionary=numeric.snapshot()
+				check(not numeric.advance(100,player,vector,source_hold) and numeric.snapshot()==before,"Invalid freighter coordinates partly advanced the recovery frame")
+		var pulled: Dictionary=started.encounter.evaluate_cargo_recovery(started.tractor,started.cargo,100,player)
+		if pulled.is_empty():check(false,started.encounter.error);return
+		var moved: Dictionary=pulled.encounter.npc_destruction_owner(id).snapshot();var body: Dictionary=pulled.encounter.combat_snapshot().actors[id]
+		var expected_statistics: Transform3D=life.statistics_pose
+		if freighter:
+			expected_statistics=life.pose
+			expected_statistics.origin=Vector3(observed.freighter_position)-Vector3(0,0,1000)
+			check(moved.pose==expected_statistics and moved.wreck_shape_origin==life.wreck_shape_origin and pulled.encounter._control._flight[id].source_position()==Vector3i(expected_statistics.origin),"Freighter pulling lost its integer origin or moved independent wreck volumes")
+		check(pulled.frame.phase=="pulling" and moved.cargo.pose.origin==life.cargo.pose.origin-Vector3(0,0,1000) and body.body_pose==moved.pose and body.pose==expected_statistics and moved.statistics_pose==expected_statistics,"Pulling confused physical cargo/body motion with the retained statistics transform")
+		var blocked: RefCounted=pulled.encounter.fork_for_frame()
+		blocked._combat=pulled.encounter._combat.fork_for_frame()
+		blocked._combat._recovery_totals=blocked.recovery_totals();blocked._combat._recovery_totals.accepted_quantity=2147483647
+		var blocked_before: Dictionary=blocked.snapshot()
+		var prior: Dictionary=pulled.encounter.snapshot();var pending: Dictionary=pulled.tractor.snapshot()
+		if used==0:
+			check(blocked.evaluate_cargo_recovery(pulled.tractor,pulled.cargo,0,player).is_empty() and blocked.recovery_totals().accepted_quantity==2147483647 and blocked.snapshot()==blocked_before and pulled.tractor.snapshot()==pending and pulled.cargo.snapshot()==source_hold,"A rejected counter update partly published its cargo/wreck transaction")
+		var picked: Dictionary=pulled.encounter.evaluate_cargo_recovery(pulled.tractor,pulled.cargo,0,player)
+		if picked.is_empty():check(false,pulled.encounter.error);return
+		var transferred: Dictionary=picked.encounter.npc_destruction_owner(id).snapshot()
+		var first:=Recovery.first_positive(life.cargo.entries)
+		var attempted:=maxi(1,mini(life.cargo.entries[first].quantity,25-used))
+		var accepted:=attempted if used==0 else 0
+		var remaining: Array=life.cargo.entries.duplicate(true);remaining[first].quantity-=attempted
+		check(picked.frame.phase=="pickup" and picked.encounter.recovery_totals().accepted_quantity==accepted and picked.cargo.snapshot().used==used+accepted,"World progress counted rejected cargo or disagreed with the actual hold")
+		if actor.actor_kind in [0,1,2,3]:
+			var history: Array=picked.encounter.combat_snapshot().reputation.events
+			check(history.size()==original.combat.reputation.events.size()+1 and history[-1].event_kind=="cargo_recovered" and history[-1].actor_id==id,"Capacity acceptance incorrectly gated or repeated the wreck's faction change")
+		if actor.actor_kind==-1:
+			check(picked.encounter.combat_snapshot().reputation==original.combat.reputation and picked.frame.events.all(func(event):return event.kind!="faction_cargo_taken"),"Debris collection borrowed the container model's faction")
+			check(transferred.phase=="destroyed" and transferred.cargo.model_id==16990 and not transferred.active,"Debris collection changed its container or retained active cargo")
+		check(picked.encounter.recovery_totals().friendly_cargo_taken==actor.get("friendly",false),"Capacity acceptance lost the source friendly-cargo flag")
+		check(not transferred.cargo.eligible and not transferred.cargo.model_exists and transferred.cargo.entries==remaining and picked.encounter.combat_snapshot().actors[id].active==not life.retire_on_transfer,"Pickup lost the first-row subtraction, remaining cargo or retained death lifetime")
+		check(encounter.snapshot()==original and tractor.snapshot()==source_tractor and hold.snapshot()==source_hold and pulled.encounter.snapshot()==prior and pulled.tractor.snapshot()==pending,"A successful recovery mutated a parent branch")
+		var repeated: RefCounted=picked.tractor.fork_for_frame();check(repeated.queue_acquired_wreck(observed),repeated.error)
+		check(picked.encounter.evaluate_cargo_recovery(repeated,picked.cargo,0,player).is_empty() and picked.encounter.recovery_totals().accepted_quantity==accepted,"A stale queued observation recovered the wreck's remaining rows again")
+		var continued: Dictionary=picked.encounter.evaluate_world(player_owner,player.pose,0,world_random)
+		if continued.is_empty():check(false,picked.encounter.error);return
+		check(continued.encounter.recovery_totals().accepted_quantity==accepted and not continued.encounter.npc_destruction_owner(id).snapshot().cargo.eligible,"The following NPC phase lost the accepted quantity or recreated transferred cargo")
+		if actor.actor_kind==-1:
+			check(continued.random_state==world_random and continued.encounter.snapshot().controller.accounting==original.controller.accounting and not continued.encounter.combat_snapshot().actors[id].active,"Collected debris replayed a drop, destruction reward or activation in the next NPC phase")
 
 func check(ok: bool, message: String):
 	checks+=1

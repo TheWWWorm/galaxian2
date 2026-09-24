@@ -11,6 +11,10 @@ const Contracts = preload("res://src/content/early_contract_definitions.gd")
 const Convoy = preload("res://src/content/convoy_world_definitions.gd")
 const Kappa = preload("res://src/content/kappa_rescue_definitions.gd")
 const Alioth = preload("res://src/content/alioth_attack_definitions.gd")
+const Sahi = preload("res://src/content/sahi_encounter_definitions.gd")
+const Dima = preload("res://src/content/dima_encounter_definitions.gd")
+const VoidCrystals = preload("res://src/content/void_crystal_definitions.gd")
+const TrafficPopulation = preload("res://src/simulation/traffic_population.gd")
 const AliothSequence = preload("res://src/simulation/alioth_attack.gd")
 const Random = preload("res://src/simulation/seeded_random.gd")
 const Vectors = preload("res://src/simulation/source_vectors.gd")
@@ -25,6 +29,7 @@ var _loop := true
 var _authored := false
 var _ambient_restart := false
 var _kappa_patrol := {}
+var _sahi_patrol := {}
 
 func configure(bindings: RefCounted, actor_id: Variant) -> bool:
 	clear()
@@ -116,6 +121,17 @@ func configure_free_generated(bindings: RefCounted,actor_id: int,context: Dictio
 	_ambient_restart=true
 	return true
 
+func configure_void_generated(bindings: RefCounted,actor_id: int,context: Dictionary) -> bool:
+	clear()
+	if bindings==null or not VoidCrystals.selected_void(bindings.mido_travel,context):return reject("Void route requires its selected and retained nonstory world")
+	var population:=TrafficPopulation.new()
+	if not population.configure_void(bindings,context) or actor_id<0 or actor_id>=population.maximum_void_actor_count():return reject("Unknown ordinary Void route owner")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated Void routes are unavailable in this pack")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=int(context.campaign_cursor)
+	return true
+
 func configure_contract_generated(bindings: RefCounted,actor_id: int,cursor:=13) -> bool:
 	clear()
 	if bindings==null or not Contracts.encounter_parameters(bindings.early_contracts):return reject("Contract routes require their source encounter declarations")
@@ -166,6 +182,31 @@ func replace_with_kappa_patrol() -> bool:
 	if _kappa_patrol.is_empty() or _points.is_empty() or _authored:return reject("Generate a Kappa fighter route before assigning its patrol")
 	_points=[_kappa_patrol.point];_candidates=[]
 	_index=_kappa_patrol.index;_loop=_kappa_patrol.loop;_authored=true
+	return true
+
+func configure_sahi_generated(bindings: RefCounted,actor_id: int,context: Dictionary) -> bool:
+	clear()
+	var post_rules=load("res://src/content/post_sahi_definitions.gd")
+	var post: bool=bindings!=null and post_rules.selected(bindings.mido_travel,context)
+	var dima: bool=bindings!=null and Dima.selected(bindings.mido_travel,context)
+	if bindings==null or not (post or dima or Sahi.selected(bindings.mido_travel,context)):return reject("Story routes require their selected source encounter")
+	var population: Dictionary=post_rules.population(bindings.mido_travel,context) if post else (Dima.population(bindings.mido_travel,context) if dima else bindings.mido_travel.sahi_encounter.population)
+	if population.is_empty():return reject("Dima routes require the relocated portal position")
+	if actor_id<0 or actor_id>=int(population.actor_count):return reject("Unknown Sahi route owner")
+	var data: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("routes",{})
+	if not Definitions.parameters(data):return reject("Generated Sahi routes are unavailable")
+	_configure_generated(bindings,actor_id,data)
+	_identity.campaign_cursor=int(context.campaign_cursor)
+	if not post and not dima and population.actor_route_ids.any(func(value):return int(value)==actor_id):
+		_sahi_patrol={"points":population.waypoints.map(func(point):return Vector3(point[0],point[1],point[2])),
+			"index":int(population.route_initial_index),"loop":bool(population.actor_route_loop)}
+	return true
+
+func replace_with_sahi_patrol() -> bool:
+	error=""
+	if _sahi_patrol.is_empty() or _points.is_empty() or _authored:return reject("Generate a Sahi fighter route before assigning its authored patrol")
+	_points=_sahi_patrol.points.duplicate();_candidates=[]
+	_index=_sahi_patrol.index;_loop=_sahi_patrol.loop;_authored=true
 	return true
 
 func configure_kappa_player(bindings: RefCounted) -> bool:
@@ -287,11 +328,11 @@ func fork_for_frame() -> RefCounted:
 	copy._points=_points.duplicate();copy._candidates=_candidates.duplicate();copy._index=_index
 	copy._loop=_loop;copy._authored=_authored
 	copy._ambient_restart=_ambient_restart
-	copy._kappa_patrol=_kappa_patrol.duplicate(true)
+	copy._kappa_patrol=_kappa_patrol.duplicate(true);copy._sahi_patrol=_sahi_patrol.duplicate(true)
 	return copy
 
 func clear() -> void:
-	error="";_identity={};_definition={};_points=[];_candidates=[];_index=0;_loop=true;_authored=false;_ambient_restart=false;_kappa_patrol={}
+	error="";_identity={};_definition={};_points=[];_candidates=[];_index=0;_loop=true;_authored=false;_ambient_restart=false;_kappa_patrol={};_sahi_patrol={}
 
 func reject(message: String) -> bool:
 	error=message

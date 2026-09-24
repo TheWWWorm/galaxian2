@@ -4,6 +4,7 @@ const ArrivalEnvironment=preload("res://src/simulation/local_arrival_environment
 const ArrivalRules=preload("res://src/content/local_arrival_environment_definitions.gd")
 const PlanetLayout=preload("res://src/simulation/opening_planet_layout.gd")
 const Travel=preload("res://src/content/mido_travel_definitions.gd")
+const SahiHistory=preload("res://tests/fixtures/sahi_location_history.gd")
 
 func _initialize():
 	var args:=OS.get_cmdline_user_args()
@@ -53,10 +54,31 @@ func verify(args: PackedStringArray):
 	check(not environment.configure(bindings,cat,95,foreign) and environment.snapshot()==before,"Arrival accepted a cache selecting a different station")
 	check(not environment.configure(bindings,cat,56,foreign) and environment.snapshot()==before,"Unsupported pending story location changed prepared arrival")
 	check(environment.player_pose(Basis(Vector3.ZERO,Vector3.ZERO,Vector3.ZERO))==null and environment.snapshot()==before,"Invalid initial heading changed prepared arrival")
+	if load("res://src/content/post_sahi_definitions.gd").available(bindings):verify_sahi_history(bindings,cat,lib)
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
 	for key in ArrivalRules.SPANS:
 		var invalid: Dictionary=bindings.mido_travel.duplicate(true);invalid.provenance.erase(key)
 		check(not Travel.validate(invalid,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Missing arrival proof was accepted: "+key)
+
+func verify_sahi_history(bindings: RefCounted,cat: RefCounted,lib: RefCounted) -> void:
+	var fixture:=SahiHistory.new();var history: RefCounted=fixture.create(bindings,cat,lib)
+	if history==null:check(false,fixture.error);return
+	var before: Dictionary=history.snapshot()
+	check(before.locations.map(func(row):return int(row.station_id))==[55,45,48] and before.current_station_id==48,"Selected Sahi cache lost its generated FIFO history")
+	var environment:=ArrivalEnvironment.new()
+	if not environment.configure(bindings,cat,48,history,26):check(false,environment.error);return
+	var arrival: Dictionary=environment.snapshot()
+	check(arrival.source=="cached_planet" and arrival.cache_station_id==45 and arrival.planet_index==1 and arrival.location_order==[55,45,48],"Sahi return did not select insertion index1 from retained history")
+	check(arrival.position==arrival.planets.entries[1].origin*4.0 and history.snapshot()==before,"Sahi return changed the source planet position or retained locations")
+	var revisit:={"station_id":45,"campaign_cursor":24,"rank":0,"reputation":{"axes":[0,0],"override":-1}}
+	if not history.select_location(bindings,cat,lib,revisit,SahiHistory.SETTINGS,before.random,1700000045):check(false,history.error);return
+	check(history.snapshot().locations==before.locations and history.snapshot().history==before.history and history.snapshot().random==before.random,"A cached revisit reordered visits or regenerated stock and contacts")
+	check(not environment.configure(bindings,cat,48,history,26) and environment.snapshot()==arrival,"Sahi arrival accepted a cache currently selecting a different station")
+	revisit.station_id=48
+	if not history.select_location(bindings,cat,lib,revisit,SahiHistory.SETTINGS,before.random,1700000048):check(false,history.error);return
+	check(history.snapshot()==before and environment.configure(bindings,cat,48,history,26) and environment.snapshot()==arrival,"Returning to a cached Sahi destination changed insertion order or its arrival")
+	var missing:=Cache.new();check(missing.configure(bindings),missing.error)
+	check(not environment.configure(bindings,cat,48,missing,26) and environment.snapshot()==arrival,"Sahi arrival accepted a cache without matching destination history")
 
 func select(cache: RefCounted,bindings: RefCounted,cat: RefCounted,lib: RefCounted,station: int) -> bool:
 	var context:={"station_id":station,"campaign_cursor":13 if station<95 else 18,"rank":0,"reputation":{"axes":[0,0],"override":-1}}

@@ -11,7 +11,7 @@ var local_packet:={}
 var local_equipment: RefCounted
 
 func run():
-	var args:=OS.get_cmdline_user_args()
+	var args:=training_arguments()
 	check(args.size() in [3,4],"Expected explicit Mac content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:verify(args.slice(0,3))
 	check(local_departure_verified,"The native training return did not reach local departure verification")
@@ -33,11 +33,11 @@ func after_training_reload(cat: RefCounted, station: RefCounted):
 	check(station.snapshot()==before and prepared.snapshot().equipment==before.equipment,"Conversation preparation applied the future equipment exchange")
 	for i in 11:
 		var line: Dictionary=prepared.snapshot()
-		check(line.campaign_cursor==9 and line.dialogue.text_id==1747+i and line.equipment==before.equipment,"A local line advanced progress or exchanged equipment early")
+		check(line.campaign_cursor==9 and line.dialogue.text_id==int(bindings.mido_travel.conversations[0].events[i].text_id) and line.equipment==before.equipment,"A local line advanced progress or exchanged equipment early")
 		check(prepared.prepare_departure(bindings,cat).is_empty(),"Local conversation launched before final acknowledgement")
 		if i==1:
-			check(prepared.previous() and prepared.snapshot().dialogue.text_id==1747,"Local dialogue lost previous-line navigation")
-			check(prepared.acknowledge() and prepared.snapshot().dialogue.text_id==1748,"Local dialogue lost explicit next-line navigation")
+			check(prepared.previous() and prepared.snapshot().dialogue.text_id==int(bindings.mido_travel.conversations[0].events[0].text_id),"Local dialogue lost previous-line navigation")
+			check(prepared.acknowledge() and prepared.snapshot().dialogue.text_id==int(bindings.mido_travel.conversations[0].events[1].text_id),"Local dialogue lost explicit next-line navigation")
 		check(prepared.acknowledge(),prepared.error)
 	var ready: Dictionary=prepared.snapshot()
 	check(ready.phase=="local_departure_required" and ready.campaign_cursor==10 and ready.acknowledged and ready.local_conversation_acknowledged,"The completed local conversation did not select departure")
@@ -114,10 +114,10 @@ func verify_local_session(args: PackedStringArray):
 		check(session.can_control() and session.flight_hud_visible() and not session.snapshot().dialogue.visible,"Local session failed to release flight without a modal")
 		check(not host.touch_overlay.visible and not host._flight_actions.visible and not host._pause_button.visible,"Desktop local flight exposed touch action buttons")
 		check(session.briefing_audio.snapshot().history.is_empty() and session.objective_audio.snapshot().history.is_empty(),"Local visit played another mission's speech")
-		key_down(KEY_W)
+		key_down(KEY_UP)
 		for i in 3:
 			if not training_app_step():return
-		key_up(KEY_W)
+		key_up(KEY_UP)
 		check(session.snapshot().player_pose!=initial.player_pose and session.snapshot().angular_units.x<0,"Local keyboard steering did not reach native flight")
 		key_down(KEY_SPACE)
 		if not training_app_step():return
@@ -320,13 +320,13 @@ func verify_local_session_journey(args: PackedStringArray, existing: Node=null):
 
 func verify_local_map_interface(args: PackedStringArray, session: Node):
 	var before: Dictionary=session.snapshot()
-	key_down(KEY_SPACE);key(KEY_M)
+	key_down(KEY_SPACE);check(choose_keyboard_flight_action(KEY_E,"map"),"E action menu did not open the map")
 	check(session.map_open() and session.map_active() and host.map_panel.visible and not session.can_control(),"Keyboard map failed to take flight input")
 	check(session.flight_audio.snapshot().paused and not host._controls.snapshot().held.fire,"Map retained held fire or unpaused flight sound")
 	if not session.map_open():return false
 	if not training_app_step():return false
 	check(session.snapshot()==before,"Map time advanced movement, cargo, combat, scanning or mission state")
-	key(KEY_SPACE);key(KEY_EQUAL)
+	key(KEY_SPACE);key(KEY_BRACKETRIGHT)
 	check(not host._controls.snapshot().held.fire and session.snapshot()==before,"Map forwarded flight actions")
 	host.map_panel.select_station(78);host.map_panel.request_confirmation()
 	check(host.map_panel.snapshot().diagnostic==lib.strings[408] and not host.map_panel.snapshot().confirmation_visible,"Map allowed travel to the current station")
@@ -411,7 +411,7 @@ func verify_local_session_arrival(args: PackedStringArray, departing: Node):
 	check(station.station_name=="Kernstal" and station.snapshot().campaign_cursor==10,"Destination station reused another location")
 	for i in 10:
 		if not training_app_step():return
-	check(station.snapshot().conversation_started and station.snapshot().dialogue.text_id==1758,"Kernstal's delayed conversation did not start")
+	check(station.snapshot().conversation_started and station.snapshot().dialogue.text_id==int(bindings.mido_travel.conversations[1].events[0].text_id),"Kernstal's delayed conversation did not start")
 	if args.size()==4:
 		await capture(args[3],"kernstal-station")
 		await capture_phone(args[3],"kernstal-station-phone")

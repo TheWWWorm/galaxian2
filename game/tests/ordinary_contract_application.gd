@@ -73,7 +73,7 @@ func verify_delivery_route(original: Dictionary,before: Dictionary,offer: Dictio
 	check(pending.contracts.credits==accepted.contracts.credits and pending.contracts.completed_side_missions==accepted.contracts.completed_side_missions and pending.cargo==accepted.cargo,"Opening the result paid or removed cargo before acknowledgement")
 	check(not app._hangar_button.visible and not app._launch_button.visible,"The delivery acknowledgement retained conflicting station actions")
 	await capture_free_application("ordinary-contract-result-desktop")
-	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.set_touch_controls(true)
+	root.size=Vector2i(960,540);app.set_mobile_layout(true);TouchInput.set_preference(app,true)
 	await process_frame;resume_application_focus();app.present_session()
 	check(app.lounge_panel._mobile and app.lounge_panel._yes.size.y>=44,"The landscape result lost its larger touch control")
 	await capture_free_application("ordinary-contract-result-mobile-landscape")

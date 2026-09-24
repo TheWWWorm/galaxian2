@@ -1,10 +1,10 @@
 """Original Mac convoy EMP sprite declarations, verified at import only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_convoy_effects(mach,arrival):
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
-    return (copy.deepcopy(VALUES),proof) if proof else ({},{})
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
+    return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'mido_convoy_emp_sprites',
  'campaign_cursor': 14,
@@ -123,6 +123,65 @@ LAYOUTS = {'convoy_effects_inherited_presets': [491693,
                                       '__text',
                                       '5a5cfab42fd6a7be334cccb91c5320b913260990ce41601961fddeb03cba49a6'],
  'convoy_effects_unanimated_uv': [523561,
+                                  16,
+                                  '__text',
+                                  '78b91d6dfdfcae52a3b0bfd28e1b1d46c84edb46546e167a1fc10fcb110e7325']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'convoy_effects_inherited_presets': [492221,
+                                      2241,
+                                      '__text',
+                                      'd691f0adeb3ca0ca3caf9471f58d863fb46061dd503fb522e8e211e84c00b9ff'],
+ 'convoy_effects_handle_defaults': [607055,
+                                    36,
+                                    '__text',
+                                    'fb2a902876bf4cee3124c3b48afcd69e2a56677a820a9fae92cb392765c2fc1d'],
+ 'convoy_effects_registrations': [609305,
+                                  132,
+                                  '__text',
+                                  '4ad8964f25ec62eecaeb7c7560554cbf60b3a82044049eb6ccbf1968c87e7b1f'],
+ 'convoy_effects_manager': [-43286, 44, '__text', '306736d5860c462daa827a1759ef0db500bfd196bb4f014ed1166e738f8f6f67'],
+ 'convoy_effects_nozzle_manager': [-43546,
+                                   44,
+                                   '__text',
+                                   '89d1650a4d86ed0e3a07f603d5af6eadeda6c8e70a3d3f87791205024e6c176a'],
+ 'convoy_effects_activation': [154023,
+                               405,
+                               '__text',
+                               '081ea4caffaa6fb4daa9e85dc38590b76aebc487658edd1a5ade248775cae877'],
+ 'convoy_effects_capture_view_stop': [155213,
+                                      117,
+                                      '__text',
+                                      '1acd4a3bf1cde46997e37a33f424dd6d9c36235e207fb48919b56d77d7f10878'],
+ 'convoy_effects_emission_visibility': [512170,
+                                        104,
+                                        '__text',
+                                        '3c6c2bad3c7338ede2b97892f2a0d0f85eab5203fe70487663856d0bcd83f2f2'],
+ 'convoy_effects_retarget_dispatch': [513122,
+                                      56,
+                                      '__text',
+                                      'df90fe7506d74e36935ad7284df018603ff5d0c6d56eb97d1e24820ae19f49a4'],
+ 'convoy_effects_retarget_state': [521434,
+                                   18,
+                                   '__text',
+                                   '0aefff26eee55d550c47bfb7cd84791c9978e56fa73828bb172b91c83b71ba38'],
+ 'convoy_effects_manager_flags': [509582,
+                                  242,
+                                  '__text',
+                                  '12a129b4ee7748c1cb7ab2a9573590c21c4475dcf7ab0e6a8fd9943374b108ea'],
+ 'convoy_effects_sprite_registration': [511506,
+                                        250,
+                                        '__text',
+                                        'f920cf346c608665e24471370fee1641149fad255427f9d07f5ca22fd609062b'],
+ 'convoy_effects_brightness_fade': [514280,
+                                    392,
+                                    '__text',
+                                    '56bdf591ec367dab82c66548bb1ccb559023f68e45821b800ecbb483a3b72b1b'],
+ 'convoy_effects_initial_mirroring': [516356,
+                                      168,
+                                      '__text',
+                                      'a14cc4e26e58e7228934c5f9ee45e547df4bbdd2d7fdfec1406feb694bee8dcd'],
+ 'convoy_effects_unanimated_uv': [524097,
                                   16,
                                   '__text',
                                   '78b91d6dfdfcae52a3b0bfd28e1b1d46c84edb46546e167a1fc10fcb110e7325']}

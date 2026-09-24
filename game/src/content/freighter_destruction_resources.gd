@@ -29,6 +29,10 @@ func configure_alioth_attack(library: RefCounted,bindings: RefCounted) -> bool:
 	if rules.is_empty():return reject("Alioth freighter destruction is unavailable in this content pack")
 	return _configure_resources(library,bindings,rules)
 
+func _configure_story(library: RefCounted,bindings: RefCounted,data: Dictionary) -> bool:
+	error="";_state={}
+	return _configure_resources(library,bindings,data.freighter_death)
+
 func configure_free(library: RefCounted,bindings: RefCounted,construction: RefCounted) -> bool:
 	error="";_state={}
 	if not construction is Construction:return reject("Ordinary freighter resources require their population")

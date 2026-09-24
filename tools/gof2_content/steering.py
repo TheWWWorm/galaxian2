@@ -3,6 +3,12 @@ import math
 import re
 import struct
 from .ship_models import section_bytes
+from .opening_loadout import template
+
+MAC_HELPERS = (
+    '554889e54883ec504889f848ba3c00000000000000488975f8f30f1145f4f30f114df0f30f1155ecf30f5a45f4',
+    '554889e54883ec404889f8488975f8f30f1145f4f30f114df0f30f1155ecf30f5a45f4',
+)
 
 
 def lit(value):
@@ -17,7 +23,7 @@ def extract_manual_rotation(mach, cruise):
     base = text['address']
     if mach.architecture == 'x86_64':
         consumer = lit('f3410f10842414030000f30f59c1f30f59c3f30f59c4f30f59c2f3410f598c2418030000f30f59cbf30f59ccf30f59caf3410f10104c89f6e8') + rb'(.{4})'
-        helper = bytes.fromhex('554889e54883ec504889f848ba3c00000000000000488975f8f30f1145f4f30f114df0f30f1155ecf30f5a45f4')
+        helper = MAC_HELPERS
     elif mach.architecture == 'armv7':
         import capstone
         decoder = capstone.Cs(capstone.CS_ARCH_ARM, capstone.CS_MODE_THUMB)
@@ -25,7 +31,7 @@ def extract_manual_rotation(mach, cruise):
         consumer = (rb'(.{4})' + lit('94ed9d1a94ed9e2a') + rb'.{4}' + lit('41ff104d') + rb'.{4}'
                     + lit('42ff102d') + rb'(.{4})' + lit('784444ff900d006842ff902d') + rb'(.{4})'
                     + lit('48ff300d48ff322d00ff901d02ff900d11ee102a10ee103a90ed000a28a88ded000a20ef1001') + rb'(.{4})')
-        helper = bytes.fromhex('80b56f468eb043ec103bb0ee402a42ec102bb0ee404a97ed026a3c22')
+        helper = ('80b56f468eb043ec103bb0ee402a42ec102bb0ee404a97ed026a3c22',)
     else:
         return {}
     matches = [m for m in re.finditer(consumer, code, re.S)
@@ -80,9 +86,12 @@ def extract_manual_rotation(mach, cruise):
         regions.append({'offset': offset + mach.slice_offset, 'bytes': 4})
     if values[0] > 1 or values[1] > 10 or values[2] > 1:
         return {}
-    found = section_bytes(mach, target, len(helper), b'__text')
-    if found is None or found[0] != helper:
+    helpers = [found for spec in helper
+               if (found := section_bytes(mach, target, len(bytes.fromhex(spec)), b'__text'))
+               and template(spec).fullmatch(found[0])]
+    if len(helpers) != 1:
         return {}
-    regions.append({'offset': found[1], 'bytes': len(helper)})
+    found = helpers[0]
+    regions.append({'offset': found[1], 'bytes': len(found[0])})
     return dict(zip(('angle_unit_scale', 'radians_per_turn', 'time_scale'), values),
                 rotation_order='local_x_y', provenance=regions)

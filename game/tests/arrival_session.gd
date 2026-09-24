@@ -17,6 +17,7 @@ var captures:=""
 func _initialize():call_deferred("run")
 func run():
 	var args:=OS.get_cmdline_user_args()
+	captures=OS.get_environment("GOF2_CAPTURE_DIR")
 	if not args.is_empty() and args[0].begins_with("--captures="):captures=args[0].trim_prefix("--captures=");args.remove_at(0)
 	check(args.size()==3,"Expected one Mac content/bindings/visual triple")
 	if args.size()==3:await verify(args)

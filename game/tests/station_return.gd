@@ -34,6 +34,7 @@ var docked: RefCounted
 func _initialize():call_deferred("run")
 func run():
 	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
 	check(args.size() in [3,4],"Expected Mac content, bindings, visuals and optional capture directory")
 	if args.size() in [3,4]:await verify(args)
 	print("Station return: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
@@ -45,6 +46,9 @@ func verify(args: PackedStringArray):
 	check(header.architecture=="x86_64","This verification is Mac only")
 	if not bindings.station_return.is_empty():
 		check(Definitions.validate(bindings.station_return,header.source_executable_bytes,header.architecture,bindings.arrival_staging,bindings.first_flight).is_empty(),"Station return declarations were refused")
+		var other: Dictionary=(Definitions.VALUES if int(bindings.station_return.events[0].text_id)==int(Definitions.MAC_VALUES.events[0].text_id) else Definitions.MAC_VALUES).duplicate(true)
+		other.provenance=bindings.station_return.provenance.duplicate(true)
+		check(not Definitions.validate(other,header.source_executable_bytes,header.architecture,bindings.arrival_staging,bindings.first_flight).is_empty(),"Station return accepted another source's conversation with these proofs")
 		for key in Definitions.VALUES:
 			var bad: Dictionary=bindings.station_return.duplicate(true);bad[key]=null
 			check(not Definitions.parameters(bad),"Changed station return parameter accepted: "+key)
@@ -126,7 +130,7 @@ func mine_and_acknowledge() -> RefCounted:
 		if flight.dialogue_visible():break
 		flight=flight.evaluate(100)
 		if flight==null:check(false,"Mined-cargo mission poll failed");return null
-	check(flight.snapshot().dialogue.text_id==1706 and flight.prepare_station().is_empty(),"Unacknowledged cargo entered station")
+	check(flight.snapshot().dialogue.text_id==int(bindings.mining_objective.events[0].text_id) and flight.prepare_station().is_empty(),"Unacknowledged cargo entered station")
 	for i in 3:flight=flight.navigate("next")
 	if flight==null:check(false,"Return instructions failed");return null
 	check(flight.snapshot().campaign_cursor==3 and flight.snapshot().cargo.used==25 and flight.snapshot().station_return_required,"Acknowledgement lost earned cargo or its return mission")
@@ -204,7 +208,7 @@ func verify_arrival():
 	check(not station.previous() and station.snapshot()==before,"First return line navigated backward")
 	for i in 5:
 		var current: Dictionary=station.snapshot()
-		check(current.dialogue.text_id==1711+i and current.dialogue.speaker_id==[2,0,2,0,2][i] and current.cargo==accepted.cargo and current.campaign_cursor==3,"Return line removed cargo or changed source dialogue")
+		check(current.dialogue.text_id==int(bindings.station_return.events[i].text_id) and current.dialogue.speaker_id==[2,0,2,0,2][i] and current.cargo==accepted.cargo and current.campaign_cursor==3,"Return line removed cargo or changed source dialogue")
 		check(station.prepare_departure(bindings,cat).is_empty() and station.snapshot()==current,"Return conversation allowed early departure or changed state")
 		check(station.acknowledge(),station.error)
 	var finished: Dictionary=station.snapshot()
@@ -254,7 +258,7 @@ func verify_presentation(args: PackedStringArray):
 		if language in ["gb","de"]:check(speech.configure_station_return(lib,bindings),speech.error)
 		for i in 5:
 			var state: Dictionary=station.snapshot()
-			check(panel.present(state) and panel._body.text==lib.strings[1711+i],"Wrong return localization: "+language)
+			check(panel.present(state) and panel._body.text==lib.strings[int(bindings.station_return.events[i].text_id)],"Wrong return localization: "+language)
 			if language in ["gb","de"]:
 				check(speech.present(i) and speech._player!=null and speech.snapshot().history.back().source_id==411+i,"Wrong return voice")
 				var history: Array=speech.snapshot().history;speech.present(i);check(speech.snapshot().history==history,"Repainting restarted speech")

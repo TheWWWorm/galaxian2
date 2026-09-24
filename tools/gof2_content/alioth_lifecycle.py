@@ -1,10 +1,10 @@
 """Alioth-specific composition of ordinary NPC lifecycle declarations."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_alioth_lifecycle(mach,arrival):
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
-    return (copy.deepcopy(VALUES),proof) if proof else ({},{})
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
+    return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'alioth_attack_lifecycle',
  'campaign_cursor': 16,
@@ -76,6 +76,60 @@ LAYOUTS = {'alioth_lifecycle_target_opposition': [614204,
                                   '__text',
                                   'fd0da3d850f75ea9a1bff6c2779caf478f3180a7fbe79bef18f0b8d76739bc78'],
  'alioth_lifecycle_freighter_wreck_table': [638178,
+                                            20,
+                                            '__text',
+                                            'de6e6debcec626d191654edde387c465fcd9775a9e266ee12caebb9ab3827d1c']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'alioth_lifecycle_target_opposition': [614752,
+                                        102,
+                                        '__text',
+                                        '62b39b30851db0c25b74f07c5aee28274bf4cf016e532e6005cbd3c3b39f30a0'],
+ 'alioth_lifecycle_freighter_factory': [80265,
+                                        13,
+                                        '__text',
+                                        'a1264f8686983324a5c263bc9109bd8311afcc9f7eee946b5ceb496a68fc7d35'],
+ 'alioth_lifecycle_small_constructor': [605720,
+                                        2562,
+                                        '__text',
+                                        '69ffded45ed01c0720d4524c45cb78a5be444af55b84ea7c93f85df3bf003325'],
+ 'alioth_lifecycle_freighter_update': [634682,
+                                       4064,
+                                       '__text',
+                                       '1fcae1e52a8e660198a8848c7aaf10a4d899c62314132da2eb1fcbd6462569f7'],
+ 'alioth_lifecycle_death_model': [634134,
+                                  336,
+                                  '__text',
+                                  '749376daa2364b02e990cdfdb75449de79c1aa5e426db70ca83dba025b77155c'],
+ 'alioth_lifecycle_cargo_model': [-77266,
+                                  246,
+                                  '__text',
+                                  '19766516b9a3016a5f6ee02277c456563061ba01343c3edf5abc260c5bc9e1f3'],
+ 'alioth_lifecycle_friendship': [536188,
+                                 28,
+                                 '__text',
+                                 '29f61672e56345b7cd33246f9865630c51342b38086156ed5ac59e432e6804c6'],
+ 'alioth_lifecycle_normal_hit': [539472,
+                                 1846,
+                                 '__text',
+                                 '407b208cd78b7b7e70b5bc505bc9509f70781ad9d1af9c2b9a9f80104cd54242'],
+ 'alioth_lifecycle_reputation': [808494,
+                                 184,
+                                 '__text',
+                                 '4776f5a1b8fe49b57a997912089fc31e318347df429100480034401ee0ced2aa'],
+ 'alioth_lifecycle_reputation_axis': [808678,
+                                      184,
+                                      '__text',
+                                      '48b146881bbcd041e6fa4b24bc767946e1499bffd52f1a9994b56153fea7ecd4'],
+ 'alioth_lifecycle_secondary_faction': [735306,
+                                        76,
+                                        '__text',
+                                        '433abfe7fa1b346202bfe1cb54dae5907afbb6497173385ce1b574fe8cfdde65'],
+ 'alioth_lifecycle_world_death': [106510,
+                                  1044,
+                                  '__text',
+                                  'b2b3dd33cbc5f7ce937530800f3e23c5fa9b2e6630f92dd194b7cff902d9baab'],
+ 'alioth_lifecycle_freighter_wreck_table': [638726,
                                             20,
                                             '__text',
                                             'de6e6debcec626d191654edde387c465fcd9775a9e266ee12caebb9ab3827d1c']}

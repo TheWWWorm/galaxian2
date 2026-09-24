@@ -121,8 +121,9 @@ func view(scene: Dictionary) -> Dictionary:
 
 static func target_pose(shot: Dictionary, scene: Dictionary) -> Dictionary:
 	if scene.get("base_content_id") != shot.get("base_content_id") or scene.get("binding_id") != shot.get("binding_id"): return {"error": "Scene belongs to another opening content identity"}
-	if shot.get("target") not in ["player", "actor", "environment"]: return {"error": "Unknown camera target selector"}
+	if shot.get("target") not in ["player", "actor", "environment", "probe"]: return {"error": "Unknown camera target selector"}
 	var target: Variant = scene.get("player_pose")
+	if shot.target=="probe":target=scene.get("probe_pose")
 	if shot.target == "environment":
 		if not Numbers.integer(shot.get("slot"),0,2147483647):return {"error":"Invalid environment camera slot"}
 		target=scene.get("environment",{}).get(shot.slot)

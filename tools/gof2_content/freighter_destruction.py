@@ -1,11 +1,11 @@
 """Original early Mido freighter lifecycle declarations, without executable code."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 from .ambient_combat import VALUES as COMBAT_VALUES
 
 def extract_freighter_destruction(mach,arrival,combat):
     if not isinstance(combat,dict) or any(combat.get(key)!=value for key,value in COMBAT_VALUES.items()):return {}
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
+    _variant,proof=hashed_variants(mach,arrival,[LAYOUTS,MAC_ALTERNATE])
     if not proof:return {}
     result=copy.deepcopy(VALUES);result['provenance']=proof
     return result
@@ -141,6 +141,76 @@ LAYOUTS = {'freighter_update': [634134,
                           '__const',
                           '54e347282ecf0fd46f002970fa012534725e0bf3b2ad2f4ca0efc0134d7e1d28'],
  'cargo_angle_tau': [1575058,
+                     4,
+                     '__const',
+                     '12d85026b5109a3119231704608d5991a63d8d397d2867a9fc522305810ddb76']}
+
+
+MAC_ALTERNATE = {'freighter_update': [634682,
+                      4064,
+                      '__text',
+                      '1fcae1e52a8e660198a8848c7aaf10a4d899c62314132da2eb1fcbd6462569f7'],
+ 'death_model': [634134, 336, '__text', '749376daa2364b02e990cdfdb75449de79c1aa5e426db70ca83dba025b77155c'],
+ 'freighter_draw': [638810,
+                    174,
+                    '__text',
+                    'b3b1b44de4dde187e14b48960031b627bd0edc0ac0ebad64bcc93dbd1ae92b66'],
+ 'cargo_model': [-77266, 246, '__text', '19766516b9a3016a5f6ee02277c456563061ba01343c3edf5abc260c5bc9e1f3'],
+ 'cargo_predicate': [-77020,
+                     46,
+                     '__text',
+                     'aed362171a1efcc1573ca914f849a0cf2e804fc570aeb6b3ee85124aae88df77'],
+ 'active_setter': [-78854, 18, '__text', 'f658c35ebe2675aacd5f6b934f50394778f1d20395bdd4acce1c39b740fd452f'],
+ 'wreck_reader': [-683190, 398, '__text', '50f85dfe16696f020692df1af63e1dddf73339d828db2dea33f53fee2dccbd8a'],
+ 'wreck_volumes': [-221138,
+                   888,
+                   '__text',
+                   '0e3bc234ea666b8347d9ccfcbb3d0b4d59d5661d4d685382ccb8a8b2667480e5'],
+ 'freighter_point': [639380,
+                     218,
+                     '__text',
+                     'f3939053e839e83f54fc8886f028bf8daef9d07c152b299addb966381e760e57'],
+ 'effect_fragments': [-688202,
+                      482,
+                      '__text',
+                      'a00d2fbcdd159747612c2553d63d25a73bc82190def9c338e96383ba938d17a5'],
+ 'effect_reset': [-688792, 424, '__text', 'a5fcd67a285f31504f74894f2e18953c7256df08b7ba8413d9cddc7350a76bab'],
+ 'effect_scale': [-689150, 358, '__text', 'f2c2502a7871acd051f6321146b3565907cec880201a0ed46a8d6f9be4fe3bcb'],
+ 'effect_trigger': [-687254,
+                    484,
+                    '__text',
+                    '6bebbe94e3c5af68f3f2122a37e51694e20e09d100d29dbb99087cf531739190'],
+ 'effect_sound': [-687710, 456, '__text', '8cb9be771fc5ae5fcb31e23e0d75f04b95c01fa9e0dd2e213b8b6f3a2efadaad'],
+ 'hostile_death': [106510,
+                   1044,
+                   '__text',
+                   'b2b3dd33cbc5f7ce937530800f3e23c5fa9b2e6630f92dd194b7cff902d9baab'],
+ 'nonhostile_death': [107650,
+                      12,
+                      '__text',
+                      '1af7d34d1aa1e74ac404afe1770303291e5a353ea9e56208c80d45e035f47db6'],
+ 'animation_mode': [1068258,
+                    112,
+                    '__text',
+                    '6a2cefce45fb6d05eebc13e900db1d549828f2dd81fa64dd34e89e0b48f9c6f0'],
+ 'animation_step': [1068764,
+                    309,
+                    '__text',
+                    'a7d2b484016cda377ca81084dc81177b47a717b8a29e80c7a6d75a39fed278ce'],
+ 'wreck_box_scale': [1532770,
+                     4,
+                     '__const',
+                     'e7d9a957c3c942d3551b291f30acbb11064e373eb6adcf4dc54671f8a64f965f'],
+ 'wreck_sphere_scale': [1531934,
+                        4,
+                        '__const',
+                        '8e215ece122cf70ebe3556a0318fa6c395d1766375c3edc080967e4a09592401'],
+ 'effect_scales': [1563890, 8, '__const', '85ed843f43023b0b591590f8a434969b030ec3675cf17ca36fc2de030418c5dc'],
+ 'cargo_angle_fraction': [1550078,
+                          4,
+                          '__const',
+                          '54e347282ecf0fd46f002970fa012534725e0bf3b2ad2f4ca0efc0134d7e1d28'],
+ 'cargo_angle_tau': [1550122,
                      4,
                      '__const',
                      '12d85026b5109a3119231704608d5991a63d8d397d2867a9fc522305810ddb76']}

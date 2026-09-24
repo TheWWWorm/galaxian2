@@ -62,9 +62,15 @@ def extract_scenery_population(mach):
     def require(value):
         if not value:raise ValueError('Unsupported scenery population')
     def match(key,at,size,spec):
-        row=section_bytes(mach,at,size,b'__text');require(row is not None)
-        result=template(spec).fullmatch(row[0]);require(result is not None)
-        proof[key]={'offset':row[1],'bytes':size};return result
+        choices = [(size, spec)] + (MAC_ALTERNATES.get(key, []) if mac else [])
+        matches = []
+        for length, layout in choices:
+            row = section_bytes(mach, at, length, b'__text')
+            if row is not None and (result := template(layout).fullmatch(row[0])):
+                matches.append((row, result, length))
+        require(len(matches) == 1)
+        row, result, length = matches[0]
+        proof[key]={'offset':row[1],'bytes':length};return result
     def target(m,key,at,kind='bl'):
         if mac:return at+m.end(key)+int.from_bytes(m[key],'little',signed=True)
         rows=list(md.disasm(m[key],at+m.start(key)))
@@ -104,3 +110,14 @@ MAC_DRAW='554889e54883ec4048897df08975ec488b7df08b75ecb8000000002b45ec21f03b45ec
 ARM_DRAW='80b56f4687b00022c0f200020590049105980499049bd21a1140049a914201900ed104981f21019a00901046 {first:4} 009981fb0001c00f40ea4100069015e01f21c0f200010198 {repeat:4} 039003980499 {modulo:4} 029003980299401a0499013908440028ebdb02980690069807b080bd'
 MAC_BITS='554889e548897df88975f4488b7df848c745e8e6ecde05488b45e848c1e008480d6d000000488945e8488b07480faf45e848050b00000048b9ffffffffffff00004821c148890f488b07be300000002b75f489f148d3f889c689f05dc3'
 ARM_BITS='90b501af85b06c4624f00704a546049003910498002101914ef6e641c0f2de510091052101914ef26d61cdf6ec61009102684368a2fb019c02eb8202624403fb012119f10b0241f1000189b2026041600398c0f13003c0f1100021fa00f9c3f1200c01fa0cf122fa03f241ea02010028a8bf49460846a7f10404a54690bd'
+
+# Equivalent register allocations around the same 48-bit seed/multiplier and
+# bounded rejection sampler. Keep complete alternatives to reject mixed layouts.
+MAC_ALTERNATES = {
+    'seed': [(69, MAC_SEED.replace('4821f8488906', '4821c748893e'))],
+    'draw': [(170, MAC_DRAW.replace('21f03b45ec', '21c63b75ec')
+                          .replace('480faff948c1ff1f89f8', '480fafcf48c1f91f89c8')
+                          .replace('e946000000', 'e945000000')
+                          .replace('01c181f9000000000f8cc0ffffff', '01c83d000000000f8cc1ffffff'))],
+    'bits': [(93, MAC_BITS.replace('4821c148890f', '4821c8488907'))],
+}

@@ -4,13 +4,14 @@ This capability supplies construction rules. It does not unlock travel or claim
 that all associated actor behavior has been implemented.
 """
 import copy
-from .station_exterior import hashed_declarations
-from .mido_travel import VALUES as TRAVEL_VALUES
+from .station_exterior import hashed_variants
+from .mido_travel import VALUES as TRAVEL_VALUES, MAC_VALUES as TRAVEL_MAC_VALUES
 
 def extract_ambient_population(mach, arrival, travel):
-    if not isinstance(travel,dict) or any(travel.get(key)!=value for key,value in TRAVEL_VALUES.items()):return {}
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
+    if not isinstance(travel,dict):return {}
+    variant,proof=hashed_variants(mach,arrival,[LAYOUTS,MAC_ALTERNATE])
     if not proof:return {}
+    if any(travel.get(key)!=value for key,value in (TRAVEL_VALUES,TRAVEL_MAC_VALUES)[variant].items()):return {}
     result=copy.deepcopy(VALUES);result['provenance']=proof
     return result
 
@@ -112,6 +113,45 @@ LAYOUTS = {'population_counts': [-30330,
                               '__const',
                               'ae7f1c600658137578e6e5495e92bf830791e1b6754eccd0d4acb13076390856'],
  'remaining_container_positions': [1557866,
+                                   8,
+                                   '__const',
+                                   '0bba1a14920c7c3b8accd3c7de6b1c9b5f0ceaa1a8d909f9805d1f1151295081']}
+
+
+MAC_ALTERNATE = {'population_counts': [-30330,
+                       215,
+                       '__text',
+                       '635f8a15bf71befe5b93c5a7cf9968535a9951c8c797f9d9b48174351b2b3458'],
+ 'empty_fallback': [-29088,
+                    121,
+                    '__text',
+                    '6c685a026a476ffbd940d1b6ffe1d117b2948caec81bd144845837fb10bcf7cb'],
+ 'group_order': [-24575, 244, '__text', '4be57f51aef2e05bcf4c16e3253877efc0091c035082e54dd0b50639efd214a2'],
+ 'travel_ship': [-23123, 248, '__text', '568e1881ff375f9c367bae4f5b6ab0a4657f607747c3b529df2eba7c7b1131c8'],
+ 'travel_route': [-77698, 104, '__text', '7cbfdc0c5acc3bd38d42bf2085e6f9af2d686e827bfeaaafcabb869810df8cb8'],
+ 'travel_mode': [-77334, 26, '__text', 'a589ecbd9a495aac117c46401fa020983111bc89e441aaa4c85e8ab32ba8e219'],
+ 'travel_flag': [-79064, 14, '__text', '3290bff84bf17ae4fb65f02db29f01af503d7ab9b5bb467c378245fbd907a7e4'],
+ 'freighter_choice_and_spawn': [-22069,
+                                300,
+                                '__text',
+                                '0c9846533f04482d2f425d06fce28c927d0427bacd9b744cfa33093570b838b1'],
+ 'freighter_constructor': [78543,
+                           170,
+                           '__text',
+                           'b507c7c5a5b5d0a34ae84625e656330a1ce31fddfd97e5c8edbc298e1c2fe24a'],
+ 'freighter_cargo': [632546,
+                     210,
+                     '__text',
+                     'a105c3590785f2e6c7f863e47e04222c995b89ba02e81ae39e9a33c67755435c'],
+ 'freighter_assembly': [-219730,
+                        635,
+                        '__text',
+                        '01176ea35b1f4a8b75b466458f0d04760fdb82cae7e6e2be41ed9cb5f810df3a'],
+ 'first_container_position': [1532778,
+                              4,
+                              '__const',
+                              'ae7f1c600658137578e6e5495e92bf830791e1b6754eccd0d4acb13076390856'],
+ 'remaining_container_positions': [1532866,
                                    8,
                                    '__const',
                                    '0bba1a14920c7c3b8accd3c7de6b1c9b5f0ceaa1a8d909f9805d1f1151295081']}

@@ -1,10 +1,10 @@
 """Original station conversation after the earned contract threshold."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_lounge_story(mach, arrival):
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
-    return (copy.deepcopy(VALUES),proof) if proof else ({},{})
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
+    return (copy.deepcopy((VALUES, MAC_VALUES)[variant]), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'mido_contract_story_handoff',
  'campaign_cursor': 13,
@@ -72,3 +72,70 @@ LAYOUTS = {'contract_story_dialogue': [1547114,
                                        24,
                                        '__text',
                                        '40ce6014c69a9881f775974499c243447638fb0dc6c92ad34a8cf41b7da12f3c']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'contract_story_dialogue': [1522098,
+                             16,
+                             '__const',
+                             '228a7d18a04be30f7c5ff209f0b2b5dabaa94d5cc0730e9287c07ca30a03d6ba'],
+ 'contract_story_voices': [1535690,
+                           16,
+                           '__const',
+                           'cd61e4909279e0a73ae464e9938539b85dfc970325209e04f8f548eb53b489d0'],
+ 'contract_story_dialogue_count': [1530294,
+                                   4,
+                                   '__const',
+                                   'fb5e512425fc9449316ec95969ebe71e2d576dbab833d61e2a5b9330fd70ee02'],
+ 'contract_story_station_poll': [446607,
+                                 58,
+                                 '__text',
+                                 'd34f7870618d3ac5617d95936a56ab951e32bc6a6b54d2e4b4aec65a91330156'],
+ 'contract_story_station_result': [447844,
+                                   69,
+                                   '__text',
+                                   'f515790ae6100b965b4bea3dababdd8f5037a5bf3206420792f217526568be58'],
+ 'contract_story_acknowledged_story': [429308,
+                                       54,
+                                       '__text',
+                                       'b1ef70c58b888b8e718b7aeac0b8e41b1935d60bcbdc91c34d384a90d3f9f31d'],
+ 'contract_story_advance_story': [430231,
+                                  32,
+                                  '__text',
+                                  '5f8d3f6e14f9212285ac1b113a001c1d540041ec9f7235d70c1db3c4835d9437'],
+ 'contract_story_advance_cursor': [860483,
+                                   9,
+                                   '__text',
+                                   '98224ca6950faa2fc3633c703da68d1435c5d92e31ecc668256f6776bf490227'],
+ 'contract_story_next_mission': [862017,
+                                 38,
+                                 '__text',
+                                 'b54ce9776473759ee30a1fc444a1b223f8bd2dc97c30fd06e38f02cc4eca399c'],
+ 'contract_story_result_mode': [-699449,
+                                73,
+                                '__text',
+                                '46ba93bafb8859666914758e05f98b0789a5441fc2ffbdc89689100a070746b6'],
+ 'contract_story_dialogue_constructor': [-700548,
+                                         84,
+                                         '__text',
+                                         'e9a3a6646800efe3bdf19ba0026a20d990d38a38e0a50dfdd61113d8decdaad7'],
+ 'contract_story_flight_defer_dialogue': [387495,
+                                          88,
+                                          '__text',
+                                          '396a948abc657b0c2dca882faa2442ec9f4a38d8576bc4d1209b7ff9e4d26f3b'],
+ 'contract_story_flight_early_story': [388627,
+                                       24,
+                                       '__text',
+                                       'd0801e70ee3fadd18cc87d8e3caa0dc856c63acf4e24fdc1c6d6d8313063c5ae']}
+MAC_VALUES = {'scope': 'mido_contract_story_handoff',
+ 'campaign_cursor': 13,
+ 'story_kind': 150,
+ 'station_scope': 'current_station',
+ 'acknowledgement_required': True,
+ 'events': [{'speaker_id': 3, 'text_id': 1806, 'voice_event_id': 222},
+            {'speaker_id': 0, 'text_id': 1807, 'voice_event_id': 223}],
+ 'next_cursor': 14,
+ 'next_kind': 4,
+ 'next_station_id': 79,
+ 'reward': 0,
+ 'bonus': 0,
+ 'source_parameter': 0}

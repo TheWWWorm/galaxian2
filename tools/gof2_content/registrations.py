@@ -33,6 +33,9 @@ from .steering import extract_manual_rotation
 from .pilot_response import extract_pilot_response
 from .vehicle_response import extract_vehicle_response
 from .frame_clock import extract_frame_clock
+from .fast_forward import extract_fast_forward
+from .ordinary_music import extract_ordinary_music
+from .physical_scenery_contacts import extract_physical_scenery_contacts
 from .opening_loadout import extract_opening_loadout
 from .opening_dialogue import extract_opening_dialogue, extract_arrival_dialogue
 from .text_aliases import extract_text_aliases
@@ -94,7 +97,10 @@ from .combat_training_visuals import extract_combat_training_visuals
 from .combat_training_story import extract_combat_training_story
 from .mido_travel import extract_mido_travel
 from .early_contracts import extract_early_contracts
+from .deep_science_stock import extract_deep_science_stock
+from .persistent_contacts import extract_persistent_contacts
 from .engine_particles import extract_engine_particles
+from .engine_particle_owners import extract_engine_particle_owners
 from .ambient_population import extract_ambient_population
 from .ambient_combat import extract_ambient_combat
 from .freighter_destruction import extract_freighter_destruction
@@ -127,7 +133,7 @@ from .camera_follow import extract_camera_follow
 MAX_EXECUTABLE = 64 * 1024 * 1024
 MAX_SECTIONS = 256
 MAX_RECORDS = 20000
-READER = 'resource-registration-v172'
+READER = 'resource-registration-v197'
 
 
 class MachO:
@@ -375,7 +381,13 @@ def record(mach, offset, identifier, kind, path):
             'source_offset': offset + mach.slice_offset}
 
 
-def extract(source, edition, checkpoint=lambda *_: None):
+def extract(source, edition, checkpoint=lambda *_: None, *, ship_count=None):
+    # The resource importer establishes the catalogue extent independently of
+    # executable version labels. Older direct callers retain their layout.
+    if ship_count is None:
+        ship_count = 64 if edition == 'ios-hd' else 61
+    if type(ship_count) is not int or ship_count not in ((64,) if edition == 'ios-hd' else (61, 64)):
+        raise ContentError('Unsupported ship catalogue extent for executable declarations')
     mach = MachO(source, edition)
     rows = (ios_records if edition == 'ios-hd' else mac_records)(mach, checkpoint)
     if not rows:
@@ -384,7 +396,7 @@ def extract(source, edition, checkpoint=lambda *_: None):
     # are followed to choose an active registration or variant.
     rows.sort(key=lambda row: (row['id'], row['resource'], row['source_offset']))
     hangars = extract_hangars(mach, rows)
-    ship_models = extract_ship_models(mach, rows, 64 if edition == 'ios-hd' else 61)
+    ship_models = extract_ship_models(mach, rows, ship_count)
     cruise = extract_cruise(mach)
     rotation = extract_manual_rotation(mach, cruise)
     pilot = extract_pilot_response(mach, rotation)
@@ -487,16 +499,20 @@ def extract(source, edition, checkpoint=lambda *_: None):
     combat_training_control = extract_combat_training_control(mach, arrival_staging, combat_training, actors)
     combat_training_weapons = extract_combat_training_weapons(mach, arrival_staging, combat_training, combat_training_control, station_equipment, actors, weapons)
     combat_training_destruction = extract_combat_training_destruction(mach, arrival_staging, combat_training, combat_training_control, combat_training_weapons, actors)
-    mido_travel = extract_mido_travel(mach, arrival_staging, station_entry, combat_training)
+    mido_travel = extract_mido_travel(mach, arrival_staging, station_entry, combat_training, population, scenery_resources)
     ambient_population = extract_ambient_population(mach, arrival_staging, mido_travel)
     ambient_combat = extract_ambient_combat(mach, arrival_staging, ambient_population)
+    engine_particles = extract_engine_particles(mach, arrival_staging, particles)
+    early_contracts = extract_early_contracts(mach, arrival_staging, mido_travel)
+    fast_forward = extract_fast_forward(mach, arrival_staging)
+    station_exterior = extract_station_exterior(mach, arrival_staging, first_flight)
     return {'reader': READER, 'architecture': mach.architecture,
             'source_executable_sha256': mach.source_sha256,
             'source_executable_bytes': mach.source_bytes, 'registrations': rows,
             'materials': extract_materials(mach, checkpoint),
             'ship_models': ship_models,
             'hangars': hangars,
-            'ship_placement': extract_ship_placement(mach, hangars, 64 if edition == 'ios-hd' else 61),
+            'ship_placement': extract_ship_placement(mach, hangars, ship_count),
             'ship_lights': lights,
             'ship_lod': lod,
             'lod_refresh': extract_lod_refresh(mach, lod),
@@ -540,19 +556,25 @@ def extract(source, edition, checkpoint=lambda *_: None):
             'combat_training_destruction': combat_training_destruction,
             'combat_training_visuals': extract_combat_training_visuals(mach, arrival_staging, combat_training_weapons, staging),
             'combat_training_story': extract_combat_training_story(mach, arrival_staging, combat_training, combat_training_destruction, mining_briefing, mining_objective, dialogue, full_hold_story),
+            'fast_forward': fast_forward,
+            'ordinary_music': extract_ordinary_music(mach, fast_forward),
+            'physical_scenery_contacts': extract_physical_scenery_contacts(mach, arrival_staging, scenery_resources, station_exterior, staging),
             'mido_travel': mido_travel,
-            'early_contracts': extract_early_contracts(mach, arrival_staging, mido_travel),
+            'early_contracts': early_contracts,
+            'deep_science_stock': extract_deep_science_stock(mach, arrival_staging, early_contracts.get('base_station_stock', {})),
+            'persistent_contacts': extract_persistent_contacts(mach, arrival_staging, early_contracts.get('ordinary_generation', {})),
             'ambient_population': ambient_population,
             'ambient_combat': ambient_combat,
             'freighter_destruction': extract_freighter_destruction(mach, arrival_staging, ambient_combat),
             'ambient_lifecycle': extract_ambient_lifecycle(mach, arrival_staging, ambient_combat),
-            'engine_particles': extract_engine_particles(mach, arrival_staging, particles),
+            'engine_particles': engine_particles,
+            'engine_particle_owners': extract_engine_particle_owners(mach, arrival_staging, engine_particles),
             'full_hold_appearance': extract_full_hold_appearance(mach, arrival_staging, full_hold_story, full_hold_destruction),
             'full_hold_control': full_hold_control,
             'full_hold_destruction': full_hold_destruction,
             'station_flight': extract_station_flight(mach, arrival_staging, first_flight),
             'station_autopilot': extract_station_autopilot(mach, arrival_staging, first_flight),
-            'station_exterior': extract_station_exterior(mach, arrival_staging, first_flight),
+            'station_exterior': station_exterior,
             'mining_briefing': mining_briefing,
             'station_presentation': station_presentation,
             'desktop_text': desktop_text,

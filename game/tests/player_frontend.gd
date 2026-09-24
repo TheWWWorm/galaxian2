@@ -21,36 +21,51 @@ func run() -> void:
 	args=OS.get_cmdline_user_args();directory=OS.get_environment("GOF2_MENU_TEST_DIRECTORY")
 	if args.size() not in [3,4] or directory.is_empty() or not PathGuard.private_path(directory+"/player.json"):
 		check(false,"Expected content paths and a private menu test directory");quit(1);return
-	if args.size()==4:
-		captures=args[3]
+	captures=args[3] if args.size()==4 else OS.get_environment("GOF2_CAPTURE_DIR")
+	if not captures.is_empty():
 		if not PathGuard.private_path(captures+"/image.png"):check(false,"Keep captures outside source");quit(1);return
 		DirAccess.make_dir_recursive_absolute(captures)
 	app=Frontend.new();root.add_child(app);app.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	if OS.get_environment("GOF2_MENU_TEST_PHASE")=="resume":await verify_restart()
+	if OS.get_environment("GOF2_MENU_TEST_PHASE")=="setup":await verify_setup()
+	elif OS.get_environment("GOF2_MENU_TEST_PHASE")=="resume":await verify_restart()
 	elif OS.get_environment("GOF2_MENU_TEST_PHASE")=="cancel":await verify_cancel()
 	elif OS.get_environment("GOF2_MENU_TEST_PHASE")=="close_import":await verify_close_import()
 	else:await verify_prepare()
 	app.free();Streams.set_levels(1,1,1);await process_frame
 	print("Player entry: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
 
+func verify_setup() -> void:
+	check(not app.boot(PackedStringArray(),directory) and app.phase=="setup","Fresh entry must request original Mac content")
+	check(app._picker.file_mode==FileDialog.FILE_MODE_OPEN_ANY,"One picker must accept files and app directories")
+	check(app._picker.file_selected.is_connected(app._picked) and app._picker.dir_selected.is_connected(app._picked),"Both container choices must share the import entry")
+	await capture("entry-mac-game-setup")
+	check(Rect2(Vector2.ZERO,Vector2(root.size)).encloses(Rect2(app._details.position,app._details.size)),"Import setup escaped the desktop viewport")
+	app._picker.dir_selected.emit(directory)
+	check(app.phase=="setup" and not app._importer.busy() and not app.error.is_empty(),"Invalid folder must retain setup and report a useful error")
+	check(app.preferences.values.import_record.is_empty(),"Rejected folder activated an installation")
+
 func verify_prepare() -> void:
 	check(not FileAccess.file_exists(directory.path_join("player.json")),"Use a new directory for each entry test pair")
 	check(not app.boot(PackedStringArray(),directory) and app.phase=="setup","Fresh entry did not ask for imported content")
 	await capture("entry-setup")
 	check(Rect2(Vector2.ZERO,Vector2(root.size)).encloses(Rect2(app._details.position,app._details.size)),"First setup escaped its viewport")
+	var expected_ids:=[args[0].get_file(),args[1].get_file(),args[2].get_file()]
 	var selection:=Preferences.defaults();selection.content=args[0];selection.bindings=args[1];selection.visuals=args[2]
-	var dmg:=OS.get_environment("GOF2_MENU_TEST_DMG")
-	if not dmg.is_empty():
-		app._picker.file_selected.emit(dmg)
-		check(app.phase=="import" and app._importer.busy(),"Selecting the Mac DMG did not start its background import")
-		await capture("entry-dmg-progress")
+	var original:=original_source()
+	if not original.is_empty():
+		pick_source(original)
+		check(app.phase=="import" and app._importer.busy(),"Selecting the Mac game did not start its background import")
+		await capture("entry-import-progress")
 		var deadline:=Time.get_ticks_msec()+780000
 		while app._importer.busy() and Time.get_ticks_msec()<deadline:await process_frame
 		if app.phase!="menu":check(false,app.error+app._importer.error);return
 		selection=app.preferences.values.duplicate(true)
 		args[0]=selection.content;args[1]=selection.bindings;args[2]=selection.visuals
-		check(not selection.import_record.is_empty(),"The completed DMG import was not remembered")
+		check(not selection.import_record.is_empty(),"The completed Mac import was not remembered")
+		var receipt: Dictionary=Frontend.DmgImport.read_receipt(selection.import_record)
+		check(not receipt.is_empty() and selection.import_record.begins_with(directory.path_join("imports")+"/") and [receipt.get("base_content_id"),receipt.get("binding_id"),receipt.get("visual_id")]==expected_ids,"The picked Mac game did not prepare the explicit content, binding and visual identities in its own import store")
 	elif not app.select_content(selection):check(false,app.error);return
+	dismiss_title()
 	check(app.phase=="menu" and not app.menu._buttons.resume.visible and app.menu._buttons.load.disabled,"Fresh content created unearned progress")
 	check(app.music.player.playing,"The menu omitted its original music")
 	await capture("entry-menu-desktop")
@@ -59,6 +74,10 @@ func verify_prepare() -> void:
 	check(not app.select_content(failed) and app.menu.snapshot().identity==identity,"Failed content selection discarded accepted menu resources")
 	var prefs:=Preferences.new();check(prefs.read_file(directory.path_join("player.json")) and prefs.values.visuals==args[2],"Failed content selection overwrote saved paths")
 	app.show_menu();app.menu._buttons.new_game.pressed.emit()
+	if app._needs_import_update():
+		check(app.phase=="update" and not app.has_session(),"An older import must disclose missing effects before a new game")
+		for control in app._body.get_children():
+			if control is Button and control.text=="Use current game files":control.pressed.emit();break
 	if not app.has_session():check(false,app.error);return
 	check(app.phase=="game" and app.game.session.status=="running" and app.game._preview_controls.all(func(control):return not control.visible),"New game did not enter the native opening with player controls")
 	check(not app.game._pause_button.visible and not app.game._menu_button.visible,"Desktop flight exposed hidden touch actions")
@@ -121,13 +140,13 @@ func verify_prepare() -> void:
 	var old:=FileAccess.get_file_as_bytes(path)
 	app.visuals=Frontend.Visuals.new();app.request_action("load");app.confirm_pending();app.visuals=visuals
 	check(app.phase=="menu" and app.game.session==session and FileAccess.get_file_as_bytes(path)==old,"Failed menu load lost the live opening or changed its save")
-	await verify_map_input()
+	await verify_map_input(document)
 
-func verify_map_input() -> void:
+func verify_map_input(document: Dictionary) -> void:
 	if failures:return
 	app.request_action("load");app.confirm_pending()
 	if app.phase!="game":check(false,app.error);return
-	check(app.game.session.snapshot().campaign_cursor==18,"Map input requires the earned ordinary station")
+	check(Archive.new().capture(app.game.session.station_owner(),app.bindings)==document,"Map input must retain the exact earned station and career")
 	app.game.set_process(false);app.game._notification(MainLoop.NOTIFICATION_APPLICATION_FOCUS_IN)
 	var now:=Time.get_ticks_usec()
 	if not app.game.request_departure() or not app.game.enter_first_flight(now,4096,1789100000):check(false,app.game.status.text);return
@@ -141,7 +160,7 @@ func verify_map_input() -> void:
 	for code in [KEY_A,KEY_D]:
 		var steer:=InputEventKey.new();steer.physical_keycode=code;steer.pressed=true
 		Input.parse_input_event(steer);Input.flush_buffered_events()
-		check(app.game._controls.snapshot().command.y==(1 if code==KEY_A else -1),"Normal keyboard routing reversed horizontal flight")
+		check(app.game._controls.snapshot().command==Vector2.ZERO and app.game._controls.snapshot().strafe==(-1.0 if code==KEY_A else 1.0),"A/D must strafe without steering the ship")
 		var released:=InputEventKey.new();released.physical_keycode=code
 		Input.parse_input_event(released);Input.flush_buffered_events()
 	var motion:=InputEventMouseMotion.new();motion.screen_relative=Vector2(10,0)
@@ -167,8 +186,14 @@ func verify_map_input() -> void:
 func preferences_unchanged() -> bool:
 	var prefs:=Preferences.new();return prefs.read_file(directory.path_join("player.json")) and is_equal_approx(prefs.values.fx,0.35)
 
+func dismiss_title() -> void:
+	var event:=InputEventKey.new();event.physical_keycode=KEY_ENTER;event.pressed=true
+	app.menu._unhandled_input(event)
+	check(not app.menu._title_active,"The title did not accept its opening input")
+
 func verify_restart() -> void:
 	if not app.boot(PackedStringArray(),directory):check(false,app.error);return
+	dismiss_title()
 	check(app.phase=="menu" and app.library.root==app.preferences.values.content and app.menu._buttons.resume.visible and not app.menu._buttons.load.disabled,"Restart did not restore content selection and saved-game actions")
 	check(app.preferences.values.invert_pitch and app.preferences.values.touch_controls and is_equal_approx(app.preferences.values.fx,.35),"Restart forgot control or sound preferences")
 	var file:=SaveFile.new();var path:=SaveFile.path_for(directory.path_join("saves"),app.bindings);var document:=file.read_document(path)
@@ -197,24 +222,25 @@ func verify_restart() -> void:
 
 func verify_cancel() -> void:
 	if not app.boot(PackedStringArray(),directory):check(false,app.error);return
-	var dmg:=OS.get_environment("GOF2_MENU_TEST_DMG")
-	if dmg.is_empty():check(false,"Supply the same Mac DMG for the cancellation check");return
+	dismiss_title()
+	var original:=original_source()
+	if original.is_empty():check(false,"Supply the same Mac game for the cancellation check");return
 	var stored:=FileAccess.get_file_as_bytes(directory.path_join("player.json"))
 	var identity: Dictionary=app.menu.snapshot().identity
-	app.show_setup();app._picker.file_selected.emit(dmg)
+	app.show_setup();pick_source(original)
 	check(app._importer.busy() and app.phase=="import","Mac picker did not start a cancellable import")
 	app._importer.cancel()
 	var deadline:=Time.get_ticks_msec()+30000
 	while app._importer.busy() and Time.get_ticks_msec()<deadline:await process_frame
-	check(app.phase=="setup" and not app._importer.busy() and app.error.contains("cancelled") and FileAccess.get_file_as_bytes(directory.path_join("player.json"))==stored,"Cancelling the DMG import changed the accepted content selection")
-	await capture("entry-dmg-cancelled")
+	check(app.phase=="setup" and not app._importer.busy() and app.error.contains("cancelled") and FileAccess.get_file_as_bytes(directory.path_join("player.json"))==stored,"Cancelling the Mac import changed the accepted content selection")
+	await capture("entry-import-cancelled")
 	app.show_menu();check(app.menu.snapshot().identity==identity and app.has_save(),"Cancellation lost the accepted game or saved career")
-	app.show_setup();app._picker.file_selected.emit(dmg)
+	app.show_setup();pick_source(original)
 	deadline=Time.get_ticks_msec()+60000
 	while app._importer.busy() and Time.get_ticks_msec()<deadline:await process_frame
-	check(app.phase=="menu" and app.menu.snapshot().identity==identity and FileAccess.get_file_as_bytes(directory.path_join("player.json"))==stored,"Reusing a completed DMG import changed its content identity or preferences")
-	app.show_setup();app._picker.file_selected.emit(dmg.get_base_dir().path_join("Game.app"))
-	check(app.phase=="setup" and app.error.contains(".dmg") and not app._importer.busy(),"Player setup accepted a source other than the required Mac DMG")
+	check(app.phase=="menu" and app.menu.snapshot().identity==identity and FileAccess.get_file_as_bytes(directory.path_join("player.json"))==stored,"Reusing a completed Mac import changed its content identity or preferences")
+	app.show_setup();app._picker.dir_selected.emit(directory)
+	check(app.phase=="setup" and not app.error.is_empty() and not app._importer.busy(),"Player setup accepted a folder without the Mac app structure")
 	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.show_options()
 	await process_frame;app._settings_controls.touch_controls.grab_focus();await process_frame;await process_frame
 	var scroll: ScrollContainer=app._body.get_parent()
@@ -223,11 +249,11 @@ func verify_cancel() -> void:
 
 func verify_close_import() -> void:
 	if not app.boot(PackedStringArray(),directory):check(false,app.error);return
-	var dmg:=OS.get_environment("GOF2_MENU_TEST_DMG")
-	if dmg.is_empty():check(false,"Supply the Mac DMG for import close");return
+	var original:=original_source()
+	if original.is_empty():check(false,"Supply the Mac game for import close");return
 	var stored:=FileAccess.get_file_as_bytes(directory.path_join("player.json"))
 	var exited:=[0];app.exit_requested.connect(func():exited[0]+=1)
-	app.show_setup();app._picker.file_selected.emit(dmg)
+	app.show_setup();pick_source(original)
 	check(app._importer.busy(),"Import close requires a running importer")
 	app.request_close()
 	check(exited[0]==0 and app._quit_after_import,"Window close did not wait for import cancellation")
@@ -235,6 +261,14 @@ func verify_close_import() -> void:
 	while app._importer.busy() and Time.get_ticks_msec()<deadline:await process_frame
 	check(not app._importer.busy() and exited[0]==1,"Import close failed to finish cancellation and exit")
 	check(FileAccess.get_file_as_bytes(directory.path_join("player.json"))==stored,"Closing import lost the previously accepted game")
+
+func original_source() -> String:
+	var original:=OS.get_environment("GOF2_MENU_TEST_SOURCE")
+	return original if not original.is_empty() else OS.get_environment("GOF2_MENU_TEST_DMG")
+
+func pick_source(path: String) -> void:
+	if DirAccess.dir_exists_absolute(path):app._picker.dir_selected.emit(path)
+	else:app._picker.file_selected.emit(path)
 
 func capture(label: String) -> void:
 	if captures.is_empty() or DisplayServer.get_name()=="headless":return

@@ -24,8 +24,10 @@ var directory := ""
 func _initialize() -> void:
 	directory = "user://tests/scene-bindings-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()]
 	DirAccess.make_dir_recursive_absolute(directory)
-	var base := {"content_id": "a".repeat(64), "profile": {"edition": "mac-full-hd"}, "files": {
-		HIGH: {"kind": "texture", "sha256": "b".repeat(64)}, LOW: {"kind": "texture", "sha256": "c".repeat(64)}, MESH: {"kind": "mesh"}}}
+	var base := {"content_id": "a".repeat(64), "profile": {"edition": "mac-full-hd"},
+		"ship_table": {"records": 61, "record_bytes": 36}, "languages": {"gb": {"records": 3371}}, "files": {
+		HIGH: {"kind": "texture", "sha256": "b".repeat(64)}, LOW: {"kind": "texture", "sha256": "c".repeat(64)}, MESH: {"kind": "mesh"},
+		"resources/data/bin/ships.bin": {"bytes": 61 * 36}}}
 	var bindings := Bindings.new()
 	write_fixture(base)
 	check(bindings.open(directory, base), bindings.error)

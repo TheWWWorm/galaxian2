@@ -10,7 +10,9 @@ from .ship_models import section_bytes
 
 
 def template(spec):
-    """Hex runs and named fixed-width fields in a declaration layout."""
+    """Hex runs and named fields, or explicit alternative compiler layouts."""
+    if isinstance(spec, (tuple, list)):
+        return _TemplateChoices(spec)
     pieces = []
     for token in spec.split():
         if token.startswith('{'):
@@ -19,6 +21,26 @@ def template(spec):
         else:
             pieces.append(re.escape(bytes.fromhex(token)))
     return re.compile(b''.join(pieces), re.S)
+
+
+class _TemplateChoices:
+    """Keep each complete layout intact; never mix fields between variants."""
+    def __init__(self, specs):
+        self.patterns = tuple(template(spec) for spec in specs)
+
+    def finditer(self, data, *bounds):
+        return iter(sorted((match for pattern in self.patterns for match in pattern.finditer(data, *bounds)),
+                           key=lambda match: (match.start(), match.end())))
+
+    def match(self, data, *bounds):
+        return self._unique('match', data, *bounds)
+
+    def fullmatch(self, data, *bounds):
+        return self._unique('fullmatch', data, *bounds)
+
+    def _unique(self, method, data, *bounds):
+        matches = [match for pattern in self.patterns if (match := getattr(pattern, method)(data, *bounds))]
+        return matches[0] if len(matches) == 1 else None
 
 
 MAC = '''

@@ -1,6 +1,6 @@
 """Fresh ordinary projectile draw declarations, independently recognized per edition."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {'item_ids':[2,19], 'model_ids':[6756,6795], 'kinds':[0,1],
           'camera_facing_kind':1, 'shrink_below_ms':1000, 'shrink_divisor':1000.0,
@@ -16,13 +16,10 @@ def extract_projectile_visuals(mach,staging,actors,opening):
         if not staging['player_flight'] or actors['npc_initialization']['primary_weapon']['item_id']!=19:return {}
         if opening['ship_id']!=10:return {}
         origin=staging['provenance']['initial']['offset']
-        at=mach.text['address']+origin-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,raw) in LAYOUTS[arch].items():
-            section=b'__const' if (key in ['model_2','model_19'] or arch=='x86_64' and key.endswith('_constant')) else b'__text'
-            found=section_bytes(mach,at+delta,size,section)
-            if found is None or found[0]!=bytes.fromhex(raw):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        layouts=[LAYOUTS[arch]]+([MAC_ALTERNATE] if arch=='x86_64' else [])
+        constants=['model_2','model_19']+[k for k in LAYOUTS[arch] if k.endswith('_constant')] if arch=='x86_64' else ['model_2','model_19']
+        proof=recognize(mach,origin,layouts,constants=constants)
+        if not proof:return {}
         result=copy.deepcopy(VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,IndexError,ValueError,OverflowError):return {}
@@ -122,3 +119,53 @@ LAYOUTS = {'x86_64': {'player_model_table': [-57355, 28, '488b45d04863c0488d0d5c
            'model_19': [2342426, 4, '8b1a0000'],
            'shrink_constant': [368470, 4, '00007a44'],
            'hidden_constant': [368466, 4, '00504347']}}
+
+
+# Independently verified alternate Mac compiler layout.
+MAC_ALTERNATE = {'player_model_table': [-57355, 28, '488b45d04863c0488d0df4af16008b04818945b085c00f8885010000'],
+ 'player_wrapper': [-56975, 27, '4c89ef4489fe4c89f28b4db041b8e80300004c8b4dc8e819430600'],
+ 'npc_model': [-65918, 31, '41c78424a0000000010000004c89e7be13000000e8b241fcff41bf8b1a0000'],
+ 'npc_wrapper': [-63455, 29, '4889df31f64c89e24489f941b8112700004c8b7d984d89f9e8675c0600'],
+ 'wrapper_load': [353749, 26, '418b742420488d05dea01d00488b38410fb7d731c9e8b86f0a00'],
+ 'orientation_kind': [353825, 31, '418b8ea000000083f908770cb001ba0a0100000fa3ca720230c04188442468'],
+ 'reduced_scale': [353856,
+                   61,
+                   '488d05aca71d00f600017431418b86a000000083f808772cb90a0100000fa3c1732241c74424589a99193f41c744245c9a99193f41c74424609a99193f'],
+ 'model_tick': [354627,
+                55,
+                '418b7620488d05719d1d00488b38e8017a0a004963f54889b590feffff4889c731d2e8ad08090045896e50498b7e104489eee861f7f5ff'],
+ 'live_position': [356854,
+                   44,
+                   '488b48184863fa4c8d2c7ff3420f1004a90f2e05f5e40f0075060f8bc307000089b550fbffff899554fbffff'],
+ 'velocity': [356950,
+              78,
+              '498b4710488b78304c01f7e831e50800f30f118dd0fefffff30f1185c8feffff660f70c001f30f1185ccfeffff488b9d58fbffff4889df488db5c8feffffe83eda080041f64768010f849d010000'],
+ 'camera_basis': [357090,
+                  269,
+                  '488d05d6931d00488b184889dfe853760a004889df89c6e879720a00488d5d984889df4889c6e8ba760b004889dfe8f2840b00f30f118db0fefffff30f1185a8feffff660f70c001f30f1185acfeffff488dbdb8feffff488db5a8feffffe892d90800498b4710f30f1045984c8bad60fbfffff3410f114500f30f1045a8f3410f1187a0000000f30f1045b8f3410f1187b0000000f30f10459c8b8d54fbfffff3410f118794000000f30f1045acf3410f1187a4000000f30f1045bcf3410f1187b4000000f30f1085b8fefffff30f100d508010000f57c1f3410f118798000000f30f1085bcfeffff0f57c1f3410f1187a8000000f30f1085c0feffff0f57c1f3410f1187b8000000488b5078'],
+ 'last_second': [357359,
+                 44,
+                 '8b0c8a81f9e70300007f26f30f2ad1f30f5e15690f1000488dbd68feffff4c89ee0f28c20f28cae8dc950b00'],
+ 'new_shot_scale': [357408, 33, 'f68091000000010f8454040000488dbd28feffff4c89eef30f101500df0f00ebcf'],
+ 'world_up': [358008,
+              266,
+              'c785e8fcffff00000000c785ecfcffff0000803fc785f0fcffff000000004c89e7488db5e8fcffffe832d608004c89e74c89f6e837e00800f30f118de0fcfffff30f1185d8fcffff660f70c001f30f1185dcfcffff488b9d40fbffff4889df488db5d8fcffffe8f4d508004889dfe8ace00800f30f118dd0fcfffff30f1185c8fcffff660f70c001f30f1185ccfcffff4889df488db5c8fcffffe8c0d508004c89f74889dee8c5df0800f30f118dc0fcfffff30f1185b8fcffff660f70c001f30f1185bcfcffff4c89e7488db5b8fcffffe889d508004c89e7e841e00800f30f118db0fcfffff30f1185a8fcffff660f70c001f30f1185acfcffff4c89e7488db5a8fcffffe855d50800'],
+ 'flight_basis': [358274,
+                  193,
+                  '8b8554fbfffff30f10034c8bad60fbfffff3410f114500f3410f108788000000f3410f1187a0000000f3410f10878c000000f3410f1187b0000000f3410f100424f3410f118794000000f3410f10477cf3410f1187a4000000f3410f108780000000f3410f1187b4000000f3410f1006f3410f118798000000f3410f104770f3410f1187a8000000f3410f104774f3410f1187b8000000498b4f10488b51788b04823de70300007f18f30f2ad0f30f5e15380b1000488dbd68fcffffe9cafbffff'],
+ 'scale_preset': [358536,
+                  45,
+                  '488d0564951d00f600017421f3410f105760f3410f104758f3410f104f5c488dbde8fbffff4c89eee842910b00'],
+ 'draw': [358819, 36, '418b7720488d1d118d1d00488b3b4c89eae89e610a00418b7720488b3b31d2e8301d0a00'],
+ 'loop_setup': [1038175,
+                44,
+                '488b45e04805b00100008b75f44889c7e87b680500be0200000048ba0000000000000000488b38e8ac98feff'],
+ 'loop_update': [946828,
+                 187,
+                 '488b8830010000483b88280100000f8ea7000000488b8548ffffff817878020000000f8577000000488b8548ffffff4881b828010000000000000f851a000000488b8548ffffff488b882001000048898830010000e940000000488b8548ffffff488b8030010000488b8d48ffffff488b9120010000488bb12801000048899540ffffff489948f7fe488b8540ffffff4801d048898130010000e91c000000488b8548ffffffc6800d01000000488b882801000048898830010000'],
+ 'animation_defaults': [943166, 39, '48c7803001000000000000c6800d0100000148c7801801000000000000c780100100000000803f'],
+ 'model_2': [1429503, 4, '641a0000'],
+ 'model_19': [1429571, 4, '8b1a0000'],
+ 'shrink_constant': [1409903, 4, '00007a44'],
+ 'hidden_constant': [1398531, 4, '00504347'],
+ 'unit_constant': [1397567, 4, '0000803f']}

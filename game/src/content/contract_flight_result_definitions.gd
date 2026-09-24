@@ -6,6 +6,8 @@ const Delivery=preload("res://src/content/delivery_result_definitions.gd")
 const VALUES = {"scope":"mido_contract_flight_results","campaign_cursor":13,"ship_kinds":[4,12],"success_poll_milliseconds":5001,"success_requires_idle_radio":true,"reset_missed_poll":true,"failure_uses_success_gate":false,"success_result_mode":1,"failure_result_mode":2,"success_count_on_open":true,"reputation_excluded_kinds":[12,183],"penalty_kind":12,"penalty_uses_base_reward":true,"empty_mission_kind":-1,"retain_flight_after_acknowledgement":true}
 const SPANS = {"flight_result_success_poll":[385744,2546],"flight_result_failure_poll":[388290,794],"flight_result_failure_controller":[118652,24],"flight_result_result_flags":[-693644,164],"flight_result_result_content":[-692464,5780],"flight_result_acknowledgement":[348260,11612],"flight_result_side_slot":[859522,22],"flight_result_active_slot":[858112,14],"flight_result_objective_slots":[118602,22],"flight_result_poll_clock":[365135,8],"flight_result_poll_order":[377531,71]}
 
+const MAC_SPANS = {"flight_result_success_poll":[386260,2546],"flight_result_failure_poll":[388806,794],"flight_result_failure_controller":[118652,24],"flight_result_result_flags":[-699540,164],"flight_result_result_content":[-698360,5788],"flight_result_acknowledgement":[347974,11612],"flight_result_side_slot":[860154,22],"flight_result_active_slot":[858744,14],"flight_result_objective_slots":[118602,22],"flight_result_poll_clock":[364858,8],"flight_result_poll_order":[378043,71]}
+
 static func parameters(data: Variant) -> bool:
 	return Equal.equal_value(data,VALUES)
 

@@ -6,7 +6,7 @@ Unknown layouts remain unsupported instead of receiving guessed death behavior.
 """
 import copy
 from .opening_npc_guidance import LAYOUTS as GUIDANCE_LAYOUTS
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {
     'actor_kind':8, 'dying_mode':3, 'explosion_mode':4,
@@ -32,12 +32,9 @@ def extract_npc_destruction_audio(mach, actors):
         source=npc['guidance']['provenance']['selection']
         _,relative,size,_=GUIDANCE_LAYOUTS[arch]['selection']
         if source['bytes']!=size:return {}
-        update=mach.text['address']+source['offset']-mach.slice_offset-mach.text['offset']-relative
-        proof={}
-        for key,(delta,size,pattern) in AUDIO_LAYOUTS[arch].items():
-            found=section_bytes(mach,update+delta,size,b'__text')
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        layouts=[AUDIO_LAYOUTS[arch]]+([MAC_AUDIO_ALTERNATE] if arch=='x86_64' else [])
+        proof=recognize(mach,source['offset']-relative,layouts)
+        if not proof:return {}
         return {'initial_source_id':death['death_sound'],
                 'breakup_source_ids':list(range(death['breakup_sound_base'],death['breakup_sound_base']+death['breakup_sound_bound'])),
                 'position':'pre_motion','instance':'cached_event','provenance':proof}
@@ -67,14 +64,10 @@ def extract_npc_destruction(mach, actors):
         source=npc['guidance']['provenance']['selection']
         _,relative,size,_=GUIDANCE_LAYOUTS[arch]['selection']
         if source['bytes']!=size:return {}
-        update=mach.text['address']+source['offset']-mach.slice_offset-mach.text['offset']-relative
-        proof={}
-        for key,(delta,size,pattern) in LAYOUTS[arch].items():
-            # Relative positions bind each guard/callee to this verified actor
-            # update. Renaming or repackaging either game does not affect this.
-            found=section_bytes(mach,update+delta,size,b'__const' if key in ['spin_constant','drift_multiplier','drift_base'] and arch=='x86_64' else b'__text')
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        layouts=[LAYOUTS[arch]]+([MAC_ALTERNATE] if arch=='x86_64' else [])
+        constants=['spin_constant','drift_multiplier','drift_base'] if arch=='x86_64' else []
+        proof=recognize(mach,source['offset']-relative,layouts,constants=constants)
+        if not proof:return {}
         value=copy.deepcopy(VALUES);value['provenance']=proof
         return value
     except (KeyError,ValueError,TypeError,IndexError,OverflowError):return {}
@@ -154,3 +147,51 @@ LAYOUTS = {'x86_64': {'early_retirement': [40,
            'active_setter': [-54908, 8, '80f8c010704700bf'],
            'drift_multiplier': [7656, 4, '0ad7233c'],
            'drift_base': [7660, 4, '00004842']}}
+
+
+# Complete alternate Mac proof set; native values keep the verified fresh context.
+MAC_ALTERNATE = {'early_retirement': [40,
+                      61,
+                      '4183bebc000000047533498bbe70010000e80a36ecff84c0752341f6466801740d4181be2001000061ea00007c0f4c89f731f6e8a877f5ffe93c420000'],
+ 'death_guard': [7251, 28, '4585e40f8fe1050000418b86bc00000083c0fd83f8020f82ce050000'],
+ 'initial_delay': [8207,
+                   109,
+                   '41c686a30000000041c786bc000000030000004c8d2d6f6f1b00498b7d00bedc050000e8f9a4070005dc05000041898660020000498b7e10e85067ebff498dbefc010000488db528fcfffff30f118d30fcfffff30f118528fcffff660f70c001f30f11852cfcffffe814b50600'],
+ 'initial_spin': [8437,
+                  196,
+                  '498b7d00bec8000000e82da407004c8dbdf8fbffff83c09c0f57c0f30f2ac0f30f11856cf5ffff498b7d00bec8000000e806a4070089c3498b7d00bec8000000e8f6a30700f30f10856cf5fffff30f1185f8fbffff83c39c0f57c0f30f2ac3f30f1185fcfbffff83c09c0f57c0f30f2ac0f30f118500fcffff4c89ffe8dabe0600498d9ef0010000488db508fcfffff30f118d10fcfffff30f118508fcffff660f70c001f30f11850cfcffff4889dfe8e7b30600f30f10058b2c0e004889dfe8d7b40600'],
+ 'tumble': [15113,
+            436,
+            '4989d441c6868e0100000041c6864d01000000c78558f7ffff0000803f48c78564f7ffff0000000048c7855cf7ffff00000000c7856cf7ffff0000803f48c78578f7ffff0000000048c78570f7ffff00000000488dbd18f7ffff488db558f7ffffc78580f7ffff0000803fc78584f7ffff00000000c78588f7ffff0000803fc7858cf7ffff0000803fc78590f7ffff0000803ff3410f1096f8010000f3410f1086f0010000f3410f108ef4010000e8344a09004585ed7e30498b5e104889dfe84d4cebff4c8dbdd8f6ffff488d9558f7ffff4c89ff4889c6e8ca3a09004889df4c89fee83b4cebff498b5e10498dbefc0100000f57c0f3410f2ac5e8f79d0600f30f118dc0f6fffff30f1185b8f6ffff660f70c001f30f1185bcf6ffff488dbdb8f6fffff3410f108650020000e8c59d0600488db5c8f6fffff30f118dd0f6fffff30f1185c8f6ffff660f70c001f30f1185ccf6ffff4889dfe8b150ebff498b7e10e8bc52ebff418b86600200004429e84189866002000085c04c89e60f8915060000498bbe70010000c785a8f6ffff00000000c785acf6ffff00000000c785b0f6ffff00000000488d95a8f6ffffe8bbf2ebff'],
+ 'breakup_draws': [15645,
+                   255,
+                   '498b5e084c8d2570521b00498b3c24be32000000e8fa8707000f57c0f30f2ac0f30f5905d3ce0d00f30f58056fcf0d004889dfe817a5feff498b3c24bec8000000e8cd8707004c8dbd88f6ffff83c09c0f57c0f30f2ac0f30f118590f5ffff498b3c24bec8000000e8a687070089c3498b3c24bec8000000e896870700f30f108590f5fffff30f118588f6ffff83c39c0f57c0f30f2ac3f30f11858cf6ffff83c09c0f57c0f30f2ac0f30f118590f6ffff4c89ffe87aa20600498dbee4010000488db598f6fffff30f118da0f6fffff30f118598f6ffff660f70c001f30f11859cf6ffffe88a97060041c786bc0000000400000041c7866002000000000000'],
+ 'explosion_mode': [16020, 34, '418b86600200004401e84189866002000085c07e0d41c686a300000000e954010000'],
+ 'cleanup': [16963,
+             75,
+             '498bbe70010000e8f9f3ebff84c0754e41f6861801000001741241f6869100000001750841c68690000000014181be2001000061ea00007c0a4c89f731f6e88235f5ff41c6864d01000001'],
+ 'cargo_predicate': [-688334,
+                     46,
+                     '554889e5488b4f7030c04885c9741d8b1131f6eb044883c60230c039d6730d488b7908b001837cb704007ee95dc3'],
+ 'sound_choice': [-1298790,
+                  79,
+                  '8b078d48fe83f904724585c07573488d05f1662f004c8b30488d05df602f00488b38be02000000e86a961b00488d0dff602f008a510f31c9f6c201480f44d985c00f95c00fb6f083ce124c89f7eba0'],
+ 'type_zero_models': [-1301757,
+                      122,
+                      'bfe8000000e879a921004889c3488d05616c2f00488b104889dfbeb541000031c9e80b60ffff49891c24bfe8000000e84fa921004889c3488d05376c2f00488b104889dfbeb441000031c9e8e15fffff8b7314498b3c24e89363ffff4885db0f84640100004889dfe8ee62ffff4889dfe802a92100e94f010000'],
+ 'effect_update': [-1297660,
+                   538,
+                   '554889e54157415641554154534883ec384989d64189f74989fc41f6442430010f84e4010000488d05475c2f00488b38498b4424088b7014e8cf381c004d63ff4889c74c89fe31d2e87fc71a00498b4424088b701c83feff741c488d05135c2f00488b38e8a3381c004889c74c89fe31d2e856c71a00498b4424104885c0741f8b7014488d05ea5b2f00488b38e87a381c004889c74c89fe31d2e82dc71a00498b4424184885c0743b833800743631db4c8d2dbd5b2f00488b4008488b04d88b7014498b7d00e841381c004889c74c89fe31d2e8f4c61a0048ffc3498b4424183b1872d34d85f60f84f100000041833c24010f87e6000000498b7c2408e87c53fffff30f114dc0f30f1145b8660f70c001f30f1145bc4c8d2d575b2f00498b5d004889dfe8d33d1c004889df89c6e8f9391c004889c7e8e14c1d00488d7db8488d75a8f30f114db0f30f1145a8660f70c001f30f1145ace8a0a41a00488d7dc8f30f114dd0f30f1145c8660f70c001f30f1145cce8d3ac1a00f30f1145a4498b7d00498b4424088b7014e87d371c008b80300100003dd00700007f42f30f100520ab2100f30f1055a4f30f5dd0f30f5ed0f30f2ac8f30f5e0d0bab2100f30f10052fa72100f30f58c8f30f5cc2f30f59c14c89f7be32000000e85a5a18004d037c24284d897c24284d3b7c24207e1b4c89e7e87bf4ffff4d85f6740e4c89f7660fefc031f6e82e5a18004883c4385b415c415d415e415f5dc390'],
+ 'retire': [-690168, 18, '554889e5488b7f08400fb6f65de9fa760900'],
+ 'active_setter': [-69868, 14, '554889e54088b7c80000005dc390'],
+ 'spin_constant': [937532, 4, 'cdcc4c3d'],
+ 'drift_multiplier': [920600, 4, '0ad7233c'],
+ 'drift_base': [920764, 4, '00004842']}
+
+
+# Independently verified alternate Mac compiler layout.
+MAC_AUDIO_ALTERNATE = {'initial': [8316,
+             121,
+             '4c8d8518fcfffff30f1005cdeb0d00498b46788b704c488bb888000000c78518fcffff00000000c7851cfcffff00000000c78520fcffff00000000488b9d90f5ffff4889da31c9e8245ffeff488d05d1741b0031c9488d15f46e1b00f6420f014889da480f44d1488b38be1400000031c90f57c0e86958ecff'],
+ 'breakup_entry': [-1299024, 10, '554889e54156534889f3'],
+ 'breakup_call': [-1298807, 17, '4889da31c90f57c05b415e5de9c44a0000']}

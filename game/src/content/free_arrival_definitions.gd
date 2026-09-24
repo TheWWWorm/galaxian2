@@ -5,6 +5,8 @@ const VALUES = {"scope":"augmenta_ordinary_arrival","campaign_cursor":18,"system
 const SPANS = {"free_arrival_marker":[382634,133],"free_arrival_ambush":[-19839,241],"free_arrival_rank":[876350,12],"free_arrival_player_position":[562384,14],"free_arrival_entity_position":[-724356,26],"free_arrival_matrix_position":[1241402,96],"free_arrival_position_scale":[1556910,4],"free_arrival_hard_mode":[873106,34],"free_arrival_other_systems":[873024,82],"free_arrival_hard_constant":[1545698,4]}
 
 # Native composition.
+const MAC_SPANS = {"free_arrival_marker":[383150,133],"free_arrival_ambush":[-19839,241],"free_arrival_rank":[876982,12],"free_arrival_player_position":[562920,14],"free_arrival_entity_position":[-730252,26],"free_arrival_matrix_position":[1234194,96],"free_arrival_position_scale":[1531910,4],"free_arrival_hard_mode":[873738,34],"free_arrival_other_systems":[873656,82],"free_arrival_hard_constant":[1520682,4]}
+
 static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
 
 static func available(bindings: RefCounted) -> bool:

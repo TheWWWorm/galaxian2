@@ -7,6 +7,7 @@ const GameOverPanel=preload("res://src/presentation/game_over_panel.gd")
 
 func run():
 	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
 	check(args.size() in [3,4],"Expected Mac content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:await verify(args)
 	if is_instance_valid(host):host.free()
@@ -44,11 +45,11 @@ func after_first_return(args: PackedStringArray):
 	for i in 60:
 		if host.session.snapshot().dialogue.visible:break
 		if not step():return
-	check(host.session.snapshot().dialogue.text_id==1717 and host.session.objective_audio.snapshot().history[0].source_id==431,"Second cargo instruction used the wrong line or voice")
+	check(host.session.snapshot().dialogue.text_id==int(bindings.full_hold_story.completion_events[0].text_id) and host.session.objective_audio.snapshot().history[0].source_id==431,"Second cargo instruction used the wrong line or voice")
 	if args.size()==4:await capture(args[3],"app-second-warning")
 	key(KEY_ENTER)
-	check(host.session.snapshot().dialogue.text_id==1718 and host.session.objective_audio.snapshot().history.back().source_id==432,"Second warning lost its acknowledgement/voice order")
-	key(KEY_ENTER);button(JOY_BUTTON_Y)
+	check(host.session.snapshot().dialogue.text_id==int(bindings.full_hold_story.completion_events[1].text_id) and host.session.objective_audio.snapshot().history.back().source_id==432,"Second warning lost its acknowledgement/voice order")
+	key(KEY_ENTER);button(JOY_BUTTON_Y);key(KEY_2)
 	check(host.session.snapshot().campaign_cursor==5 and host.session.snapshot().station_autopilot.active,"Second return failed to activate native station guidance")
 	var flight: Node=host.session;var audio: Node=flight.flight_audio
 	for i in 4000:
@@ -73,7 +74,7 @@ func after_first_return(args: PackedStringArray):
 	check(host.session.snapshot().cargo==arrived.cargo and host.session.snapshot().arrival_player==arrived.player,"Second station entry reset the accepted player or cargo")
 	if args.size()==4:await capture(args[3],"app-second-return")
 	for i in 6:
-		check(host.session.snapshot().dialogue.text_id==1719+i and not host.request_departure(),"Second station conversation skipped a line or allowed departure")
+		check(host.session.snapshot().dialogue.text_id==int(bindings.full_hold_return.events[i].text_id) and not host.request_departure(),"Second station conversation skipped a line or allowed departure")
 		if i<5:check(host.session.audio.snapshot().history.back().source_id==433+i,"Second station conversation used the wrong recording")
 		else:
 			check(host.session.audio._player==null,"Silent equipment instruction retained speech")
@@ -93,7 +94,7 @@ func release_second_briefing() -> bool:
 	for i in 160:
 		if host.session.snapshot().dialogue.visible:break
 		if not step():return false
-	check(host.session.snapshot().phase=="briefing" and host.session.snapshot().dialogue.text_id==1716 and host.session.briefing_audio.snapshot().history[0].source_id==188,"Second departure lost its source briefing")
+	check(host.session.snapshot().phase=="briefing" and host.session.snapshot().dialogue.text_id==int(bindings.full_hold_story.briefing_events[0].text_id) and host.session.briefing_audio.snapshot().history[0].source_id==188,"Second departure lost its source briefing")
 	var before: Dictionary=host.session.snapshot();var serial: int=before.flight_audio.serial
 	for i in 3:
 		if not step():return false
@@ -108,7 +109,7 @@ func start_second_drill(hold_trigger:=false) -> bool:
 	place_for_mining(world,asteroid)
 	if not host.session._commit(world,false):check(false,host.session.error);return false
 	if hold_trigger:trigger(.9)
-	else:key(KEY_E)
+	else:key(KEY_F)
 	for i in 200:
 		if host.session.flight_owner().drill_owner()!=null:return true
 		if not step():return false
@@ -131,9 +132,9 @@ func death_branch(args: PackedStringArray, packet: Dictionary):
 	if not flight._commit(dead,false):check(false,flight.error);return
 	host.present_session()
 	check(not flight.can_control() and flight.can_stop_mining() and not host._flight_actions.visible,"Death allowed normal flight or lost the existing drill stop")
-	key(KEY_W);key(KEY_P);key(KEY_MINUS)
+	key(KEY_UP);key(KEY_Q);key(KEY_SLASH)
 	check(host._controls.snapshot().command==Vector2.ZERO and flight.snapshot().input_throttle==1 and not flight.snapshot().station_autopilot.active,"Dead application accepted steering, throttle or a new autopilot")
-	key(KEY_E)
+	key(KEY_F)
 	check(flight.flight_owner().drill_owner()==null and flight.snapshot().cargo.used==0 and not flight.can_stop_mining(),"Death input failed to stop the existing zero-ore drill")
 	var before: Dictionary=flight.snapshot()
 	for reason in ["user","focus","hidden"]:

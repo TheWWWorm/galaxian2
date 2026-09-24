@@ -1,4 +1,5 @@
 extends RefCounted
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 ## Verified ordinary hits and source freighter boxes. No travel permission.
 const Equal=preload("res://src/content/opening_escape_definitions.gd")
 const Fonts=preload("res://src/content/font_definitions.gd")
@@ -7,6 +8,8 @@ const FreeTraffic=preload("res://src/content/free_traffic_definitions.gd")
 const ControlRules=preload("res://src/content/combat_training_control_definitions.gd")
 const VALUES = {"scope":"early_mido_ambient_combat","campaign_cursor":11,"station_id":79,"system_id":15,"actor_kind":3,"supported_ranks":[0,1,2],"initial_actor_mode":0,"initial_active":true,"freighter":{"subtype":1,"hull_catalogue_id":15,"hull_multiplier":5,"point_geometry":true,"boxes":[{"offset":[0,-199,4708],"half_extents":[490,765,620]},{"offset":[0,-14,-98],"half_extents":[2250,702.5,4430]}]}}
 const SPANS = {"factory":[77944,3478],"base_actor":[-81548,948],"statistics":[534164,980],"freighter_constructor":[631244,1108],"normal_hit":[538936,1846],"point_wrapper":[-76580,26],"freighter_point":[638832,218],"box_constructor":[-710254,138],"box_point":[-710024,122],"freighter_position":[633042,280],"projectile_point_selection":[-181241,192],"freighter_hostility":[634203,154],"box_values":[1575362,32],"half_extent_scale":[1544586,4]}
+
+const MAC_SPANS = {"factory":[77944,3478],"base_actor":[-81548,948],"statistics":[534700,980],"freighter_constructor":[631792,1108],"normal_hit":[539472,1846],"point_wrapper":[-76580,26],"freighter_point":[639380,218],"box_constructor":[-716150,138],"box_point":[-715920,122],"freighter_position":[633590,280],"projectile_point_selection":[-181733,192],"freighter_hostility":[634751,154],"box_values":[1550426,32],"half_extent_scale":[1519570,4]}
 
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.size()!=VALUES.size()+1 or not data.get("provenance") is Dictionary:return false
@@ -20,10 +23,7 @@ static func validate(data: Variant,source_bytes: int,arch: String,arrival: Dicti
 	if arch!="x86_64" or not parameters(data) or not Ambient.parameters(population):return "Unsupported ambient combat declarations"
 	var origin: Variant=arrival.get("provenance",{}).get("actor")
 	if not Fonts.extent(origin,"offset","bytes",[315],source_bytes):return "Ambient combat lacks its source anchor"
-	if data.provenance.size()!=SPANS.size():return "Invalid ambient combat provenance"
-	for key in SPANS:
-		var span: Variant=data.provenance.get(key);var rule: Array=SPANS[key]
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],source_bytes) or int(span.offset)!=int(origin.offset)+int(rule[0]):return "Invalid ambient combat extent: "+key
+	if not Layouts.matches(data.provenance,int(origin.offset),source_bytes,[SPANS,MAC_SPANS]):return "Invalid ambient combat source layout"
 	return ""
 
 static func population(bindings: RefCounted,packet: Dictionary,rank: Variant,difficulty: Variant) -> Dictionary:

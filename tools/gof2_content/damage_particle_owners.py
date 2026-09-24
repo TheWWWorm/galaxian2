@@ -6,6 +6,7 @@ only parameters and file extents; no instructions enter a content pack.
 import math
 import struct
 from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 
 def extract_damage_particle_owners(mach, actors, staging):
@@ -18,16 +19,18 @@ def extract_damage_particle_owners(mach, actors, staging):
         anchor=npc['provenance']['factory_entry']
         if anchor['bytes']!=4:return {}
         at=mach.text['address']+anchor['offset']-mach.slice_offset-mach.text['offset']
-        proof={};fraction=None
-        for key,(delta,size,raw) in LAYOUTS[mach.architecture].items():
-            section=b'__const' if key=='hull_fraction' and mach.architecture=='x86_64' else b'__text'
-            found=section_bytes(mach,at+delta,size,section)
-            if found is None:return {}
-            if key=='hull_fraction':
-                fraction=struct.unpack('<f',found[0])[0]
-                if not math.isfinite(fraction) or not 0<fraction<1:return {}
-            elif found[0]!=bytes.fromhex(raw):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        layouts=[LAYOUTS[mach.architecture]]+([MAC_ALTERNATE] if mach.architecture=='x86_64' else [])
+        proof=recognize(mach,anchor['offset'],[{k:v for k,v in row.items() if k!='hull_fraction'} for row in layouts])
+        if not proof:return {}
+        delta=LAYOUTS[mach.architecture]['hull_fraction'][0]
+        if mach.architecture=='x86_64' and proof['npc_registration']['offset']==anchor['offset']+MAC_ALTERNATE['npc_registration'][0]:
+            delta=MAC_ALTERNATE['hull_fraction'][0]
+        section=b'__const' if mach.architecture=='x86_64' else b'__text'
+        found=section_bytes(mach,at+delta,4,section)
+        if found is None:return {}
+        fraction=struct.unpack('<f',found[0])[0]
+        if not math.isfinite(fraction) or not 0<fraction<1:return {}
+        proof['hull_fraction']={'offset':found[1],'bytes':4}
         return {'scope':'fresh_opening_damage_emitters','npc_hull_fraction':fraction,
                 'npc_suppressed_mode':9,'active_mode':1,'player_max_campaign_cursor':1,
                 'npc_uses_detail_gate':mach.architecture=='x86_64',
@@ -101,3 +104,38 @@ LAYOUTS = {'x86_64': {'npc_registration': (530685,
            'npc_root_getter': (-1146244, 4, '84307047'),
            'npc_root_capture': (-1145116, 30, '90b5c26a00f18404c16801af1046d8f22df901462046bde89040e3f2b7bd'),
            'player_root_getter': (-1146264, 8, 'c168c06ad8f270bb')}}
+
+
+# Independently verified complete alternate Mac compiler layout.
+MAC_ALTERNATE = {'npc_registration': [531233,
+                      128,
+                      '488b7b10488b43784c8bb090000000e88990ebff4c89f74889c6ba0f00000031c9e84b81feff8983b4000000488b4b78488bb99000000089c631d2e8d184feff488b7b10488b43784c8bb0a8000000e84990ebff4c89f74889c6ba2a00000031c9e80b81feff8983b8000000488b4b78488bb9a800000089c631d2e89184feff'],
+ 'npc_initial_flag': [529307, 18, '41c684247f0100000041c684246402000000'],
+ 'npc_threshold': [540270,
+                   351,
+                   '498b7e08e8fbc6feff4189c4418a8664020000a801753c498b7e080f57c0f3410f2ac4f30f118580f5ffffe8e0c6feff0f57c0f30f2ac0f30f5905b1c00d000f2e8580f5ffff0f878e000000418a86640200004c89bd90f5ffffa8010f84fd000000498b7e080f57c0f3410f2ac4f30f118580f5ffffe895c6feff0f57c0f30f2ac0f30f590566c00d00f30f108d80f5ffff0f2ec80f82c400000041c6866402000000418bb6b4000000498b4678488bb89000000031d2e80861feff418bb6b8000000498b4678488bb8a800000031d2e8ef60feffe9850000004c89bd90f5ffff488d05f0731b00f30f104028660fefc90f2ec176614c89f7e8f661f5ff418bb6b4000000498b4e78488bb99000000084c07523ba01000000e8a660feff418bb6b8000000498b4678488bb8a8000000ba01000000eb1b31d2e88660feff418bb6b8000000498b4678488bb8a800000031d2e86d60feff41c6866402000001'],
+ 'npc_release': [542910,
+                 77,
+                 '41c786bc0000000100000041f68664020000017438418bb6b4000000498b4678488bb890000000ba01000000e84357feff418bb6b8000000498b4678488bb8a8000000ba01000000e82757feff'],
+ 'npc_holding': [543929,
+                 75,
+                 '41c786bc0000000900000041f68664020000010f8449190000418bb6b4000000498b4678488bb89000000031d2e84753feff418bb6b8000000498b4678488bb8a800000031d2e82e53feff'],
+ 'npc_breakup': [548842,
+                 173,
+                 '418b86600200004429e84189866002000085c04c89e60f8915060000498bbe70010000c785a8f6ffff00000000c785acf6ffff00000000c785b0f6ffff00000000488d95a8f6ffffe8bbf2ebff418bb608020000498b4678488bb88800000031d2e8e23ffeff660fefc0488d05eb521b00f30f1048280f2ec87632418bb6b4000000498b4678488bb89000000031d2e8b43ffeff418bb6b8000000498b4678488bb8a800000031d2e89b3ffeff'],
+ 'player_registration': [482306,
+                         157,
+                         '488d05d9561c00488b38e81b8e040083f8017e055b415e5dc3488b7b10488b43184c8bb090000000e8654fecff4c89f74889c6ba0f00000031c9e85140ffff89839c030000488b4b18488bb99000000089c631d2e8d743ffff488b7b10488b43184c8bb0a8000000e8254fecff4c89f74889c6ba2a00000031c9e81140ffff8983a0030000488b4b18488bb9a800000089c631d25b415e5de99343ffff'],
+ 'player_enable': [523200,
+                   80,
+                   '554889e553504889fb8bb39c03000085f679074883c4085b5dc3488b4318488bb890000000ba01000000e843a4feff8bb3a0030000488b4318488bb8a8000000ba010000004883c4085b5de922a4feff'],
+ 'restore_cue': [64447, 5, 'e8fcff0600'],
+ 'relocation_reset': [63657, 28, '488bb8a8000000e851aa0500498b4520488bb890000000e841aa0500'],
+ 'world_smoke_update': [40359, 20, '498bbf900000004885ff74084c89f6e89dfd0500'],
+ 'world_fire_update': [40472, 20, '498bbfa80000004885ff74084c89f6e82cfd0500'],
+ 'npc_root_getter': [-808002, 13, '554889e5488d87ac0000005dc3'],
+ 'npc_root_capture': [-806234,
+                      45,
+                      '554889e553504889fb8b7314488b7b38e8efd61c004881c3ac0000004889df4889c64883c4085b5de927e31d00'],
+ 'player_root_getter': [-808044, 17, '554889e58b7714488b7f385de905de1c00'],
+ 'hull_fraction': [1441630, 4, '']}

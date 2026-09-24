@@ -1,10 +1,10 @@
 """Original convoy capital-ship assembly and physical constants, import only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_convoy_ship(mach,arrival):
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
-    return (copy.deepcopy(VALUES),proof) if proof else ({},{})
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
+    return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'mido_convoy_capital_ship',
  'campaign_cursor': 14,
@@ -112,3 +112,38 @@ LAYOUTS = {'convoy_ship_factory_dispatch': [-219266,
                             234,
                             '__text',
                             '5e829d7f69fbf841716f93f9920674c726dba64ffd1be0ca3c4b5355e1b8b9d9']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'convoy_ship_factory_dispatch': [-220222,
+                                  28,
+                                  '__text',
+                                  '61002a5a4596c0d58114a1dba0db422093335f3b9221d5bf737830e99681b60d'],
+ 'convoy_ship_assembly': [-219965, 225, '__text', '786bb1eeaffb1528c09127981662d00a2ccfd4c4c982451a2062a07b7d15fefd'],
+ 'convoy_ship_assembly_scale': [1532082,
+                                4,
+                                '__const',
+                                'd88c86f15bbea365d658ad95a81d45367c465f7af6f7264fb077f01747ddc77d'],
+ 'convoy_ship_factory_hull': [78349, 37, '__text', 'e5fa589ad007cfe54667fab1645e9db2b1d83957902386c5655c6b31757bb181'],
+ 'convoy_ship_box_factory': [78968, 967, '__text', '37ba8a7bf2c615bb684c7784b2ead7eeb65cf184c7797fd06f4492d6f73c70e6'],
+ 'convoy_ship_box_values': [1550638,
+                            160,
+                            '__const',
+                            'b4a320ba8b1af7f4dbe7c0d236e9ffca167559e4348cc25dec2305a4d7963979'],
+ 'convoy_ship_box_constructor': [-716150,
+                                 138,
+                                 '__text',
+                                 'ed1b33eabc9ac0588b159815a2100fdf8b20ca75e7019d44467390d4b60fb660'],
+ 'convoy_ship_box_half_scale': [1519570,
+                                4,
+                                '__const',
+                                'd99e58435243d9fef9c88273b8d553b4fba4d0baf8009d29eae74fa99e0d9f57'],
+ 'convoy_ship_box_point': [-715920, 122, '__text', 'ed39d6edebadeaa30e762599d6c92439c73a5786159abc733801b6cf712a8f76'],
+ 'convoy_ship_cargo': [632573, 115, '__text', '4f1428b76ab0cc039a35c6034bd951634a75ad3cb3a81bd8a76bdbf95fcd905f'],
+ 'convoy_ship_initial_state': [632781,
+                               57,
+                               '__text',
+                               'c4a2f3684275360b22e594b5389f8ea3463a8dbd8c374fc0afb97722b2c27df7'],
+ 'convoy_ship_motion_gate': [635070, 64, '__text', 'b35cc70ec8a66a86ee4190f377dff59d0fc95969b142d51f105fcfaaadd1e1fc'],
+ 'convoy_ship_motion_step': [634470, 212, '__text', '96ea25789aeae64e83fcdead3b99e4fd2f9e4448436afd85acd02ba1a30651ea'],
+ 'convoy_ship_motion_flag': [633576, 14, '__text', '2f5cd2adf4e89c1d33ae38fd13660af81f5e8d562088a4570e24e9765d840ecc'],
+ 'convoy_ship_model_move': [-728598, 234, '__text', '733a495e07430f5e052584772edb564e11bfa77a5d082b6eec2130c2221cd27d']}

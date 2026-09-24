@@ -53,7 +53,8 @@ def prepare(source: Path, base: Path, output: Path, checkpoint=lambda *_: None):
                     done += len(block)
             if read != size or digest.hexdigest() != expected[name]['sha256']:
                 raise ContentError('Source resource checksum differs from the base: ' + name)
-        declarations = extract(bundle.read(bundle.executable(), MAX_EXECUTABLE), bundle.profile['edition'], checkpoint)
+        declarations = extract(bundle.read(bundle.executable(), MAX_EXECUTABLE), bundle.profile['edition'], checkpoint,
+                               ship_count=manifest['ship_table']['records'])
     audio = {}
     event_files = [name for name, record in manifest['files'].items() if record.get('kind') == 'audio_events']
     if len(event_files) > 1:
@@ -135,9 +136,15 @@ def prepare(source: Path, base: Path, output: Path, checkpoint=lambda *_: None):
     combat_training_destruction = declarations.pop('combat_training_destruction')
     combat_training_visuals = declarations.pop('combat_training_visuals')
     combat_training_story = declarations.pop('combat_training_story')
+    fast_forward = declarations.pop('fast_forward')
+    ordinary_music = declarations.pop('ordinary_music')
+    physical_scenery_contacts = declarations.pop('physical_scenery_contacts')
     mido_travel = declarations.pop('mido_travel')
     early_contracts = declarations.pop('early_contracts')
     engine_particles = declarations.pop('engine_particles')
+    engine_particle_owners = declarations.pop('engine_particle_owners')
+    deep_science_stock = declarations.pop('deep_science_stock')
+    persistent_contacts = declarations.pop('persistent_contacts')
     ambient_population = declarations.pop('ambient_population')
     ambient_combat = declarations.pop('ambient_combat')
     freighter_destruction = declarations.pop('freighter_destruction')
@@ -231,9 +238,15 @@ def prepare(source: Path, base: Path, output: Path, checkpoint=lambda *_: None):
                        'combat_training_destruction': combat_training_destruction,
                        'combat_training_visuals': combat_training_visuals,
                        'combat_training_story': combat_training_story,
+                       'fast_forward': fast_forward,
+                       'ordinary_music': ordinary_music,
+                       'physical_scenery_contacts': physical_scenery_contacts,
                        'mido_travel': mido_travel,
                        'early_contracts': early_contracts,
                        'engine_particles': engine_particles,
+                       'engine_particle_owners': engine_particle_owners,
+                       'deep_science_stock': deep_science_stock,
+                       'persistent_contacts': persistent_contacts,
                        'ambient_population': ambient_population,
                        'ambient_combat': ambient_combat,
                        'freighter_destruction': freighter_destruction,

@@ -45,9 +45,16 @@ func verify(args: Array):
 	for key in Definitions.VALUES:
 		var bad: Dictionary=bindings.mining_session.duplicate(true);bad[key]=null
 		check(not Definitions.parameters(bad),"Changed session parameter accepted: "+key)
-	for key in Definitions.SPANS:
+	for key in bindings.mining_session.provenance:
 		var bad: Dictionary=bindings.mining_session.duplicate(true);bad.provenance[key].offset+=1
 		check(not Definitions.validate(bad,header.source_executable_bytes,header.architecture,bindings.arrival_staging,bindings.mining_approach,bindings.mining_drill).is_empty(),"Detached session provenance accepted: "+key)
+	if bindings.mining_session.has("failure_instruction"):
+		var mixed: Dictionary=bindings.mining_session.duplicate(true)
+		mixed.failure_instruction=(Definitions.CURRENT_VALUES if mixed.failure_instruction.repeat_each_drill else Definitions.MAC_VALUES).failure_instruction.duplicate(true)
+		check(not Definitions.validate(mixed,header.source_executable_bytes,header.architecture,bindings.arrival_staging,bindings.mining_approach,bindings.mining_drill).is_empty(),"A failure policy from another source matched unchanged provenance")
+		for change in [{"text_id":607},{"repeat_each_drill":1},{"acknowledgement_advances_story":true}]:
+			var bad: Dictionary=bindings.mining_session.duplicate(true);bad.failure_instruction.merge(change,true)
+			check(not Definitions.parameters(bad),"Changed failure instruction parameters were accepted")
 	var player:=Player.new();var handoff:=Handoff.new();check(player.configure(bindings,cat),player.error)
 	var packet:=handoff.prepare(bindings,cat,Fixture.completed(bindings,player,3))
 	var arrival:=Arrival.new()
@@ -94,7 +101,7 @@ func verify(args: Array):
 	check(not first.is_empty() and first.session.snapshot().drill.point.distance_to(Vector2(3.75,-3.75))<0.000001 and first.session.snapshot().drill.input==Vector2.ZERO and first.random_state==random,"Mining lost input latency or consumed premature RNG")
 	verify_gated_input(session,created,field,hold,random)
 	check(session.snapshot()==created and world.snapshot()==field and cargo.snapshot()==hold and approach.snapshot()==docked,"Prospective drilling changed an accepted owner")
-	for bad in [-1,151,0.5,"1"]:check(session.evaluate(world,cargo,bad,random).is_empty() and session.snapshot()==created,"Invalid mining delta changed a session")
+	for bad in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5,"1"]:check(session.evaluate(world,cargo,bad,random).is_empty() and session.snapshot()==created,"Invalid mining delta changed a session")
 	check(session.evaluate(world,cargo,100,{}).is_empty() and session.evaluate(world,cargo,100,random,Vector2(2,0)).is_empty(),"Invalid mining RNG or command was accepted")
 	check(not session.configure(bindings,cat,Construction.new(),false) and session.snapshot()==created,"Failed configuration replaced the active drill")
 	var replacement:=Construction.new();check(replacement.prepare(bindings,cat,departure,4096,1789100000,true,bodies,effects),replacement.error)
@@ -124,6 +131,11 @@ func verify(args: Array):
 	check(failed.outcome=="failed" and failed.resume_motion and failed.release_approach and failed.cargo.snapshot()==hold and failed.scenery.snapshot().mined_count==1,"Failed drilling did not consume only its asteroid or resume motion")
 	var events: Array=failed.session.snapshot().events
 	check(events==[{"kind":"stop_audio_event","source_id":1},{"kind":"stop_audio_event","source_id":3},{"kind":"notification","source_id":8,"text_id":528}],"Mining failure event sequence differs from the source")
+	if bindings.mining_session.has("failure_instruction"):
+		var candidate: RefCounted=failed.session.fork_for_frame()
+		var policy: Dictionary=bindings.mining_session.failure_instruction
+		check(candidate.failure_instruction_due(2) and candidate.failure_instruction_due(3)==(int(policy.campaign_cursor)<0),"Failure instruction ignored its source campaign gate")
+		check(candidate.mark_failure_instruction_shown(2) and not candidate.failure_instruction_due(2) and not failed.session.failure_instruction_shown(),"Instruction history leaked across a candidate or repeated without another attempt")
 	var completed:=run_drilling(500,false,false)
 	if completed.is_empty():return
 	var earned: Dictionary=completed.cargo.snapshot();var core_id:=int(asteroid.item_id)+11
@@ -170,29 +182,10 @@ func verify_flight(lib: RefCounted,args: Array):
 		if flight==null:check(false,"Could not prepare first-flight briefing");return
 	for i in 5:flight=flight.navigate("next")
 	var asteroid: Dictionary=construction.snapshot().scenery.bodies.objects[index]
-	var distance:=float(int(Approach.f32(asteroid.scale*2500))+10000)
-	# Initial pilot placement is a test fixture. Live acquisition, approach,
-	# creation, drilling and world transactions run through the real frame.
-	flight._pose=Transform3D(Basis(Vector3.UP,PI),asteroid.position+Vector3(0,0,distance))
-	var data: Dictionary=bindings.camera_follow
-	var eye: Vector3=flight._pose*Vector3(data.eye_offset[0],data.eye_offset[1],data.eye_offset[2])
-	var look: Vector3=flight._pose*Vector3(data.look_offset[0],data.look_offset[1],data.look_offset[2])
-	flight._camera._state.eye=eye;flight._camera._state.look=look;flight._camera._state.pose=Transform3D.IDENTITY.looking_at(look-eye,Vector3.UP);flight._camera._state.pose.origin=eye
-	flight._aim=Aim.new();flight._aim.configure(bindings)
-	for i in 55:
-		var next: RefCounted=flight.evaluate(100,Vector2.ZERO,0.0)
-		if next==null:check(false,flight.error);return
-		flight=next
-	if flight.snapshot().mining_targeting.selected_object_index!=index:check(false,"Live scanner did not acquire the actual session asteroid");return
-	flight=flight.evaluate(0,Vector2.ZERO,1.0)
-	var departure: Dictionary=flight.snapshot()
-	flight=flight.start_mining()
-	if flight==null:check(false,"Live mining action was refused");return
-	for i in 200:
-		var next: RefCounted=flight.evaluate(100,Vector2.ZERO,0.0)
-		if next==null:check(false,flight.error);return
-		flight=next
-		if not flight.snapshot().mining_session.drill.is_empty():break
+	var prepared:=begin_flight_drill(flight,asteroid)
+	if prepared.is_empty():return
+	flight=prepared.flight
+	var departure: Dictionary=prepared.departure
 	var created: Dictionary=flight.snapshot();var captures:={"drill-created":flight}
 	check(not created.mining_session.drill.is_empty() and created.mining_session.drill.elapsed_ms==0 and created.mining_session.drill.random_state.is_empty() and created.random_state==departure.random_state,"Live creation consumed drilling time or random draws")
 	check(flight.cancel_mining()==null and flight.stop_mining(true)==null,"Active drill accepted an approach cancel or paused stop")
@@ -223,19 +216,24 @@ func verify_flight(lib: RefCounted,args: Array):
 	if failed==null:return
 	var failure: Dictionary=failed.snapshot();captures["drill-failed"]=failed
 	check(failure.mining_session.extraction.phase=="failed" and failure.cargo.used==0 and failure.scenery.mined_count==1 and failure.mining_session.events.back().text_id==528,"Live failure lost its no-ore transaction or source notice")
+	if bindings.mining_session.has("failure_instruction"):
+		var retry:=verify_failure_retry(failed)
+		if retry!=null:captures["drill-failed-again"]=retry
 	var complete:=finish_flight(flight,false)
 	if complete==null:return
 	var success: Dictionary=complete.snapshot();captures["drill-complete"]=complete
 	check(success.mining_session.extraction.all_layers and success.cargo.used==25 and success.scenery.mined_count==1 and complete.drill_owner()==null,"Live full extraction did not fill the owned cargo hold once")
 	for state in [result,failure,success]:
-		for key in ["mission","progress","campaign_cursor","mining_completed","reward_credits"]:check(state[key]==departure[key],"Mining granted unearned campaign progress: "+key)
+		var progress: Dictionary=state.progress.duplicate(true);progress.erase("mining_failure_hint_seen")
+		check(progress==departure.progress,"Mining changed earned counters while recording instruction history")
+		for key in ["mission","campaign_cursor","mining_completed","reward_credits"]:check(state[key]==departure[key],"Mining granted unearned campaign progress: "+key)
 	if complete._objective!=null:
 		var objective: RefCounted=complete
 		for i in 60:
 			if objective.dialogue_visible():break
 			objective=objective.evaluate(100)
 			if objective==null:check(false,"Mined cargo objective poll failed");return
-		check(objective.snapshot().cargo_objective_satisfied and objective.snapshot().dialogue.text_id==1706 and objective.snapshot().campaign_cursor==2,"Actual full extraction did not offer the return instructions")
+		check(objective.snapshot().cargo_objective_satisfied and objective.snapshot().dialogue.text_id==int(bindings.mining_objective.events[0].text_id) and objective.snapshot().campaign_cursor==2,"Actual full extraction did not offer the return instructions")
 		for i in 3:objective=objective.navigate("next")
 		check(objective.snapshot().campaign_cursor==3 and objective.snapshot().cargo.used==25 and objective.snapshot().station_return_required and not objective.snapshot().mining_completed,"Actual mined cargo lost the acknowledged return boundary")
 		# Six prior tons and a clock one millisecond before its due poll are
@@ -246,7 +244,79 @@ func verify_flight(lib: RefCounted,args: Array):
 		check(manual!=null and manual.snapshot().cargo.used==10 and not manual.snapshot().cargo_objective_satisfied and not manual.dialogue_visible(),"Manual stop polled cargo before the next frame")
 		manual=manual.evaluate(1)
 		check(manual!=null and manual.snapshot().cargo_objective_satisfied and manual.dialogue_visible(),"Next due poll ignored the manual extraction")
-	if args.size()==4:await render(lib,args[2],args[3],captures)
+	var directory: String=args[3] if args.size()==4 else OS.get_environment("GOF2_CAPTURE_DIR")
+	if DisplayServer.get_name()!="headless" and not directory.is_empty():
+		DirAccess.make_dir_recursive_absolute(directory)
+		await render(lib,args[2],directory,captures)
+
+func begin_flight_drill(parent: RefCounted,asteroid: Dictionary) -> Dictionary:
+	var flight: RefCounted=parent.fork_for_frame()
+	var distance:=float(int(Approach.f32(asteroid.scale*2500))+10000)
+	# Initial pilot placement is a test fixture. Live acquisition, approach,
+	# creation, drilling and world transactions run through the real frame.
+	flight._pose=Transform3D(Basis(Vector3.UP,PI),asteroid.position+Vector3(0,0,distance))
+	var data: Dictionary=bindings.camera_follow
+	var eye: Vector3=flight._pose*Vector3(data.eye_offset[0],data.eye_offset[1],data.eye_offset[2])
+	var look: Vector3=flight._pose*Vector3(data.look_offset[0],data.look_offset[1],data.look_offset[2])
+	flight._camera._state.eye=eye;flight._camera._state.look=look;flight._camera._state.pose=Transform3D.IDENTITY.looking_at(look-eye,Vector3.UP);flight._camera._state.pose.origin=eye
+	flight._aim=Aim.new();flight._aim.configure(bindings)
+	for i in 55:
+		var next: RefCounted=flight.evaluate(100,Vector2.ZERO,0.0)
+		if next==null:check(false,flight.error);return {}
+		flight=next
+	if flight.snapshot().mining_targeting.selected_object_index!=asteroid.index:check(false,"Live scanner did not acquire the actual session asteroid");return {}
+	flight=flight.evaluate(0,Vector2.ZERO,1.0)
+	var departure: Dictionary=flight.snapshot()
+	flight=flight.start_mining()
+	if flight==null:check(false,"Live mining action was refused");return {}
+	for i in 200:
+		var next: RefCounted=flight.evaluate(100,Vector2.ZERO,0.0)
+		if next==null:check(false,flight.error);return {}
+		flight=next
+		if not flight.snapshot().mining_session.drill.is_empty():break
+	if flight.drill_owner()==null:check(false,"Native approach did not create its drill");return {}
+	return {"flight":flight,"departure":departure}
+
+func verify_failure_retry(failed: RefCounted) -> RefCounted:
+	var original: Dictionary=failed.snapshot()
+	var closed:=verify_failure_instruction(failed)
+	if closed==null:return null
+	var asteroid:={}
+	for body in closed.snapshot().scenery.bodies.objects:
+		if body.source_size_value==7 and not body.get("mined",false):asteroid=body;break
+	if asteroid.is_empty():check(false,"No remaining source asteroid for a second attempt");return null
+	var prepared:=begin_flight_drill(closed,asteroid)
+	if prepared.is_empty():return null
+	var second: RefCounted=prepared.flight
+	var repeat: bool=bindings.mining_session.failure_instruction.repeat_each_drill
+	check(second.snapshot().progress.mining_failure_hint_seen==not repeat and second._mining.failure_instruction_shown()==not repeat,"The next actual drill applied another source's failure reset")
+	second=finish_flight(second,true)
+	if second==null:return null
+	var state: Dictionary=second.snapshot()
+	check(state.cargo.used==0 and state.scenery.mined_count==2 and state.mining_session.extraction.phase=="failed","Retry lost the two earned failure transactions")
+	check(second.dialogue_visible()==repeat and state.progress.mining_failure_hint_seen,"A second failure did not follow this source's modal repeat policy")
+	check(state.campaign_cursor==original.campaign_cursor and state.mission==original.mission and state.progress==original.progress,"Failure retry changed the mission or career counters")
+	check(failed.snapshot()==original,"The next attempt changed the accepted failure branch")
+	if repeat:verify_failure_instruction(second)
+	return second
+
+func verify_failure_instruction(flight: RefCounted) -> RefCounted:
+	var shown: Dictionary=flight.snapshot()
+	check(shown.phase=="mining_instruction" and shown.dialogue.text_id==606 and shown.dialogue.speaker_name=="Info" and shown.dialogue.voice_event_id==-1 and shown.progress.mining_failure_hint_seen,"Failed drill omitted its source modal instruction or invented speech")
+	check(flight.navigate("previous")==null and flight.navigate("next",true)==null and flight.start_mining()==null,"Failure instruction accepted flight input, backward navigation or a paused acknowledgement")
+	var held: RefCounted=flight.evaluate(150,Vector2.ONE,1.0,false,Vector2i.ZERO,Vector2.ONE,true,true)
+	check(held!=null,flight.error)
+	if held==null:return null
+	var paused: Dictionary=held.snapshot()
+	for key in ["world_elapsed_ms","player_pose","camera_view","cargo","progress","mission","random_state","dialogue"]:
+		check(paused[key]==shown[key],"Failure modal advanced "+key)
+	if shown.has("flight_notices"):check(paused.flight_notices==shown.flight_notices,"The timed mining notice elapsed behind the modal")
+	var closed: RefCounted=held.navigate("next")
+	check(closed!=null and not closed.dialogue_visible() and closed.snapshot().progress==shown.progress and closed.snapshot().campaign_cursor==shown.campaign_cursor and closed.snapshot().world_elapsed_ms==shown.world_elapsed_ms,"Acknowledging a failure advanced the campaign or clock")
+	check(closed.navigate("next")==null and flight.snapshot()==shown,"Instruction acknowledgement replayed or mutated its parent")
+	var resumed: RefCounted=closed.evaluate(100)
+	check(resumed!=null and resumed.snapshot().world_elapsed_ms==shown.world_elapsed_ms+100 and not resumed.dialogue_visible(),"Failure instruction did not resume ordinary flight exactly once")
+	return resumed
 
 func verify_shared_random(flight: RefCounted):
 	var branch: RefCounted=flight.fork_for_frame();var other:=0 if index!=0 else 1
@@ -272,7 +342,8 @@ func finish_flight(created: RefCounted, fail_input: bool) -> RefCounted:
 		flight=next
 		if flight.drill_owner()==null:
 			var state: Dictionary=flight.snapshot()
-			check(state.player_pose.origin.distance_to(before.player_pose.origin+before.player_pose.basis.z*200)<0.1 and state.camera_view!=before.camera_view and state.player_model_basis==Basis.IDENTITY,"Automatic mining completion did not resume ordinary movement/camera on the same frame")
+			var hint: bool=state.phase=="mining_instruction"
+			check(state.player_pose.origin.distance_to(before.player_pose.origin+before.player_pose.basis.z*200)<0.1 and (state.camera_view==before.camera_view if hint else state.camera_view!=before.camera_view) and state.player_model_basis==Basis.IDENTITY,"Automatic completion lost player motion or the later modal camera gate")
 			return flight
 	check(false,"Live mining did not reach its terminal transaction");return null
 
@@ -301,6 +372,10 @@ func render(lib: RefCounted,pixels: String,directory: String,captures: Dictionar
 	canvas.size=Vector2i(800,450);scene.set_mobile_layout(true);check(scene.present(captures["drill-partial"]),scene.error)
 	for i in 3:await process_frame
 	check(canvas.get_texture().get_image().save_png(directory.path_join("drill-partial-phone.png"))==OK,"Could not save phone drilling view")
+	if bindings.mining_session.has("failure_instruction"):
+		check(scene.present(captures["drill-failed"]),scene.error)
+		for i in 3:await process_frame
+		check(canvas.get_texture().get_image().save_png(directory.path_join("drill-failed-phone.png"))==OK,"Could not save landscape phone failure instruction")
 	canvas.free()
 
 func fresh(hard:=false) -> RefCounted:

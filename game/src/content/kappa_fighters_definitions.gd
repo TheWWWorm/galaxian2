@@ -5,6 +5,8 @@ const VALUES = {"scope":"kappa_shared_fighters","campaign_cursor":21,"systems":{
 const SPANS = {"kappa_fighters_shared_factory":[77944,3478],"kappa_fighters_systems_initializer":[535708,56],"kappa_fighters_systems_update":[612681,60],"kappa_fighters_disabled_motion":[624443,343],"kappa_fighters_target_membership":[59038,2050],"kappa_fighters_fire_gate":[542670,494],"kappa_fighters_holding_activation":[617194,408],"kappa_fighters_target_activation":[619682,255]}
 
 # Native composition.
+const MAC_SPANS = {"kappa_fighters_shared_factory":[77944,3478],"kappa_fighters_systems_initializer":[536244,56],"kappa_fighters_systems_update":[613229,60],"kappa_fighters_disabled_motion":[624991,343],"kappa_fighters_target_membership":[59038,2050],"kappa_fighters_fire_gate":[543206,494],"kappa_fighters_holding_activation":[617742,408],"kappa_fighters_target_activation":[620230,255]}
+
 static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
 
 static func available(bindings: RefCounted) -> bool:

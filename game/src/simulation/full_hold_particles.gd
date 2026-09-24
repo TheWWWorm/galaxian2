@@ -1,4 +1,5 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Second-trip particle ownership. The player tail precedes the early particle
 ## managers, the death poll follows them, and the NPC pass updates next-frame
 ## roots and flags. Each registered emitter has an independent random stream.
@@ -32,11 +33,27 @@ func configure(bindings: RefCounted,combat: Dictionary,death: RefCounted,seed_se
 	for key in ["base_content_id","binding_id"]:
 		if initial.get(key)!=bindings.get(key) or combat.get(key)!=bindings.get(key):return reject("Second-flight particles belong to another departure")
 	var training: bool=combat.get("campaign_cursor")==7
-	var local_flight: bool=combat.get("campaign_cursor") in [10,11,12,13,14,16,18,19]
+	var local_flight: bool=combat.get("campaign_cursor") in (FlightStages.LOCAL+FlightStages.POST_SAHI)
 	if initial.get("phase")!="ready" or initial.get("departure_cursor")!=(int(combat.campaign_cursor) if local_flight else (7 if training else 4)):return reject("Register ordinary-flight particles before player death in the same encounter")
 	var smoke:=Smoke.new()
 	var ready:=smoke.configure_local_traffic(bindings,combat,seed_seconds) if local_flight else (smoke.configure_combat_training(bindings,combat,seed_seconds) if training else smoke.configure_full_hold(bindings,combat,seed_seconds))
 	if not ready:return reject(smoke.error)
+	return _configure_registered(bindings,combat,death,int(seed_seconds),smoke)
+
+func configure_first_mining(bindings: RefCounted,death: RefCounted,seed_seconds: Variant) -> bool:
+	error=""
+	if bindings==null or bindings.source_architecture!="x86_64" or not Definitions.parameters(bindings.full_hold_particles) or not death is Death or death.presentation_identity()==null or not seed_seconds is int:
+		return reject("First mining particles require verified Mac sprite presets and player destruction")
+	var state: Dictionary=death.snapshot()
+	for key in ["base_content_id","binding_id"]:
+		if state.get(key)!=bindings.get(key):return reject("First mining particles belong to another departure")
+	if state.get("phase")!="ready" or state.get("departure_cursor")!=2 or state.get("campaign_cursor")!=2 or state.get("equipment_ids")!=[90,81]:
+		return reject("First mining particles require the fresh Betty departure and its retained equipment")
+	var smoke:=Smoke.new()
+	if not smoke.configure_first_mining(bindings,seed_seconds):return reject(smoke.error)
+	return _configure_registered(bindings,{"campaign_cursor":2,"actors":[]},death,int(seed_seconds),smoke)
+
+func _configure_registered(bindings: RefCounted,combat: Dictionary,death: RefCounted,seed_seconds: int,smoke: RefCounted) -> bool:
 	var emitters:={}
 	var keys:=["player"]
 	for id in combat.actors.size():

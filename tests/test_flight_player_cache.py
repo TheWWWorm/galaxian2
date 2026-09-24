@@ -1,55 +1,42 @@
 """Static declaration recognition with relocated synthetic layouts only."""
 import copy
 import unittest
-from types import SimpleNamespace
+from declaration_fixture import literal_fixture
 from gof2_content import flight_player_cache as reader
 
 
-def fixture(arch, shift=0):
-    rows = reader.LAYOUTS[arch]
-    low = min(v[1] for v in rows.values()) - 32
-    high = max(v[1] + v[2] for v in rows.values()) + 32
-    offset, bias = 128, 4096
-    base = 0x800000 + shift - low
-    raw = bytearray(offset + high - low)
-    groups = {b'__text': [], b'__const': []}
-    for section, delta, size, pattern in rows.values():
-        raw[offset+delta-low:offset+delta-low+size] = bytes.fromhex(pattern)
-        groups[section.encode()].append((delta, size))
-    sections = []
-    for name, spans in groups.items():
-        if not spans:
-            continue
-        lo = min(v[0] for v in spans)-16
-        hi = max(v[0]+v[1] for v in spans)+16
-        sections.append({'segment': b'__TEXT', 'name': name, 'address': base+lo,
-                         'offset': offset+lo-low, 'length': hi-lo})
-    mach = SimpleNamespace(architecture=arch, slice_offset=bias, data=bytes(raw),
-                           text=sections[0], sections=sections)
-    opening = {'station_id': 78, 'provenance': {'declaration': {
-        'offset': bias+offset-low, 'bytes': 376 if arch == 'x86_64' else 284}}}
-    actors = {'player_initialization': {'repair': {'supported': True}}}
-    arrival = {'campaign_cursor': 1}
-    return mach, opening, actors, arrival, offset, low
+def variants():
+    return [('x86_64',reader.LAYOUTS['x86_64']),
+            ('armv7',reader.LAYOUTS['armv7']),
+            ('x86_64',reader.MAC_ALTERNATE)]
+
+
+def fixture(arch,rows,shift=0):
+    constants=[k for k,v in rows.items() if v[0]=='__const']
+    mach,origin,offset,low=literal_fixture(arch,{k:v[1:] for k,v in rows.items()},shift,constants)
+    opening={'station_id':78,'provenance':{'declaration':{'offset':origin,'bytes':376 if arch=='x86_64' else 284}}}
+    actors={'player_initialization':{'repair':{'supported':True}}}
+    arrival={'campaign_cursor':1}
+    return mach,opening,actors,arrival,offset,low
 
 
 class FlightPlayerCacheTests(unittest.TestCase):
     def test_relocation_and_data_only_output(self):
-        for arch in reader.LAYOUTS:
+        for arch,layout in variants():
             for shift in [0, 0x1200000]:
-                m, o, a, r, *_ = fixture(arch, shift)
+                m, o, a, r, *_ = fixture(arch,layout,shift)
                 data = reader.extract_flight_player_cache(m, o, a, r)
                 self.assertEqual({k: v for k, v in data.items() if k != 'provenance'}, reader.VALUES)
                 for key, span in data['provenance'].items():
                     self.assertEqual(set(span), {'offset', 'bytes'})
-                    self.assertEqual(span['offset'], o['provenance']['declaration']['offset'] + reader.LAYOUTS[arch][key][1])
+                    self.assertEqual(span['offset'], o['provenance']['declaration']['offset'] + layout[key][1])
                 data['provenance'].clear()
                 self.assertTrue(reader.extract_flight_player_cache(m, o, a, r)['provenance'])
 
     def test_altered_spans_and_truncation(self):
-        for arch in reader.LAYOUTS:
-            m, o, a, r, offset, low = fixture(arch)
-            for name, (_, delta, size, _) in reader.LAYOUTS[arch].items():
+        for arch,layout in variants():
+            m, o, a, r, offset, low = fixture(arch,layout)
+            for name, (_, delta, size, _) in layout.items():
                 for index in [0, size-1]:
                     changed = copy.copy(m)
                     raw = bytearray(m.data)
@@ -60,9 +47,9 @@ class FlightPlayerCacheTests(unittest.TestCase):
             self.assertEqual(reader.extract_flight_player_cache(m, o, a, r), {})
 
     def test_context_and_bounds(self):
-        for arch in reader.LAYOUTS:
+        for arch,layout in variants():
             for key in ['player', 'repair', 'cursor', 'origin', 'size', 'section', 'arch', 'hazard_low', 'hazard_high']:
-                m, o, a, r, *_ = fixture(arch)
+                m, o, a, r, *_ = fixture(arch,layout)
                 if key == 'player': a.clear()
                 elif key == 'repair': a['player_initialization']['repair'] = {}
                 elif key == 'cursor': r['campaign_cursor'] = 95

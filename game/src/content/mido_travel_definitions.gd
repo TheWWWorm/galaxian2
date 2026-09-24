@@ -43,6 +43,23 @@ const LocalArrivalEnvironment=preload("res://src/content/local_arrival_environme
 const Fitting=preload("res://src/content/ordinary_fitting_definitions.gd")
 const OrdinaryContracts=preload("res://src/content/ordinary_contracts_definitions.gd")
 const EMPBombs=preload("res://src/content/emp_bombs_definitions.gd")
+const Secondary=preload("res://src/content/secondary_ownership_definitions.gd")
+const KappaDeparture=preload("res://src/content/kappa_departure_definitions.gd")
+const SahiVisit=preload("res://src/content/sahi_visit_definitions.gd")
+const SahiEncounter=preload("res://src/content/sahi_encounter_definitions.gd")
+const SahiStage=preload("res://src/content/sahi_stage_definitions.gd")
+const VoidPortal=preload("res://src/content/void_portal_definitions.gd")
+const PostSahi=preload("res://src/content/post_sahi_definitions.gd")
+const Thynome=preload("res://src/content/thynome_expedition_definitions.gd")
+const VoidProbe=preload("res://src/content/void_probe_definitions.gd")
+const DimaReturn=preload("res://src/content/dima_return_definitions.gd")
+const PostProbe=preload("res://src/content/post_probe_visit_definitions.gd")
+const VoidAccess=preload("res://src/content/void_access_definitions.gd")
+const VoidCrystals=preload("res://src/content/void_crystal_definitions.gd")
+const Nehma=preload("res://src/content/nehma_visit_definitions.gd")
+const TractorRecovery=preload("res://src/content/tractor_recovery_definitions.gd")
+const KappaOutcome=preload("res://src/content/kappa_outcome_definitions.gd")
+const KappaReturn=preload("res://src/content/kappa_return_definitions.gd")
 const KappaLife=preload("res://src/content/kappa_lifecycle_definitions.gd")
 const KappaFighters=preload("res://src/content/kappa_fighters_definitions.gd")
 const KappaRescue=preload("res://src/content/kappa_rescue_definitions.gd")
@@ -54,22 +71,40 @@ const GateTransit=preload("res://src/content/gate_transit_definitions.gd")
 const Worlds=preload("res://src/content/ordinary_world_definitions.gd")
 const GateEnvironment=preload("res://src/content/gate_environment_definitions.gd")
 
+const MAC_SPANS = {"mode1_counts":[1530242,44],"mode1_offsets":[-700355,60],"mode0_counts":[1529586,44],"ordinary_radio_draw_order":[391212,32],"mode1_speaker":[-698084,57],"mode1_text":[-697805,78],"departure_dialogue":[1521746,88],"arrival_dialogue":[1521834,96],"factory_slots":[872074,8],"exchange_factory":[861719,119],"arrival_factory":[861843,54],"inventory_find":[730792,124],"inventory_remove":[732008,88],"inventory_install":[732542,100],"inventory_equal":[-81946,20],"inventory_clone":[-83770,30],"pending_destination":[818698,26],"map_constructor_wrapper":[809014,18],"map_flight_entry":[350483,157],"map_world_pause":[341003,91],"map_flight_exit":[350721,163],"map_confirm_destination":[837390,170],"map_cancel":[837917,50],"map_initial_view":[811634,74],"map_layout":[814876,1644],"map_planet_sizes":[1565058,88],"map_lighting":[817792,177],"map_material":[1175319,71],"map_material_cases":[1176598,92],"map_presentation_setup":[810618,3767],"map_orbit_presentation":[816520,526],"map_sun_presentation":[817365,427],"map_sun_textures":[1564946,64],"map_faction_icons":[1565170,16],"map_security_colors":[1565218,48],"map_header":[829074,273],"map_legend":[819324,722],"map_projection_tilt_constants":[1564826,20],"map_tilt_y_constant":[1520982,4],"map_camera_distance_constant":[1547262,4],"map_camera_near_constant":[1520966,4],"map_sun_scale_constant":[1557694,4],"map_panel_background":[-62414,20],"map_panel_corners":[-62092,22],"map_panel_border_ids":[-61593,34],"map_panel_type_seven":[-52585,141],"map_panel_type_dispatch":[-52234,44],"destination_autopilot":[137826,368],"autopilot_planet_predicate":[563138,80],"target_selection":[562976,134],"travel_unlock":[342250,61],"scanner_duration":[661251,231],"target_window_size":[661668,48],"target_window":[667187,253],"target_charge":[667595,255],"target_charge_reset":[668095,25],"launch":[601508,154],"launch_clock":[576662,177],"launch_finished":[601724,20],"arrival_transition":[368254,214],"ordinary_world_entry":[334920,77],"arrival_audio_consumer":[336912,42],"ordinary_cache_restore":[334997,335],"departure_cache_reset":[432316,117],"ordinary_gamma_context":[879270,80],"arrival_mission_selection":[857597,661],"story_population_gate":[-42341,312],"story_dispatch_initial":[-43,55],"story_dispatch_middle":[315,21],"story_dispatch_local":[571,41],"early_wormhole_cursor":[858772,16],"ordinary_entry_release":[151038,253],"station_model_choice":[644874,330],"station_mido_layers":[648176,243],"collision_sphere_dispatch":[646465,31],"collision_sphere_arguments":[648834,251],"collision_sphere_scale":[1519570,4],"collision_sphere_constructor":[-715278,46],"collision_sphere_vtable":[2374058,8],"collision_sphere_point":[-715094,128],"collision_sphere_origin":[-714578,54],"collision_sphere_dot":[1061698,80],"target_station_id":[679384,54],"planet_ordinary_size":[843931,151],"planet_type_size":[843105,94],"ordinary_population":[-31880,28546],"traffic_hull_affiliations":[1534546,148],"traffic_hull_selection":[-221734,196],"traffic_spawn_origin":[77999,111],"traffic_weapon_dispatch":[59006,4],"traffic_weapon_mido":[55980,24],"traffic_weapon_rank_damage":[54917,173],"traffic_weapon_rank_choice":[55262,43],"traffic_weapon_context":[56946,566],"traffic_hardest_value":[1520682,4],"traffic_radio_exclusion_initial":[854577,55],"traffic_radio_exclusion_later_dispatch":[872270,4],"traffic_radio_exclusion_later":[865274,210],"traffic_threshold_values":[1519570,12],"traffic_portrait_bounds":[1549474,48],"traffic_radio_voice_dispatch":[-212902,24],"traffic_radio_voice_choices":[-214869,60],"traffic_radio_voice_gate":[-215155,66],"traffic_hostility_update":[611548,445],"traffic_death_attribution":[618995,487],"traffic_cargo_flags":[-81110,39],"traffic_warning_initial":[-45805,9],"traffic_response_reset":[-44048,8],"traffic_warning_reset":[-41711,8],"traffic_health_factory":[78110,433],"traffic_actor_factory":[78713,244],"traffic_model_selector":[-220250,66],"traffic_engine_model":[-218214,164],"traffic_boost_chance":[607146,24],"traffic_fresh_reputation":[883601,25],"reputation_actor_flags":[-81163,31],"reputation_lethal_gates":[540923,135],"reputation_opening_actors":[2702,413],"reputation_full_hold_actor":[315,256],"reputation_training_actors":[571,611],"traffic_normal_hit":[539472,1846],"traffic_statistics_constructor":[534700,980],"traffic_warning":[119652,34],"traffic_faction_response":[113780,214],"traffic_station_response_flag":[851994,10],"traffic_radio_factory":[113994,2616],"traffic_radio_delivery":[682590,70],"traffic_radio_activate":[682702,992],"traffic_radio_update":[683694,630],"traffic_radio_entry_owner":[684910,10],"traffic_radio_constructor":[684338,92],"traffic_portrait_factory":[-86554,158],"traffic_voice_character":[-726190,434],"traffic_station_id":[851984,10],"traffic_forced_hostility":[541336,14],"traffic_forced_friendliness":[536216,14],"traffic_attached_actor":[-77806,14],"traffic_hostile_death":[106510,1044],"traffic_nonhostile_death":[107650,12],"traffic_reseed":[1120354,64],"traffic_default_mission":[400240,290],"traffic_completed_predicate":[400952,14],"traffic_side_mission":[860132,22],"traffic_station_base":[851234,138],"traffic_station_flag":[852004,12],"traffic_special_location":[852016,28],"traffic_station_table1":[853560,68],"traffic_station_table2":[853670,76],"traffic_system_table":[735382,90],"traffic_optional_pilot":[873772,194],"traffic_special_system1":[873594,62],"traffic_special_system2":[873656,82],"traffic_special_system3":[873276,78],"traffic_hardest_predicate":[873738,34],"traffic_system_faction":[735296,10],"traffic_reputation_constructor":[807622,50],"traffic_reputation_hostile":[808072,128],"traffic_reputation_friendly":[808200,128],"traffic_reputation_getter":[876994,10],"reputation_lethal":[808494,184],"reputation_adjust":[808678,184],"reputation_location_wrapper":[858690,26],"reputation_location_match":[853920,22],"reputation_current_system":[873354,14],"voice_1747":[1537538,8],"voice_1748":[1537546,8],"voice_1749":[1537554,8],"voice_1750":[1537562,8],"voice_1751":[1537570,8],"voice_1752":[1537578,8],"voice_1753":[1537586,8],"voice_1754":[1537594,8],"voice_1755":[1537602,8],"voice_1756":[1537610,8],"voice_1758":[1535434,8],"voice_1759":[1535442,8],"voice_1760":[1535466,8],"voice_1761":[1535474,8],"voice_1762":[1535482,8],"voice_1763":[1535490,8],"voice_1764":[1535498,8],"voice_1765":[1535506,8],"voice_1766":[1535514,8],"voice_1767":[1535522,8],"voice_1768":[1535450,8],"voice_1769":[1535458,8]}
+const MAC_CONTINUATION_SPANS = {"continuation_radio_dispatch":[81782,54],"continuation_radio_slot":[104530,4],"continuation_radio_empty":[104126,18],"yrdal_dialogue":[1521930,104],"yrdal_voices":[1535530,104],"yrdal_completion":[861897,38],"ambient_weapon_membership":[55113,387],"ambient_weapon_interval":[57315,107],"ambient_cursor_getter":[858788,12],"small_ship_weapon_flag":[607889,9],"base_weapon_flag":[-81174,4]}
+const MAC_RETURN_SPANS = {"return_radio_slot":[104534,4],"return_dialogue":[1522034,64],"return_voices":[1535634,56],"return_completion":[861937,75],"contract_threshold_setter":[401078,24],"contract_gate_dispatch":[875572,27],"contract_gate_slot":[875866,4],"contract_gate_counter":[874399,12],"contract_gate_compare":[875290,21],"contract_gate_complete":[875812,18],"contract_counter_initial":[881321,11],"contract_counter_increment":[860382,12],"contract_story_exclusion":[387453,42],"contract_story_predicate":[401372,16]}
+const MAC_NAVIGATION_SPANS = {"contract_navigation_map_flight_entry":[350483,157],"contract_navigation_map_confirm_destination":[837390,170],"contract_navigation_autopilot_planet_predicate":[563138,80],"contract_navigation_arrival_mission_selection":[857597,661],"contract_navigation_planet_ordinary_size":[843931,151],"contract_navigation_planet_type_size":[843105,94],"contract_navigation_departure_cache_reset":[432316,117],"contract_navigation_weapon_interval":[57315,107]}
+const MAC_VALUES = {"scope":"mido_local_travel","system_id":15,"station_ids":[78,79],"planet_types":[0,11],"conversations":[{"campaign_cursor":9,"station_id":78,"mission_kind":11,"events":[{"speaker_id":17,"text_id":1761,"voice_event_id":453},{"speaker_id":17,"text_id":1762,"voice_event_id":454},{"speaker_id":17,"text_id":1763,"voice_event_id":455},{"speaker_id":2,"text_id":1764,"voice_event_id":456},{"speaker_id":0,"text_id":1765,"voice_event_id":457},{"speaker_id":2,"text_id":1766,"voice_event_id":458},{"speaker_id":0,"text_id":1767,"voice_event_id":459},{"speaker_id":2,"text_id":1768,"voice_event_id":460},{"speaker_id":0,"text_id":1769,"voice_event_id":461},{"speaker_id":2,"text_id":1770,"voice_event_id":462},{"speaker_id":16,"text_id":1771,"voice_event_id":-1}],"acknowledgement_required":true,"next_cursor":10,"next_station_id":79,"next_kind":11,"reward":0,"bonus":0},{"campaign_cursor":10,"station_id":79,"mission_kind":11,"events":[{"speaker_id":3,"text_id":1772,"voice_event_id":190},{"speaker_id":0,"text_id":1773,"voice_event_id":191},{"speaker_id":3,"text_id":1774,"voice_event_id":194},{"speaker_id":0,"text_id":1775,"voice_event_id":195},{"speaker_id":3,"text_id":1776,"voice_event_id":196},{"speaker_id":0,"text_id":1777,"voice_event_id":197},{"speaker_id":3,"text_id":1778,"voice_event_id":198},{"speaker_id":0,"text_id":1779,"voice_event_id":199},{"speaker_id":3,"text_id":1780,"voice_event_id":200},{"speaker_id":0,"text_id":1781,"voice_event_id":201},{"speaker_id":3,"text_id":1782,"voice_event_id":192},{"speaker_id":0,"text_id":1783,"voice_event_id":193}],"acknowledgement_required":true,"next_cursor":11,"next_station_id":76,"next_kind":11,"reward":0,"bonus":0}],"exchange":{"campaign_cursor":9,"find_subtype":19,"replacement_item_id":86,"quantity":1,"slot_selection":"first_empty_in_category","removal_match":"item_id","copy_prototype_price":true},"travel":{"minimum_cursor":10,"excluded_cursor":48,"mission_kind":11,"scanner_subtype":17,"scanner_duration_property":29,"default_acquisition_ms":8000,"acquisition_strict":true,"target_window_divisor":18,"acquisition_sound_id":26,"launch_sound_id":5,"launch_duration_ms":3000,"launch_duration_strict":true,"launch_speed_per_ms":8.0,"source_state":2,"world_type":3,"audio_selector":1,"arrival_keeps_cursor":true},"map":{"scope":"mido_local_system_map","first_cursor":10,"galaxy_cursor":16,"pauses_flight":true,"confirmation_required":true,"selection_starts_autopilot":true,"selection_changes_location":false,"model_base":18180,"material_id":20027,"render_type":6,"texture_id":10145,"seed_multiplier":1000,"angle_units":65536,"first_radius":8000,"radius_step":1600,"radius_draw_bound":5600,"planet_sizes":[320,192,256,256,192,256,192,192,320,256,192,192,320,256,320,256,256,256,320,192,320,256],"size_multiplier":0.000244140625,"ambient":0.20000000298023224,"diffuse":2.0,"visuals":{"background_model_ids":[16850,16851,16852],"orbit_model_id":6779,"orbit_angle_bound":3141,"orbit_angle_divisor":1000.0,"orbit_scale_multiplier":3.0517578125e-05,"parent_scale":0.0078125,"parent_rotation":[-0.39269909262657166,0.39269909262657166,-0.09817477315664291],"sun_mesh_id":6768,"sun_scale":0.004000000189989805,"sun_texture_ids":[10031,10032,10033,10034,10035,10036,10037,10038,10039,10040,10041,10032,10039,10035,10031,11741],"sun_render_type":2,"field_of_view_radians":1.1504000425338745,"camera_distance":500.0,"camera_near":200.0,"camera_far":64000.0},"ui":{"texture_id":10062,"atlas_resources":{"10062":"resources/data/textures/gof2_interface_ipad_1440.aei","10063":"resources/data/textures/gof2_interface2_ipad_large.aei"},"frame_image_id":1162,"selected_image_id":1277,"story_image_id":1108,"current_image_id":1349,"visited_image_id":1186,"footer_image_id":1151,"panel_background_image_id":1150,"panel_corner_image_id":1156,"panel_edge_image_id":1155,"legend":[{"image_id":1108,"text_id":544},{"image_id":1109,"text_id":545},{"image_id":1107,"text_id":536},{"image_id":1186,"text_id":390},{"image_id":1106,"text_id":263}],"faction_image_ids":[1190,1187,1189,1188],"faction_text_base":395,"security_text_base":391,"security_colors":[255,42,0,255,108,0,237,237,0,0,237,0],"button_images":[1116,1115,1117],"pressed_button_images":[1122,1121,1123],"back_image_id":1112,"pressed_back_image_id":1118},"labels":{"title":176,"back":169,"confirm":133,"cancel":134,"target":535,"destination":563,"current":408,"question":410,"key":389}},"entry":{"campaign_cursor":10,"departure_station_id":78,"entry_release_ms":7001,"briefing_events":[],"radio_after_hud":true},"traffic_presentation":{"engine_model_base":18000,"engine_render_type":2,"player_model":false},"planet_size_overrides":[{"planet_type":11,"additional_random_bound":15000,"additional_random_base":35000}],"arrival_flight":{"scope":"mido_kernstal_arrival","campaign_cursor":10,"station_id":79,"system_id":15,"ship_id":0,"world_type":3,"mission_kind":11,"actor_count":0,"weapon_item_sequence":[],"weapon_effect_sequence":[],"restore_player_cache":true,"reset_gamma":true},"player_entry":{"campaign_cursor":10,"ship_id":0,"system_id":15,"cache_reset":-1,"cache_truncates":["shield","gamma"]},"exterior_model_bases":[21000,21800,22000],"collision_sphere_scale":0.5,"reputation":{"scope":"early_mido_lethal_hits","station_id":78,"system_id":15,"primary_faction":3,"initial_axes":[30,0],"override":-1,"axis":1,"minimum":-100,"maximum":100,"lethal_changes":{"8":-1,"3":5},"hardest_difficulty":1.5,"hardest_multiplier":2,"actor_kinds_by_cursor":{"0":[8,8,8],"4":[8],"7":[8,8,8,3]},"location_wrapper_match":false,"special_system":false,"actor_lethal_suppression_flags":[false,false,false],"nonplayer_lethal_changes_reputation":false,"hostile_above":70,"friendly_below":-70},"traffic_control":{"scope":"mido_var_hastra_patrol","campaign_cursor":10,"station_id":78,"system_id":15,"player_ship_id":0,"actor_kind":3,"subtype":0,"supported_ranks":[0,1,2],"initial_actor_mode":0,"initial_active":true,"initial_hostile":false,"friendly":false,"boost_chance":5,"same_kind_targets":false,"player_target_id":-1,"initial_statistics_targeting_blocked":false,"initial_actor_targeting_blocked":false,"initial_mode_defers_flight":true},"traffic_combat":{"scope":"mido_var_hastra_ordinary_combat","campaign_cursor":10,"actor_kind":3,"station_id":78,"credential_subtype":29,"requested_damage_initial":0,"forced_hostile_initial":false,"warning_fraction":0.33000001311302185,"retaliation_fraction":0.5,"faction_fraction":0.6600000262260437,"thresholds_strict":true,"warning_once_per_world":true,"response_once_per_world":true,"station_flag_initial":false,"nonplayer_provokes":false,"hostile_unforced_provokes":false,"requested_damage_bits":32,"radio":{"speaker_id":21,"condition":5,"value":0,"warning_text_ids":[415,416,417],"warning_voice_ids":[645,646,647],"response_text_ids":[418,419,420],"response_voice_ids":[650,651,652],"text_draw_bound":3,"excluded_station_ids":[],"requires_completed_mission":true,"requires_player_display":true,"replaces_pending":true,"retains_active":true,"portrait_family_bound":4,"portrait_zero_family":0,"portrait_other_family":2,"portrait_part_bounds":{"0":[11,11,11,11],"2":[5,5,5,5]},"portrait_at_message_start":true},"weapon":{"item_id":25,"category":0,"kind":0,"catalogue_kind":2,"damage":3,"interval_ms":580,"lifetime_ms":3000,"projectile_capacity":4,"speed_units_per_millisecond":16.0,"model_resource_id":6802,"nonplayer_source":true},"death":{"cargo_model_id":16990,"cargo_model_resource":"resources/data/assets/main/3d/meshes/misc/container_001_midorian.aem","retains_generated_cargo":true,"initial_mode_death":true,"selection_skipped_modes":[3,4],"pirate_kills_delta":0,"nonhostile_remaining_delta":-1}},"departure_traffic":{"scope":"mido_var_hastra_traffic","campaign_cursor":10,"station_id":78,"system_id":15,"ship_id":0,"actor_kind":3,"subtype":0,"world_type":3,"seed_from_unix_seconds":true,"supported_difficulties":[0.5,1.0],"hostile_chance_bound":100,"unused_route_bounds":[100000,0,50000],"unused_route_offsets":[-50000,0,50000],"hostile_faction_bound":100,"hostile_faction_threshold":75,"actor_count_bound":2,"empty_population_fallback":4,"spawn_center_bounds":[20000,20000,30000],"spawn_center_offsets":[-10000,-10000,20000],"hull_draw_bound":37,"hull_candidates":[3,6,19,20,30],"retains_generated_cargo":true,"retains_generated_route":true,"weapon_item_sequence":[0,25],"weapon_effect_sequence":[14600,14606],"weapon_effect_capacity":4,"weapon_effect_random_bound":2,"zero_means_flipped":true}}
+const MAC_CONTINUATION = {"scope":"mido_yrdal_visit","campaign_cursor":11,"from_station_id":79,"station_id":76,"system_id":15,"planet_type":10,"ship_id":0,"arrival_actor_count":0,"entry_release_ms":7001,"briefing_events":[],"npc_weapon_interval_ms":578,"weapon_groups":["patrol","travel"],"next_cursor":12,"next_station_id":79,"next_kind":11,"events":[{"speaker_id":0,"text_id":1785,"voice_event_id":202},{"speaker_id":0,"text_id":1786,"voice_event_id":203},{"speaker_id":4,"text_id":1787,"voice_event_id":207},{"speaker_id":0,"text_id":1788,"voice_event_id":208},{"speaker_id":4,"text_id":1789,"voice_event_id":209},{"speaker_id":0,"text_id":1790,"voice_event_id":210},{"speaker_id":4,"text_id":1791,"voice_event_id":211},{"speaker_id":0,"text_id":1792,"voice_event_id":212},{"speaker_id":4,"text_id":1793,"voice_event_id":213},{"speaker_id":0,"text_id":1794,"voice_event_id":214},{"speaker_id":0,"text_id":1795,"voice_event_id":204},{"speaker_id":4,"text_id":1796,"voice_event_id":205},{"speaker_id":0,"text_id":1797,"voice_event_id":206}]}
+const MAC_RETURN_VISIT = {"scope":"mido_kernstal_return_visit","campaign_cursor":12,"from_station_id":76,"station_id":79,"system_id":15,"planet_type":11,"ship_id":0,"arrival_actor_count":0,"entry_release_ms":7001,"briefing_events":[],"npc_weapon_interval_ms":576,"weapon_groups":["patrol","travel"],"next_cursor":13,"next_station_id":0,"next_kind":150,"contract_gate":{"initial_completed_count":0,"additional_completions":4,"comparison":"at_least"},"events":[{"speaker_id":3,"text_id":1798,"voice_event_id":215},{"speaker_id":0,"text_id":1799,"voice_event_id":216},{"speaker_id":3,"text_id":1800,"voice_event_id":217},{"speaker_id":0,"text_id":1801,"voice_event_id":218},{"speaker_id":3,"text_id":1802,"voice_event_id":219},{"speaker_id":0,"text_id":1803,"voice_event_id":220},{"speaker_id":3,"text_id":1804,"voice_event_id":221},{"speaker_id":16,"text_id":1805,"voice_event_id":-1}]}
+const ARRIVAL_BRIEFING = {"scope":"mido_yrdal_entry_briefing","campaign_cursor":11,"station_id":76,"mission_kind":11,"story":true,"briefing_pending":true,"mode":0,"events":[{"speaker_id":0,"text_id":1770,"voice_event_id":163}]}
+const ARRIVAL_BRIEFING_SPANS = {"yrdal_briefing_briefing_start":[385208,516],"yrdal_briefing_has_mode0_count":[-692532,33],"yrdal_briefing_mission_kind":[400586,9],"yrdal_briefing_mission_briefing_pending":[400464,14],"yrdal_briefing_mission_story":[400856,16],"yrdal_briefing_cursor10_creates_yrdal_mission":[861211,54],"yrdal_briefing_story_mission_constructor":[399256,448],"yrdal_briefing_ordinary_entry_release":[151038,253],"yrdal_briefing_controller_ready":[233384,11],"yrdal_briefing_yrdal_entry_count":[1554646,4],"yrdal_briefing_yrdal_entry_event":[1555994,8],"yrdal_briefing_yrdal_entry_voice":[1560154,8]}
+const MAC_ARRIVAL_BRIEFING = {"scope":"mido_yrdal_entry_briefing","campaign_cursor":11,"station_id":76,"mission_kind":11,"story":true,"briefing_pending":true,"mode":0,"events":[{"speaker_id":0,"text_id":1784,"voice_event_id":163}]}
+const MAC_ARRIVAL_BRIEFING_SPANS = {"yrdal_briefing_briefing_start":[385724,516],"yrdal_briefing_has_mode0_count":[-698428,33],"yrdal_briefing_mission_kind":[401102,9],"yrdal_briefing_mission_briefing_pending":[400980,14],"yrdal_briefing_mission_story":[401372,16],"yrdal_briefing_cursor10_creates_yrdal_mission":[861843,54],"yrdal_briefing_story_mission_constructor":[399772,448],"yrdal_briefing_ordinary_entry_release":[151038,253],"yrdal_briefing_controller_ready":[233396,11],"yrdal_briefing_yrdal_entry_count":[1529630,4],"yrdal_briefing_yrdal_entry_event":[1530994,8],"yrdal_briefing_yrdal_entry_voice":[1535218,8]}
+
 static func parameters(data: Variant) -> bool:
-	if not data is Dictionary or data.size()!=VALUES.size()+1+int(data.has("continuation"))+int(data.has("return_visit"))+int(data.has("contract_navigation"))+int(data.has("contract_completion"))+int(data.has("convoy_capture"))+int(data.has("convoy_ship"))+int(data.has("convoy_lifecycle"))+int(data.has("convoy_effects"))+int(data.has("alioth_arrival"))+int(data.has("convoy_transit"))+int(data.has("alioth_attack"))+int(data.has("alioth_lifecycle"))+int(data.has("alioth_flight"))+int(data.has("alioth_return"))+int(data.has("free_navigation"))+int(data.has("free_population"))+int(data.has("free_traffic"))+int(data.has("free_lifecycle"))+int(data.has("free_flight"))+int(data.has("free_arrival"))+int(data.has("gate_environment"))+int(data.has("local_arrival_environment"))+int(data.has("gate_transit"))+int(data.has("ordinary_worlds"))+int(data.has("gate_arrival"))+int(data.has("ordinary_shopping"))+int(data.has("ordinary_fitting"))+int(data.has("ordinary_contracts"))+int(data.has("suttnar_visit"))+int(data.has("kappa_preparation"))+int(data.has("emp_bombs"))+int(data.has("kappa_rescue"))+int(data.has("kappa_fighters"))+int(data.has("kappa_lifecycle")) or not data.get("provenance") is Dictionary:return false
-	if data.has("continuation") and not Equal.equal_value(data.continuation,CONTINUATION):return false
-	if data.has("return_visit") and (not data.has("continuation") or not Equal.equal_value(data.return_visit,RETURN_VISIT)):return false
+	if not data is Dictionary or data.size()!=VALUES.size()+1+int(data.has("continuation"))+int(data.has("return_visit"))+int(data.has("contract_navigation"))+int(data.has("contract_completion"))+int(data.has("convoy_capture"))+int(data.has("convoy_ship"))+int(data.has("convoy_lifecycle"))+int(data.has("convoy_effects"))+int(data.has("alioth_arrival"))+int(data.has("convoy_transit"))+int(data.has("alioth_attack"))+int(data.has("alioth_lifecycle"))+int(data.has("alioth_flight"))+int(data.has("alioth_return"))+int(data.has("free_navigation"))+int(data.has("free_population"))+int(data.has("free_traffic"))+int(data.has("free_lifecycle"))+int(data.has("free_flight"))+int(data.has("free_arrival"))+int(data.has("gate_environment"))+int(data.has("local_arrival_environment"))+int(data.has("gate_transit"))+int(data.has("ordinary_worlds"))+int(data.has("gate_arrival"))+int(data.has("ordinary_shopping"))+int(data.has("ordinary_fitting"))+int(data.has("ordinary_contracts"))+int(data.has("suttnar_visit"))+int(data.has("kappa_preparation"))+int(data.has("emp_bombs"))+int(data.has("kappa_rescue"))+int(data.has("kappa_fighters"))+int(data.has("kappa_lifecycle"))+int(data.has("secondary_ownership"))+int(data.has("kappa_return"))+int(data.has("kappa_outcome"))+int(data.has("kappa_departure"))+int(data.has("sahi_visit"))+int(data.has("sahi_encounter"))+int(data.has("sahi_stage"))+int(data.has("tractor_recovery"))+int(data.has("void_portal"))+int(data.has("post_sahi"))+int(data.has("thynome_expedition"))+int(data.has("void_probe"))+int(data.has("dima_return"))+int(data.has("post_probe_visits"))+int(data.has("void_access"))+int(data.has("void_crystals"))+int(data.has("nehma_visit"))+int(data.has("arrival_briefing")) or not data.get("provenance") is Dictionary:return false
+	var alternate:=_alternate(data)
+	if alternate:
+		# Later capabilities have not yet established this source's extents.
+		for key in data:
+			if not MAC_VALUES.has(key) and key not in ["provenance","continuation","return_visit","contract_navigation","arrival_briefing","contract_completion","convoy_capture","convoy_ship","convoy_lifecycle","convoy_effects","alioth_arrival","convoy_transit","alioth_attack","alioth_lifecycle","alioth_flight","alioth_return","free_navigation","free_population","free_traffic","free_lifecycle","free_flight","free_arrival","gate_environment","local_arrival_environment","gate_transit","ordinary_worlds","gate_arrival","ordinary_shopping","ordinary_fitting","ordinary_contracts","suttnar_visit","kappa_preparation","emp_bombs","kappa_rescue","kappa_fighters","kappa_lifecycle","secondary_ownership","kappa_return","kappa_outcome","kappa_departure","sahi_visit","sahi_encounter","sahi_stage","tractor_recovery","void_portal","post_sahi","thynome_expedition","void_probe","dima_return","post_probe_visits","void_access","void_crystals","nehma_visit"]:return false
+	if data.has("continuation") and not Equal.equal_value(data.continuation,MAC_CONTINUATION if alternate else CONTINUATION):return false
+	if data.has("arrival_briefing") and (not data.has("continuation") or not Equal.equal_value(data.arrival_briefing,MAC_ARRIVAL_BRIEFING if alternate else ARRIVAL_BRIEFING)):return false
+	if data.has("return_visit") and (not data.has("continuation") or not Equal.equal_value(data.return_visit,MAC_RETURN_VISIT if alternate else RETURN_VISIT)):return false
 	if data.has("contract_navigation") and (not data.has("return_visit") or not Equal.equal_value(data.contract_navigation,CONTRACT_NAVIGATION)):return false
-	if data.has("contract_completion") and (not data.has("contract_navigation") or not ContractStory.parameters(data.contract_completion)):return false
-	if data.has("convoy_capture") and (not data.has("contract_completion") or not ConvoyCapture.parameters(data.convoy_capture)):return false
+	if data.has("contract_completion") and (not data.has("contract_navigation") or not Equal.equal_value(data.contract_completion,ContractStory.MAC_VALUES if alternate else ContractStory.VALUES)):return false
+	if data.has("convoy_capture") and (not data.has("contract_completion") or not Equal.equal_value(data.convoy_capture,ConvoyCapture.MAC_VALUES if alternate else ConvoyCapture.VALUES)):return false
 	if data.has("convoy_ship") and (not data.has("convoy_capture") or not ConvoyShip.parameters(data.convoy_ship)):return false
 	if data.has("convoy_lifecycle") and (not data.has("convoy_ship") or not ConvoyLifecycle.parameters(data.convoy_lifecycle)):return false
 	if data.has("convoy_effects") and (not data.has("convoy_lifecycle") or not ConvoyEffects.parameters(data.convoy_effects)):return false
-	if data.has("alioth_arrival") and (not data.has("convoy_effects") or not Alioth.parameters(data.alioth_arrival)):return false
+	if data.has("alioth_arrival") and (not data.has("convoy_effects") or not Equal.equal_value(data.alioth_arrival,Alioth.MAC_VALUES if alternate else Alioth.VALUES)):return false
 	if data.has("convoy_transit") and (not data.has("alioth_arrival") or not Transit.parameters(data.convoy_transit)):return false
-	if data.has("alioth_attack") and (not data.has("convoy_transit") or not Attack.parameters(data.alioth_attack)):return false
+	if data.has("alioth_attack") and (not data.has("convoy_transit") or not Equal.equal_value(data.alioth_attack,Attack.MAC_VALUES if alternate else Attack.VALUES)):return false
 	if data.has("alioth_lifecycle") and (not data.has("alioth_attack") or not AliothLife.parameters(data.alioth_lifecycle)):return false
 	if data.has("alioth_flight") and (not data.has("alioth_lifecycle") or not AliothFlight.parameters(data.alioth_flight)):return false
-	if data.has("alioth_return") and (not data.has("alioth_flight") or not AliothReturn.parameters(data.alioth_return)):return false
+	if data.has("alioth_return") and (not data.has("alioth_flight") or not Equal.equal_value(data.alioth_return,AliothReturn.MAC_VALUES if alternate else AliothReturn.VALUES)):return false
 	if data.has("free_navigation") and (not data.has("alioth_return") or not FreeNavigation.parameters(data.free_navigation)):return false
 	if data.has("free_population") and (not data.has("free_navigation") or not FreePopulation.parameters(data.free_population)):return false
 	if data.has("free_traffic") and (not data.has("free_population") or not FreeTraffic.parameters(data.free_traffic)):return false
@@ -81,60 +116,101 @@ static func parameters(data: Variant) -> bool:
 	if data.has("gate_transit") and (not data.has("local_arrival_environment") or not GateTransit.parameters(data.gate_transit)):return false
 	if data.has("ordinary_worlds") and (not data.has("local_arrival_environment") or not Worlds.parameters(data.ordinary_worlds)):return false
 	if data.has("gate_arrival") and (not data.has("gate_transit") or not data.has("ordinary_worlds") or not GateArrival.parameters(data.gate_arrival)):return false
-	if data.has("ordinary_fitting") and (not data.has("ordinary_shopping") or not Fitting.parameters(data.ordinary_fitting)):return false
+	if data.has("ordinary_fitting") and (not data.has("ordinary_shopping") or not Equal.equal_value(data.ordinary_fitting,Fitting.MAC_VALUES if alternate else Fitting.VALUES)):return false
 	if data.has("ordinary_contracts") and (not data.has("ordinary_fitting") or not OrdinaryContracts.parameters(data.ordinary_contracts)):return false
+	if data.has("secondary_ownership") and (not data.has("emp_bombs") or not Secondary.parameters(data.secondary_ownership)):return false
+	if data.has("kappa_departure") and (not data.has("kappa_outcome") or not Equal.equal_value(data.kappa_departure,KappaDeparture.MAC_VALUES if alternate else KappaDeparture.VALUES)):return false
+	if data.has("sahi_visit") and (not data.has("kappa_departure") or not Equal.equal_value(data.sahi_visit,SahiVisit.MAC_VALUES if alternate else SahiVisit.VALUES)):return false
+	if data.has("sahi_encounter") and (not data.has("sahi_visit") or not Equal.equal_value(data.sahi_encounter,SahiEncounter.MAC_VALUES if alternate else SahiEncounter.VALUES)):return false
+	if data.has("sahi_stage") and not SahiStage.coherent(data):return false
+	if data.has("tractor_recovery") and (not data.has("sahi_stage") or not TractorRecovery.parameters(data.tractor_recovery)):return false
+	if data.has("void_portal") and (not data.has("tractor_recovery") or not VoidPortal.coherent(data)):return false
+	if data.has("post_sahi") and (not data.has("void_portal") or not alternate or not PostSahi.parameters(data.post_sahi)):return false
+	if data.has("thynome_expedition") and (not data.has("post_sahi") or not Thynome.parameters(data.thynome_expedition)):return false
+	if data.has("void_probe") and (not data.has("thynome_expedition") or not VoidProbe.parameters(data.void_probe)):return false
+	if data.has("dima_return") and (not data.has("void_probe") or not DimaReturn.parameters(data.dima_return)):return false
+	if data.has("post_probe_visits") and (not data.has("dima_return") or not Equal.equal_value(data.post_probe_visits,PostProbe.VALUES if Equal.equal_value(data.dima_return,DimaReturn.VALUES) else PostProbe.MAC_VALUES)):return false
+	if data.has("void_access") and (not data.has("post_probe_visits") or not VoidAccess.parameters(data.void_access)):return false
+	if data.has("void_crystals") and (not data.has("void_access") or not Equal.equal_value(data.void_crystals,VoidCrystals.VALUES if Equal.equal_value(data.post_probe_visits,PostProbe.VALUES) else VoidCrystals.MAC_VALUES)):return false
+	if data.has("nehma_visit") and (not data.has("void_crystals") or not Equal.equal_value(data.nehma_visit,Nehma.VALUES if Equal.equal_value(data.void_crystals,VoidCrystals.VALUES) else Nehma.MAC_VALUES)):return false
+	if data.has("kappa_outcome") and (not data.has("kappa_return") or not Equal.equal_value(data.kappa_outcome,KappaOutcome.MAC_VALUES if alternate else KappaOutcome.VALUES)):return false
+	if data.has("kappa_return") and (not data.has("secondary_ownership") or not data.has("kappa_rescue") or not Equal.equal_value(data.kappa_return,KappaReturn.MAC_VALUES if alternate else KappaReturn.VALUES)):return false
 	if data.has("kappa_lifecycle") and (not data.has("kappa_fighters") or not KappaLife.parameters(data.kappa_lifecycle)):return false
 	if data.has("kappa_fighters") and (not data.has("kappa_rescue") or not KappaFighters.parameters(data.kappa_fighters)):return false
-	if data.has("kappa_rescue") and (not data.has("emp_bombs") or not KappaRescue.parameters(data.kappa_rescue)):return false
+	if data.has("kappa_rescue") and (not data.has("emp_bombs") or not Equal.equal_value(data.kappa_rescue,KappaRescue.MAC_VALUES if alternate else KappaRescue.VALUES)):return false
 	if data.has("emp_bombs") and (not data.has("kappa_preparation") or not EMPBombs.parameters(data.emp_bombs)):return false
-	if data.has("kappa_preparation") and (not data.has("suttnar_visit") or not KappaPreparation.parameters(data.kappa_preparation)):return false
-	if data.has("suttnar_visit") and (not data.has("ordinary_contracts") or not SuttnarVisit.parameters(data.suttnar_visit)):return false
+	if data.has("kappa_preparation") and (not data.has("suttnar_visit") or not Equal.equal_value(data.kappa_preparation,KappaPreparation.MAC_VALUES if alternate else KappaPreparation.VALUES)):return false
+	if data.has("suttnar_visit") and (not data.has("ordinary_contracts") or not Equal.equal_value(data.suttnar_visit,SuttnarVisit.MAC_VALUES if alternate else SuttnarVisit.VALUES)):return false
 	if data.has("ordinary_shopping") and (not data.has("ordinary_worlds") or not Shopping.parameters(data.ordinary_shopping)):return false
-	for key in VALUES:
-		if not Equal.equal_value(data.get(key),VALUES[key]):return false
+	var expected: Dictionary=MAC_VALUES if alternate else VALUES
+	for key in expected:
+		if not Equal.equal_value(data.get(key),expected[key]):return false
 	return true
 
-static func validate(data: Variant, source_bytes: int, arch: String, arrival: Dictionary, station: Dictionary, training: Dictionary) -> String:
+static func _alternate(data: Dictionary) -> bool:
+	return Equal.equal_value(data.get("conversations"),MAC_VALUES.conversations)
+
+static func validate(data: Variant, source_bytes: int, arch: String, arrival: Dictionary, station: Dictionary, training: Dictionary, population: Dictionary={}, resources: Dictionary={}) -> String:
 	if not data is Dictionary:return "Missing local travel declarations"
 	if data.is_empty():return ""
 	if arch!="x86_64" or not parameters(data) or not Station.parameters(station) or not Training.parameters(training):return "Unsupported local travel declarations"
+	if data.has("void_crystals") and not VoidCrystals.shared_field(population,resources):return "Disconnected Void crystal scenery declarations"
 	var origin: Variant=arrival.get("provenance",{}).get("actor")
 	if not Fonts.extent(origin,"offset","bytes",[315],source_bytes):return "Local travel lacks its source anchor"
-	var spans:=SPANS.duplicate(true)
-	if data.has("continuation"):spans.merge(CONTINUATION_SPANS)
-	if data.has("return_visit"):spans.merge(RETURN_SPANS)
-	if data.has("contract_navigation"):spans.merge(NAVIGATION_SPANS)
-	if data.has("contract_completion"):spans.merge(ContractStory.SPANS)
-	if data.has("convoy_capture"):spans.merge(ConvoyCapture.SPANS)
-	if data.has("convoy_ship"):spans.merge(ConvoyShip.SPANS)
-	if data.has("convoy_lifecycle"):spans.merge(ConvoyLifecycle.SPANS)
-	if data.has("convoy_effects"):spans.merge(ConvoyEffects.SPANS)
-	if data.has("alioth_arrival"):spans.merge(Alioth.SPANS)
-	if data.has("convoy_transit"):spans.merge(Transit.SPANS)
-	if data.has("alioth_attack"):spans.merge(Attack.SPANS)
-	if data.has("alioth_lifecycle"):spans.merge(AliothLife.SPANS)
-	if data.has("alioth_flight"):spans.merge(AliothFlight.SPANS)
-	if data.has("alioth_return"):spans.merge(AliothReturn.SPANS)
-	if data.has("free_navigation"):spans.merge(FreeNavigation.SPANS)
-	if data.has("free_population"):spans.merge(FreePopulation.SPANS)
-	if data.has("free_traffic"):spans.merge(FreeTraffic.SPANS)
-	if data.has("free_lifecycle"):spans.merge(FreeLifecycle.SPANS)
-	if data.has("free_flight"):spans.merge(FreeFlight.SPANS)
-	if data.has("free_arrival"):spans.merge(FreeArrival.SPANS)
-	if data.has("gate_environment"):spans.merge(GateEnvironment.SPANS)
-	if data.has("local_arrival_environment"):spans.merge(LocalArrivalEnvironment.SPANS)
-	if data.has("gate_transit"):spans.merge(GateTransit.SPANS)
-	if data.has("ordinary_worlds"):spans.merge(Worlds.SPANS)
-	if data.has("gate_arrival"):spans.merge(GateArrival.SPANS)
-	if data.has("ordinary_shopping"):spans.merge(Shopping.SPANS)
-	if data.has("ordinary_fitting"):spans.merge(Fitting.SPANS)
-	if data.has("ordinary_contracts"):spans.merge(OrdinaryContracts.SPANS)
-	if data.has("suttnar_visit"):spans.merge(SuttnarVisit.SPANS)
-	if data.has("kappa_preparation"):spans.merge(KappaPreparation.SPANS)
-	if data.has("emp_bombs"):spans.merge(EMPBombs.SPANS)
-	if data.has("kappa_rescue"):spans.merge(KappaRescue.SPANS)
-	if data.has("kappa_fighters"):spans.merge(KappaFighters.SPANS)
-	if data.has("kappa_lifecycle"):spans.merge(KappaLife.SPANS)
+	var alternate:=_alternate(data)
+	var spans: Dictionary=(MAC_SPANS if alternate else SPANS).duplicate(true)
+	if data.has("continuation"):spans.merge(MAC_CONTINUATION_SPANS if alternate else CONTINUATION_SPANS)
+	if data.has("return_visit"):spans.merge(MAC_RETURN_SPANS if alternate else RETURN_SPANS)
+	if data.has("contract_navigation"):spans.merge(MAC_NAVIGATION_SPANS if alternate else NAVIGATION_SPANS)
+	if data.has("arrival_briefing"):spans.merge(MAC_ARRIVAL_BRIEFING_SPANS if alternate else ARRIVAL_BRIEFING_SPANS)
+	if data.has("contract_completion"):spans.merge(ContractStory.MAC_SPANS if alternate else ContractStory.SPANS)
+	if data.has("convoy_capture"):spans.merge(ConvoyCapture.MAC_SPANS if alternate else ConvoyCapture.SPANS)
+	if data.has("convoy_ship"):spans.merge(ConvoyShip.MAC_SPANS if alternate else ConvoyShip.SPANS)
+	if data.has("convoy_lifecycle"):spans.merge(ConvoyLifecycle.MAC_SPANS if alternate else ConvoyLifecycle.SPANS)
+	if data.has("convoy_effects"):spans.merge(ConvoyEffects.MAC_SPANS if alternate else ConvoyEffects.SPANS)
+	if data.has("alioth_arrival"):spans.merge(Alioth.MAC_SPANS if alternate else Alioth.SPANS)
+	if data.has("convoy_transit"):spans.merge(Transit.MAC_SPANS if alternate else Transit.SPANS)
+	if data.has("alioth_attack"):spans.merge(Attack.MAC_SPANS if alternate else Attack.SPANS)
+	if data.has("alioth_lifecycle"):spans.merge(AliothLife.MAC_SPANS if alternate else AliothLife.SPANS)
+	if data.has("alioth_flight"):spans.merge(AliothFlight.MAC_SPANS if alternate else AliothFlight.SPANS)
+	if data.has("alioth_return"):spans.merge(AliothReturn.MAC_SPANS if alternate else AliothReturn.SPANS)
+	if data.has("free_navigation"):spans.merge(FreeNavigation.MAC_SPANS if alternate else FreeNavigation.SPANS)
+	if data.has("free_population"):spans.merge(FreePopulation.MAC_SPANS if alternate else FreePopulation.SPANS)
+	if data.has("free_traffic"):spans.merge(FreeTraffic.MAC_SPANS if alternate else FreeTraffic.SPANS)
+	if data.has("free_lifecycle"):spans.merge(FreeLifecycle.MAC_SPANS if alternate else FreeLifecycle.SPANS)
+	if data.has("free_flight"):spans.merge(FreeFlight.MAC_SPANS if alternate else FreeFlight.SPANS)
+	if data.has("free_arrival"):spans.merge(FreeArrival.MAC_SPANS if alternate else FreeArrival.SPANS)
+	if data.has("gate_environment"):spans.merge(GateEnvironment.MAC_SPANS if alternate else GateEnvironment.SPANS)
+	if data.has("local_arrival_environment"):spans.merge(LocalArrivalEnvironment.MAC_SPANS if alternate else LocalArrivalEnvironment.SPANS)
+	if data.has("gate_transit"):spans.merge(GateTransit.MAC_SPANS if alternate else GateTransit.SPANS)
+	if data.has("ordinary_worlds"):spans.merge(Worlds.MAC_SPANS if alternate else Worlds.SPANS)
+	if data.has("gate_arrival"):spans.merge(GateArrival.MAC_SPANS if alternate else GateArrival.SPANS)
+	if data.has("ordinary_shopping"):spans.merge(Shopping.MAC_SPANS if alternate else Shopping.SPANS)
+	if data.has("ordinary_fitting"):spans.merge(Fitting.MAC_SPANS if alternate else Fitting.SPANS)
+	if data.has("ordinary_contracts"):spans.merge(OrdinaryContracts.MAC_SPANS if alternate else OrdinaryContracts.SPANS)
+	if data.has("suttnar_visit"):spans.merge(SuttnarVisit.MAC_SPANS if alternate else SuttnarVisit.SPANS)
+	if data.has("kappa_preparation"):spans.merge(KappaPreparation.MAC_SPANS if alternate else KappaPreparation.SPANS)
+	if data.has("emp_bombs"):spans.merge(EMPBombs.MAC_SPANS if alternate else EMPBombs.SPANS)
+	if data.has("kappa_rescue"):spans.merge(KappaRescue.MAC_SPANS if alternate else KappaRescue.SPANS)
+	if data.has("kappa_fighters"):spans.merge(KappaFighters.MAC_SPANS if alternate else KappaFighters.SPANS)
+	if data.has("kappa_lifecycle"):spans.merge(KappaLife.MAC_SPANS if alternate else KappaLife.SPANS)
+	if data.has("secondary_ownership"):spans.merge(Secondary.MAC_SPANS if alternate else Secondary.SPANS)
+	if data.has("kappa_return"):spans.merge(KappaReturn.MAC_SPANS if alternate else KappaReturn.SPANS)
+	if data.has("kappa_outcome"):spans.merge(KappaOutcome.MAC_SPANS if alternate else KappaOutcome.SPANS)
+	if data.has("kappa_departure"):spans.merge(KappaDeparture.MAC_SPANS if alternate else KappaDeparture.SPANS)
+	if data.has("sahi_visit"):spans.merge(SahiVisit.MAC_SPANS if alternate else SahiVisit.SPANS)
+	if data.has("sahi_encounter"):spans.merge(SahiEncounter.MAC_SPANS if alternate else SahiEncounter.SPANS)
+	if data.has("sahi_stage"):spans.merge(SahiStage.MAC_SPANS if alternate else SahiStage.SPANS)
+	if data.has("tractor_recovery"):spans.merge(TractorRecovery.MAC_SPANS if alternate else TractorRecovery.SPANS)
+	if data.has("void_portal"):spans.merge(VoidPortal.MAC_SPANS if alternate else VoidPortal.SPANS)
+	if data.has("post_sahi"):spans.merge(PostSahi.SPANS)
+	if data.has("thynome_expedition"):spans.merge(Thynome.SPANS if Equal.equal_value(data.thynome_expedition,Thynome.VALUES) else Thynome.MAC_SPANS)
+	if data.has("void_probe"):spans.merge(VoidProbe.SPANS if Equal.equal_value(data.void_probe,VoidProbe.VALUES) else VoidProbe.MAC_SPANS)
+	if data.has("dima_return"):spans.merge(DimaReturn.SPANS if Equal.equal_value(data.dima_return,DimaReturn.VALUES) else DimaReturn.MAC_SPANS)
+	if data.has("post_probe_visits"):spans.merge(PostProbe.SPANS if Equal.equal_value(data.post_probe_visits,PostProbe.VALUES) else PostProbe.MAC_SPANS)
+	if data.has("void_access"):spans.merge(VoidAccess.SPANS if Equal.equal_value(data.post_probe_visits,PostProbe.VALUES) else VoidAccess.MAC_SPANS)
+	if data.has("void_crystals"):spans.merge(VoidCrystals.SPANS if Equal.equal_value(data.void_crystals,VoidCrystals.VALUES) else VoidCrystals.MAC_SPANS)
+	if data.has("nehma_visit"):spans.merge(Nehma.SPANS if Equal.equal_value(data.nehma_visit,Nehma.VALUES) else Nehma.MAC_SPANS)
 	if data.provenance.size()!=spans.size():return "Invalid local travel provenance"
 	for key in spans:
 		var span: Variant=data.provenance.get(key);var rule: Array=spans[key]
@@ -248,9 +324,9 @@ static func ordinary_weapon(data: Dictionary, cursor: int) -> Dictionary:
 		result.interval_ms=int(trip.npc_weapon_interval_ms)
 	return result
 
-static func station_return_overrides(cursor: int=10) -> Dictionary:
+static func station_return_overrides(cursor: int=10,alternate:=false) -> Dictionary:
 	if cursor not in [10,11,12]:return {}
-	var visit: Dictionary=RETURN_VISIT if cursor==12 else CONTINUATION if cursor==11 else VALUES.conversations[1]
+	var visit: Dictionary=(MAC_RETURN_VISIT if alternate else RETURN_VISIT) if cursor==12 else (MAC_CONTINUATION if alternate else CONTINUATION) if cursor==11 else (MAC_VALUES if alternate else VALUES).conversations[1]
 	var result:={"scope":visit.scope if cursor==12 else "mido_yrdal_station_visit" if cursor==11 else "mido_kernstal_station_visit","station_id":int(visit.station_id),"departing_cursor":int(visit.campaign_cursor),
 		"campaign_cursor":int(visit.campaign_cursor),"minimum_delivered_cargo":0,"local_visit":true,
 		"clear_cargo_after_acknowledgement":false,"cursor_after_acknowledgement":int(visit.next_cursor),
@@ -263,20 +339,25 @@ static func station_return(bindings: RefCounted, cursor: int=10) -> Dictionary:
 	if bindings==null or not parameters(bindings.mido_travel) or not FirstReturn.parameters(bindings.station_return):return {}
 	var result: Dictionary=bindings.station_return.duplicate(true)
 	if journey(bindings.mido_travel,cursor).is_empty():return {}
-	result.merge(station_return_overrides(cursor),true)
+	result.merge(station_return_overrides(cursor,_alternate(bindings.mido_travel)),true)
 	return result
 
 static func station_return_parameters(rules: Dictionary) -> bool:
 	if not rules.get("campaign_cursor") is int:return false
-	var changes:=station_return_overrides(rules.campaign_cursor)
-	if changes.is_empty():return false
-	for key in changes:
-		if not Equal.equal_value(rules.get(key),changes[key]):return false
-	var original:=rules.duplicate(true)
-	for key in changes:
-		if FirstReturn.VALUES.has(key):original[key]=FirstReturn.VALUES[key]
-		else:original.erase(key)
-	return FirstReturn.parameters(original)
+	for alternate in [false,true]:
+		var changes:=station_return_overrides(rules.campaign_cursor,alternate)
+		if changes.is_empty():continue
+		var valid:=true
+		for key in changes:
+			if not Equal.equal_value(rules.get(key),changes[key]):valid=false;break
+		if not valid:continue
+		var original:=rules.duplicate(true)
+		var base: Dictionary=FirstReturn.MAC_VALUES if alternate else FirstReturn.VALUES
+		for key in changes:
+			if base.has(key):original[key]=base[key]
+			else:original.erase(key)
+		if FirstReturn.parameters(original):return true
+	return false
 
 static func patrol(bindings: RefCounted, world: Dictionary, rank: Variant, difficulty: Variant) -> Dictionary:
 	if bindings==null or not parameters(bindings.mido_travel) or not ControlRules.parameters(bindings.combat_training_control):return {}

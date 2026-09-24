@@ -3,7 +3,8 @@
 Every supported value is guarded by bounded source context. No executable bytes
 or original logic enter the content pack; simulation is independently native.
 """
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_full_hold_particles(mach,arrival,flight,death,damage):
@@ -16,12 +17,12 @@ def extract_full_hold_particles(mach,arrival,flight,death,damage):
         if 'emitter_defaults' not in damage:return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'mac_full_hold_sprite_particles',
@@ -168,3 +169,48 @@ LAYOUTS = {'defaults': [483042,
                          25,
                          '__text',
                          'sha256:ab976b8f0100bea22d2821813318edd45eedf4fdbf1c9963040e42bc31dea951']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'defaults': [483570, 211, '__text', 'sha256:a45d4e3d94355bfb5e51a7428f530d9c92088984bdfa01d4d591f7824e1409fd'],
+ 'trail_preset': [491903, 293, '__text', 'sha256:a09d56cdb40262125c21cd7c628bb108c52ff4faa04617e56984cde0b2b2b099'],
+ 'burst_preset': [495475, 245, '__text', 'sha256:acd7e191b67d25a3aa75d95401a7de7a815e1a104ab451026092fffb9d9a4814'],
+ 'general_material': [-43613, 44, '__text', 'sha256:358d4bd3cbc6f076ed7e06743ab9017b1ca2c849a80e7565c5842a33d2a559ee'],
+ 'player_registration': [560176,
+                         232,
+                         '__text',
+                         'sha256:e05432c25e84830194c12a97d179257e307643856b8c346d8383cdb5bfce05ae'],
+ 'npc_registration': [609098, 340, '__text', 'sha256:172aab28bc563f1d8e4caa4a2e49729bdb3720bf48de588757680f00748429c4'],
+ 'world_burst_registration': [63207,
+                              30,
+                              '__text',
+                              'sha256:fb94f929bebe90525089f8c9d1c6c525769d0aa215a5b2cec5391c910d9d591d'],
+ 'emitter_registration': [511242,
+                          264,
+                          '__text',
+                          'sha256:0453ad1bc3746feff9bf520fe81760dfea34c5cf02a9899a996498239de95423'],
+ 'initial_flags': [513583, 12, '__text', 'sha256:065f536fb686a067fbaf9a456ca940a79f7e9fc46765109ef331bd522d80371b'],
+ 'continuous_gate': [514905, 85, '__text', 'sha256:986cde10ae17365117341d164aebc40767fbed4f5acfcf98e5e8e996b25e58b5'],
+ 'manual_wrapper': [512990, 66, '__text', 'sha256:04ef7809e58d51e038bfde2d33b607cb2ac30b9fd9c03e42d957bcd6b62e9a58'],
+ 'manual_emission': [519452, 1982, '__text', 'sha256:8a6c771714b985e65051074607c3c068ac6a73a4697d59daa811610e6bf213a6'],
+ 'burst_position_sample': [583292,
+                           250,
+                           '__text',
+                           'sha256:58604c2824367de88b7c54bdb893bde9ea90d648ac8fbd7bf3f638768bbde490'],
+ 'burst_position_retained': [583542,
+                             1194,
+                             '__text',
+                             'sha256:00703bb35c9c3a181b055ffffe6fab34b54917dad80d99f7bd9c9d059f8980e2'],
+ 'statistics_position_getter': [1234194,
+                                96,
+                                '__text',
+                                'sha256:75a2032bb9fc753fff283f0ba674c5947d97ca4e3687d53eeb473f94c9105cca'],
+ 'position_addition_value': [1059954,
+                             128,
+                             '__text',
+                             'sha256:7968f6d432915456876629893be624c3cce687a9c634e338de8eaf9179aa4d4e'],
+ 'player_breakup': [585119, 93, '__text', 'sha256:02f0e9a16a6767fa2f246a5276d15216f51d0663a20f065b27aceb1311cba56d'],
+ 'npc_death_enable': [619947, 28, '__text', 'sha256:aa4bb4099bb8d4807d6181e537af4ff69433834bc029a220a37bfae9e0c3fd4c'],
+ 'npc_breakup_disable': [626863,
+                         25,
+                         '__text',
+                         'sha256:9cdfce1389f2aa75ce278c9b052aa130f9432d2f4f341e89e0579c891fd8880d']}

@@ -42,6 +42,10 @@ func verify(content: String,pack: String) -> void:
 	for standing in [-100,-70,0,70,100]:
 		var group:=active_group(bindings,cat,owner,standing)
 		if group==null:return
+		var history: Dictionary=group.snapshot().reputation
+		check(history.get("kappa_rescue")==true and not history.has("spawn_generations"),"The authored rescue acquired recyclable traffic accounting")
+		var restored:=Reputation.new()
+		check(restored.restore(bindings,history) and restored.snapshot()==history,"Retained rescue reputation lost its encounter classification")
 		for id in 4:
 			var actor: Dictionary=group.snapshot().actors[id]
 			check(actor.hostile==(id==0 or standing< -70) and actor.friendly==(id>0 and standing>70),"Kappa standing threshold or mission hostility changed")
@@ -180,7 +184,7 @@ func verify_control(bindings: RefCounted,cat: RefCounted,owner: RefCounted,resou
 	actor=control.snapshot().combat.actors[0]
 	check(not actor.systems.disabled and not actor.systems_disabled and actor.body_pose!=before.body_pose,"Systems recovery failed to resume normal movement")
 	var retained: Dictionary=control.snapshot()
-	check(control.advance(int(bindings.frame_clock.max_frame_milliseconds)+1,target).is_empty() and control.snapshot()==retained,"Overlong actor frame partially committed")
+	check(control.advance(load("res://src/simulation/frame_clock.gd").simulation_limit(bindings)+1,target).is_empty() and control.snapshot()==retained,"Overlong actor frame partially committed")
 	combat=control.combat_owner()
 	if not combat.begin_contact_pass(retained.random_state,true) or combat.normal_hit(0,actor.vitals.hull).is_empty():check(false,combat.error);return
 	var rescue:=Rescue.new()

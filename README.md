@@ -3,7 +3,7 @@
 **A native, open-source Galaxy on Fire 2 remake.** Fly the opening story, take
 contracts, trade and explore the first supported star systems.
 
-**You need your own Galaxy on Fire 2 Full HD Mac `.dmg` to play, on every platform.**
+**You need your own Galaxy on Fire 2 Full HD Mac game files to play, on every platform.**
 The game imports it locally on first launch. Game assets and the original
 executable are not included in the download. No original executable is run.
 
@@ -19,22 +19,34 @@ This is an early playable preview, not the complete game.
 | Windows x64 | Windows 10/11, Intel or AMD 64-bit | Extract the ZIP, then open `Galaxian2.exe` |
 | Linux x64 | Modern Linux with glibc, Intel or AMD 64-bit | Extract the archive, then run `./Galaxian2` |
 | macOS Apple Silicon | M-series Macs | Extract the ZIP and open `Galaxian2.app` |
+| Android ARM64 (experimental) | Android 10 or later, 64-bit ARM | Install the APK, then select a ZIP containing your Mac `.app` |
 
 Desktop packages include the engine and offline import helpers. Keep each package
 intact. Windows and macOS builds are unsigned. Linux is the tested platform;
 Windows and macOS exports have not yet been tested on their native systems.
-Android and Web builds are not included in this preview.
+The Android importer has passed a document-picker and dependency smoke check,
+but a complete import and gameplay have not been tested on an ARM64 device.
+A playable Web package is not available yet.
 
-1. Start Galaxian2 and choose **Mac .dmg**.
-2. Select your **Galaxy on Fire 2 Full HD Mac disk image**. Allow several minutes
+1. Start Galaxian2 and choose **Choose Mac game…**.
+2. Select your **Galaxy on Fire 2 Full HD Mac disk image (.dmg)** or the
+   **application folder (.app)** itself. Allow several minutes
    and at least **8 GB of free space** for extraction and preparation.
 3. Choose **Start new game**. Follow the opening instructions.
 
 Later launches reuse your local import. Cancelling an import preserves an existing
-installation and its saves. Mac Full HD 1.0.6 content is verified. A tested disk
-image labelled 1.0.7 contains the same game files; the additional ships advertised
-for the official 1.0.7 update are not yet verified. Other layouts may report that
-they are unsupported.
+installation and its saves. Mac Full HD 1.0.6 content is verified, including a
+disk image labelled 1.0.7 that contains those same game files. The newer App Store
+1.0.7 bundle and extracted `.app` folders are also supported. Application
+folders and disk images use the same content preparation. Existing completed
+imports and their saves remain usable.
+
+On Android, make a ZIP containing the original Mac `.app` folder and transfer
+it to the device. Select that ZIP through **Choose Mac game…**. Direct `.dmg`
+import is unavailable on Android. Keep ample free space for the ZIP, extracted
+files and prepared content; the importer reports storage requirements. Importing
+can take several minutes. The APK includes its import tools and requires no
+separate Python installation.
 
 ## What's playable
 
@@ -49,10 +61,11 @@ they are unsupported.
 - Main menu, display and sound settings, language selection, mouse/controller input and optional
   larger touch controls. Play is landscape only.
 
-This preview also includes the trip through Magnetar to Union, the
-Suttnar conversation, and saving, shopping and travel to Tornard afterward.
-**Kappa is still unfinished:** after completing Suttnar, you cannot yet return
-through Union's jumpgate.
+The story continues through Magnetar and Union, Suttnar, Kappa and the paid
+Deep Science return, Sahi's cargo recovery, the Void escape and pursuit, Thynome,
+Dima's portal expedition, the Void probe and the paid return to Alioth. These
+supported stages retain station saves, Resume and ordinary departure. The
+following Thynome story visit is unfinished in this release.
 
 ![Portal and freighters](screenshots/02-portal-and-freighters.png)
 
@@ -62,11 +75,19 @@ Follow the tutorial prompts for flying, targeting, firing and mining.
 
 | Action | Controls |
 | --- | --- |
-| Steer | **Mouse**, **WASD** or **arrow keys** |
-| Fire / mine | **Left click** or **Space** |
-| Main menu / pause | **Esc** |
+| Steer | **Mouse** or **arrow keys** |
+| Strafe left / right | **A / D** |
+| Brake / resume previous throttle | Hold / release **S** |
+| Increase / decrease throttle | **] / /** |
+| Primary fire / mining action | **Left click** or **Space** |
+| Secondary fire / selection | **R / G** |
+| Main menu / pause and controls reference | **P** or **Esc** |
 | Toggle fullscreen | **F11** |
-| Navigation map in flight | **M** |
+| Actions, including the navigation map | **E** |
+| Autopilot destinations / cancel guidance | **Q** / controller **Y** |
+| Dock at the locked station / mine selected asteroid / stop drilling | **F** |
+| Fast Forward when navigation permits | Hold **Tab** / controller **Back** |
+| Switch mouse between ship and menus | **M** |
 | Hangar at a station | **H** |
 | Space Lounge at a station | **L** |
 | Save / load at a supported station | **F5 / F9** |
@@ -76,7 +97,7 @@ Mouse steering is enabled by default on desktop. Move the mouse to turn your shi
 the cursor is released in menus, maps and station screens. **Options** lets you
 adjust mouse sensitivity, invert pitch or turn mouse steering off.
 
-After free travel unlocks, use **M** to plot a course. Travel to Gome C or Dis to
+Use **Map** at the station or **E → Map** in flight to plot an available course. Travel to Gome C or Dis to
 reach its system's jumpgate, select the other system and a destination, and
 confirm the course. **Enter** accepts the gate question; **Esc** opens its map.
 
@@ -86,8 +107,12 @@ before departing. Some replacements need confirmation.
 
 **Space Lounge** shows job requirements and destinations. Couriers need cargo
 space; passengers need installed cabin berths. Accept a supported job, travel to
-its marker and dock. **Close** the delivery result to receive payment. Finish
-fitting before accepting a job.
+its marker and dock. **Close** the delivery result to receive payment. You can
+refit supported equipment during a delivery job; occupied passenger berths and
+protected mission cargo remain protected.
+
+Recovering floating containers requires an equipped **tractor beam**. The starter
+scanner and mining drill do not collect containers.
 
 ## Display settings
 
@@ -156,7 +181,8 @@ godot --path game
 If 7-Zip is not on PATH, set `GOF2_7ZIP` to its executable. Source checks and build
 commands are available through `python tools/run_checks.py --help` and
 `python tools/package_releases.py --help` (packaging requires Python 3.12+). Original content stays outside the
-source tree and release packages.
+source tree and release packages. Android build instructions are in
+[the importer README](platform/android_importer/README.md).
 
 ## License
 

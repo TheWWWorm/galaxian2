@@ -3,6 +3,8 @@ extends "res://tests/mixed_traffic_control.gd"
 ## lethal-contact fixtures. This does not create an earned campaign departure.
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 const FreePopulation=preload("res://tests/free_population.gd")
+const NPCSystems=preload("res://src/content/npc_systems_definitions.gd")
+const SystemsActor=preload("res://src/simulation/opening_combat_actor.gd")
 var observed_factions:={}
 var verified_wrecks:={}
 
@@ -39,6 +41,7 @@ func verify(args: PackedStringArray) -> void:
 		if not control.configure_ambient(bindings,cat,construction,context.rank,context.difficulty,equipment,REPUTATION) or not control.set_destruction(bindings,resources,freight):check(false,control.error);return
 		verify_ordinary_reactions(bindings,cat,equipment,construction)
 		verify_ordinary_contacts(bindings,cat,equipment,construction)
+		if NPCSystems.available(bindings):verify_ordinary_systems(bindings,cat,equipment,construction,control)
 		verify_ordinary_control(bindings,cat,construction,control,freight)
 		check(construction.snapshot()==packet and equipment.snapshot()==inventory,"Detached lifecycle changed construction or earned equipment")
 		if failures:return
@@ -122,7 +125,7 @@ func verify_ordinary_reactions(bindings: RefCounted,cat: RefCounted,equipment: R
 func verify_ordinary_control(bindings: RefCounted,cat: RefCounted,construction: RefCounted,control: RefCounted,freight: RefCounted) -> void:
 	var player:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"ship_id":0,"pose":Transform3D(Basis.IDENTITY,Vector3(2000000,0,0)),"active":true,"hull":95,"special_flight":false,"targeting_blocked":false,"alternate_position":null}
 	var before: Dictionary=control.snapshot()
-	for dt in [-1,151,0.5,true]:check(control.advance(dt,player).is_empty() and control.snapshot()==before,"Invalid ordinary frame partially advanced control")
+	for dt in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5,true]:check(control.advance(dt,player).is_empty() and control.snapshot()==before,"Invalid ordinary frame partially advanced control")
 	check(control.evaluate_ambient_world_logic(0,control.combat_owner(),{"state":-1}).is_empty() and control.snapshot()==before,"Invalid ordinary world stream mutated control")
 	var clock:=Launch.new()
 	if not clock.configure(bindings,construction,10000,45000):check(false,clock.error);return
@@ -156,6 +159,14 @@ func verify_ordinary_control(bindings: RefCounted,cat: RefCounted,construction: 
 		var state: Dictionary=killed.snapshot();var pirate: bool=actor.actor_kind==8
 		check(state.accounting.events.size()==1 and state.accounting.counter_deltas.player_kills==(1 if pirate else 0) and state.accounting.counter_deltas.pirate_kills==(1 if pirate else 0),"Player death accounting confused a pirate with a neutral Nivelian trader")
 		check(state.combat.current_reputation.axes==[30,-7 if pirate else -11],"Player death accounting changed the source faction standing")
+	if NPCSystems.available(bindings):
+		var disabled: RefCounted=control.combat_owner()
+		if not disabled.begin_contact_pass(control.snapshot().random_state,true):check(false,disabled.error);return
+		for id in ids:
+			var pools: Dictionary=disabled.actor_snapshot(id).systems
+			check(disabled.systems_hit(id,1).get("accepted",false),disabled.error)
+			check(disabled.systems_hit(id,pools.capacity,true).get("accepted",false),disabled.error)
+		if control.advance(0,player,disabled).is_empty():check(false,control.error);return
 	control=step(control,0,player,ids,true)
 	if control==null:return
 	var dead: Dictionary=control.snapshot()
@@ -179,6 +190,16 @@ func verify_ordinary_control(bindings: RefCounted,cat: RefCounted,construction: 
 				check(state.destruction[id].phase=="ready" and state.destruction[id].cargo.entries==state.cargo[id] and not state.destruction[id].cargo.model_exists,"Relaunch retained an old wreck or lost sampled cargo")
 				check(actor.vitals.hull==actor.max_hull and state.guidance[id].spawn_generation==actor.spawn_generation and state.accounting.spawn_generations[id]==actor.spawn_generation,"Relaunch split actor, guidance and accounting instances")
 				check(state.combat.provocation.requested_damage[id]==0,"Relaunch retained requested damage")
+				if NPCSystems.available(bindings):
+					check(actor.systems.integrity==actor.systems.capacity and not actor.systems.disabled and not actor.systems_disabled,"Recycled traffic retained EMP damage or disable state")
+					check(state.combat.provocation.systems_requested_damage[id]==0,"Recycled traffic retained requested systems damage")
+					var recycled: RefCounted=control.combat_owner()
+					if not recycled.begin_contact_pass(state.random_state,true):check(false,recycled.error);return
+					var hit: Dictionary=recycled.systems_hit(id,actor.systems.capacity)
+					var systems_history:=Reputation.new()
+					check(hit.get("disabled_now",false) and systems_history.restore(bindings,recycled.snapshot().reputation),"A new traffic instance could not retain EMP reputation after an earlier death: "+systems_history.error)
+					var stale: Dictionary=recycled.actor_snapshot(id);stale.spawn_generation-=1
+					check(not systems_history.record_systems_depletion(stale,hit),"Recycled systems history accepted an earlier traffic generation")
 				var history:=Reputation.new();check(history.restore(bindings,state.combat.reputation),history.error)
 				check(not history.record_lethal(dead.combat.actors[id]),"Recycled history accepted a stale death")
 				kill_now.append(id);killed_again.append(id)
@@ -194,6 +215,79 @@ func verify_ordinary_control(bindings: RefCounted,cat: RefCounted,construction: 
 	for actor in final.combat.actors:
 		if actor.population_group=="freighter":check(not actor.active and final.destruction[actor.actor_id].phase=="wreck","Freighter did not retain and clean up its wreck")
 	check(final.defeat_status.is_empty(),"Ordinary traffic granted a story or contract completion")
+
+func verify_ordinary_systems(bindings: RefCounted,cat: RefCounted,equipment: RefCounted,construction: RefCounted,control: RefCounted) -> void:
+	# Direct damage is a detached component fixture. Paid launch, detonation and
+	# save retention are covered by secondary_fitting_application.
+	var context: Dictionary=construction.snapshot().free_context
+	var kinds:={};var active:=[]
+	for actor in control.snapshot().combat.actors:
+		var freight: bool=actor.population_group=="freighter"
+		var capacity: int=(40 if context.rank==0 else 140)*(3 if freight else 1)
+		check(actor.systems.capacity==capacity and actor.systems.integrity==capacity and actor.systems.recovery_ms==(45000 if freight else 15000),"Ordinary systems lost rank, subtype or difficulty-independent capacity")
+		if actor.active:kinds[actor.actor_kind]=actor.actor_id;active.append(actor.actor_id)
+	for faction in kinds:
+		var id: int=kinds[faction];var group:=ordinary_group(bindings,cat,equipment,construction)
+		if group==null:return
+		var actor: Dictionary=group.actor_snapshot(id)
+		var third: int=int(actor.systems.capacity/3)
+		var partial: Dictionary=group.systems_hit(id,third)
+		check(partial.get("accepted",false) and group.actor_snapshot(id).vitals==actor.vitals and group.advance_systems(id,150) and group.actor_snapshot(id).systems.integrity==actor.systems.capacity-third,"Partial EMP damage changed combat pools or recovered spontaneously")
+		check(not group.snapshot().provocation.warning_issued,"EMP warned at the exact one-third boundary")
+		var edge: Dictionary=group.systems_hit(id,1)
+		check(not edge.is_empty() and group.snapshot().provocation.warning_issued==(faction==0),"EMP warning ignored the system's primary faction or strict boundary")
+		var hit: Dictionary=group.systems_hit(id,group.actor_snapshot(id).systems.integrity)
+		check(hit.get("disabled_now",false) and hit.first_disable_by_player and group.actor_snapshot(id).vitals==actor.vitals,"EMP depletion changed hull or lost first-disable attribution")
+		var disabled: Dictionary=group.snapshot();var expected:=REPUTATION.duplicate(true)
+		if faction==0:expected.axes[0]-=2
+		elif faction==1:expected.axes[0]+=2
+		elif faction==2:expected.axes[1]-=2
+		check(group.current_reputation()==expected and not disabled.provocation.response_issued and not disabled.provocation.station_response_flag,"EMP depletion changed the wrong faction axis or requested a station response")
+		for other in disabled.actors:check(other.script_hostile==(faction==0 and other.actor_kind==0),"EMP faction response changed unrelated ships or lost persistent hostility")
+		check(not group.systems_hit(id,1).get("accepted",true) and group.snapshot()==disabled,"Empty systems accepted another penalty")
+		check(group.advance_systems(id,1000),group.error)
+		var repeated: Dictionary=group.systems_hit(id,group.actor_snapshot(id).systems.integrity)
+		check(repeated.get("accepted",false) and not repeated.disabled_now and not repeated.first_disable_by_player and group.snapshot().reputation.events.size()==2,"Repeated depletion during recovery lost its separate reputation event")
+		var history:=Reputation.new();var retained: Dictionary=group.snapshot().reputation
+		check(history.restore(bindings,retained) and history.snapshot()==retained,history.error)
+		check(not history.record_systems_depletion(group.actor_snapshot(id),repeated),"Systems reputation credited the same hit twice")
+		var npc:=ordinary_group(bindings,cat,equipment,construction)
+		if npc==null:return
+		var previous: Dictionary=npc.snapshot()
+		check(npc.systems_hit(id,actor.systems.capacity,true).get("disabled_now",false) and npc.current_reputation()==REPUTATION and npc.snapshot().provocation==previous.provocation,"NPC EMP damage created player crime or reputation")
+		var detached: Dictionary=npc.snapshot()
+		for invalid in [-1,0.5,true]:check(npc.systems_hit(id,invalid).is_empty() and npc.snapshot()==detached,"Invalid EMP damage partially mutated ordinary combat")
+	# A direct actor frame covers the strict recovery boundary; the controller
+	# below checks ordering with an ordinary bounded duration.
+	for row in construction.snapshot().actors:
+		if row.population_group not in ["patrol","freighter"]:continue
+		var actor:=SystemsActor.new()
+		if not actor.configure_ambient(bindings,cat,construction,row.actor_id,context.rank,context.difficulty) or not actor.enable_local_combat():check(false,actor.error);return
+		var initial: Dictionary=actor.snapshot()
+		check(actor.systems_hit(initial.systems.capacity).get("disabled_now",false),actor.error)
+		check(actor.advance_systems(initial.systems.recovery_ms) and actor.snapshot().systems.disabled and actor.snapshot().systems.integrity==initial.systems.capacity,"Ordinary systems recovered before the strict integer boundary")
+		if row.population_group=="freighter":check(actor.snapshot().systems_motion_ms==0.0 and not actor.snapshot().systems_disabled,"Freighter EMP movement timer inherited strict integrity recovery")
+		check(actor.advance_systems(400) and not actor.snapshot().systems.disabled,"Ordinary systems failed to recover after full capacity")
+	var player:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"ship_id":0,"pose":Transform3D(Basis.IDENTITY,Vector3(2000000,0,0)),"active":true,"hull":95,"special_flight":false,"targeting_blocked":false,"alternate_position":null}
+	var staged: RefCounted=control.fork_for_frame();var damage_owner: RefCounted=staged.combat_owner()
+	if not damage_owner.begin_contact_pass(staged.snapshot().random_state,true):check(false,damage_owner.error);return
+	for id in active:check(damage_owner.systems_hit(id,damage_owner.actor_snapshot(id).systems.capacity,true).get("accepted",false),damage_owner.error)
+	var before: Dictionary=staged.snapshot()
+	if staged.advance(150,player,damage_owner).is_empty():check(false,staged.error);return
+	for id in active:
+		var actor: Dictionary=staged.snapshot().combat.actors[id]
+		check(actor.body_pose==before.combat.actors[id].body_pose and actor.pose==before.combat.actors[id].pose and actor.systems_disabled,"Ordinary actor movement advanced during EMP disable")
+	check(control.snapshot()==before,"Staged EMP controller changed its retained parent")
+	var resumed: RefCounted=control.fork_for_frame();var boundary: RefCounted=resumed.combat_owner();var freighters:=[]
+	if not boundary.begin_contact_pass(before.random_state,true):check(false,boundary.error);return
+	for actor in before.combat.actors:
+		if actor.population_group!="freighter":continue
+		freighters.append(actor.actor_id)
+		check(boundary.systems_hit(actor.actor_id,actor.systems.capacity,true).get("disabled_now",false) and boundary.advance_systems(actor.actor_id,45000),boundary.error)
+	if resumed.advance(1,player,boundary).is_empty():check(false,resumed.error);return
+	for id in freighters:
+		var actor: Dictionary=resumed.snapshot().combat.actors[id]
+		check(actor.systems.disabled and not actor.systems_disabled and actor.body_pose.origin==before.combat.actors[id].body_pose.origin+Vector3(0,0,1),"Freighter cruise waited for strict integrity recovery after its separate timer expired")
 
 func verify_ordinary_wreck(bindings: RefCounted,resources: RefCounted,death: RefCounted,random: Dictionary) -> void:
 	var initial: Dictionary=death.snapshot();var faction: int=initial.actor_kind

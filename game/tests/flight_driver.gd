@@ -48,10 +48,16 @@ func check_controls() -> void:
 	var c := Controls.new()
 	check(c.configure_preferences(0.2, false, false), c.error)
 	check(not c.set_touch_action("pause", true), "Hidden desktop touch action accepted")
-	c.accept(key(KEY_W, true)); c.accept(key(KEY_D, true))
-	check(c.snapshot().command == Vector2(-1, -1), "Keyboard pitch/yaw directions incorrect")
-	check(Controls.pointer_command(c.snapshot().command)==Vector2(1,-1),"W/D did not move the drilling cursor up/right")
-	c.accept(key(KEY_W, false)); c.accept(key(KEY_D, false))
+	c.accept(key(KEY_UP, true)); c.accept(key(KEY_RIGHT, true))
+	check(c.snapshot().command == Vector2(-1, -1), "Arrow pitch/yaw directions incorrect")
+	check(Controls.pointer_command(c.snapshot().command)==Vector2(1,-1),"Arrows did not move the drilling cursor up/right")
+	c.accept(key(KEY_UP, false)); c.accept(key(KEY_RIGHT, false))
+	c.accept(key(KEY_W,true));c.accept(key(KEY_D,true))
+	check(c.snapshot().command==Vector2.ZERO and c.snapshot().strafe==1.0 and c.snapshot().held.boost,"W/D still steered instead of boost/strafe")
+	c.accept(key(KEY_W,false));c.accept(key(KEY_D,false))
+	c.accept(key(KEY_S,true))
+	check(c.snapshot().held.brake and c.snapshot().command==Vector2.ZERO,"S failed to hold brake without pitching")
+	c.accept(key(KEY_S,false))
 	check(not c.accept(axis(1, JOY_AXIS_LEFT_X, 0.1)) and c.device == -1, "Idle controller stole ownership")
 	check(c.accept(axis(1, JOY_AXIS_LEFT_X, 0.6)) and c.device == 1, "Active controller did not acquire input")
 	near(c.snapshot().command.y, -0.5, "Controller deadzone remapping")
@@ -73,7 +79,7 @@ func check_controls() -> void:
 	check(c.snapshot().command == Vector2(0.5, -0.25), "Pitch inversion or touch order failed")
 	for action in Controls.ACTIONS:
 		check(c.set_touch_action(action, true) and c.snapshot().held[action], "Missing touch action: " + action)
-	c.accept(key(KEY_P, true))
+	c.accept(key(KEY_Q, true))
 	c.set_touch_controls(false)
 	check(c.take_pressed() == ["autopilot"] and c.snapshot().command == Vector2.ZERO, "Hiding touch retained touch actions or erased keyboard action")
 	check(not c.configure_preferences(NAN, false, true) and c.deadzone == 0.2, "Invalid preference changed controls")
@@ -81,7 +87,7 @@ func check_controls() -> void:
 	check(c.snapshot().command == Vector2.ZERO and not c.accept(key(KEY_D, true)), "Disabled controls accepted input")
 	c.set_enabled(true)
 	check(c.snapshot().command == Vector2.ZERO and c.take_pressed().is_empty(), "Re-enabled controls retained held input")
-	for mapping in [[KEY_M, "map"], [KEY_J, "jump"]]:
+	for mapping in [[KEY_M, "mouse_mode"], [KEY_K, "jump"], [KEY_G,"secondary_menu"], [KEY_P,"pause"], [KEY_F,"dock"], [KEY_TAB,"time"], [KEY_E,"action_menu"], [KEY_T,"change_view"], [KEY_BRACKETRIGHT,"throttle_up"], [KEY_SLASH,"throttle_down"]]:
 		check(c.accept(key(mapping[0], true)) and c.take_pressed() == [mapping[1]], "Keyboard travel action failed: " + mapping[1])
 		c.accept(key(mapping[0], true, true))
 		check(c.take_pressed().is_empty(), "Held travel key repeated its action")
@@ -97,6 +103,44 @@ func check_controls() -> void:
 		c.accept(event)
 		check(not c.snapshot().held[mapping[1]] and c.take_pressed().is_empty(), "Controller release emitted an action")
 	check_mouse()
+	check_action_events()
+
+func check_action_events() -> void:
+	var c:=Controls.new()
+	c.accept(key(KEY_TAB,true));c.accept(key(KEY_TAB,true,true))
+	c.accept(key(KEY_W,true));c.accept(key(KEY_W,false))
+	c.accept(key(KEY_F,true));c.accept(key(KEY_F,false));c.accept(key(KEY_TAB,false))
+	check(c.take_events()==[action_event("time",true),action_event("boost",true),action_event("boost",false),action_event("dock",true),action_event("dock",false),action_event("time",false)],"Action delivery lost press/release order or included steering/repeats")
+	check(c.take_pressed().is_empty() and c.take_events().is_empty(),"Event consumption left duplicate legacy presses")
+	c.accept(key(KEY_TAB,true));c.accept(key(KEY_TAB,false))
+	check(c.take_pressed()==["time"] and c.take_events().is_empty(),"Legacy consumption left stale action events")
+	c.set_touch_controls(true);c.set_touch_action("time",true)
+	check(c.take_events()==[action_event("time",true,true)],"Touch down was not delivered")
+	c.set_touch_action("time",true);c.set_touch_action("time",false)
+	check(c.take_events()==[action_event("time",false,true)],"Touch hold repeated or release was lost")
+	c.set_touch_action("time",true);c.accept(key(KEY_Q,true));c.set_touch_controls(false)
+	check(c.take_events()==[action_event("autopilot",true),action_event("time",false,true)] and not c.snapshot().held.time,"Hidden touch input retained a pending down or lost its release")
+	c.clear()
+	var button:=InputEventJoypadButton.new();button.device=1;button.button_index=JOY_BUTTON_BACK;button.pressed=true
+	c.accept(button);c.take_events();c.accept(axis(2,JOY_AXIS_LEFT_X,0.8))
+	check(c.take_events()==[action_event("time",false)],"Controller replacement left a held time action")
+	c.accept(axis(2,JOY_AXIS_TRIGGER_RIGHT,1));c.take_events();c.disconnect_controller(2)
+	check(c.take_events()==[action_event("fire",false)],"Controller disconnect lost trigger release")
+	c.accept(axis(2,JOY_AXIS_TRIGGER_RIGHT,1));c.take_events();c.accept(axis(2,JOY_AXIS_TRIGGER_RIGHT,0.25))
+	check(c.take_events()==[action_event("fire",false)],"Trigger release threshold lost its action")
+	c.set_mouse_active(true)
+	var mouse:=InputEventMouseButton.new();mouse.button_index=MOUSE_BUTTON_LEFT;mouse.pressed=true
+	c.accept(mouse);c.take_events();c.set_mouse_active(false)
+	check(c.take_events()==[action_event("fire",false)],"Releasing mouse capture left a held action")
+	c.accept(axis(2,JOY_AXIS_TRIGGER_RIGHT,1));c.accept(key(KEY_TAB,true));c.clear()
+	check(c.take_events().is_empty() and not c.snapshot().held.time,"A modal boundary leaked ordered input")
+	c.accept(axis(2,JOY_AXIS_TRIGGER_RIGHT,1))
+	check(c.take_events().is_empty(),"Action event delivery bypassed the held trigger modal guard")
+	c.accept(axis(2,JOY_AXIS_TRIGGER_RIGHT,0));c.accept(axis(2,JOY_AXIS_TRIGGER_RIGHT,1))
+	check(c.take_events()==[action_event("fire",true)],"A fresh trigger press failed after returning to neutral")
+
+func action_event(action: String,pressed: bool,touch:=false) -> Dictionary:
+	return {"action":action,"pressed":pressed,"touch":touch}
 
 func check_mouse() -> void:
 	var c:=Controls.new()
@@ -144,17 +188,27 @@ func check_driver(bindings: RefCounted, catalogues: RefCounted) -> void:
 	check(d.step(0, 1).get("seconds") == 0.0, "Driver first tick advanced")
 	d.accept(key(KEY_D, true))
 	var first := d.step(100000, 1)
-	check(first.pose.origin == Vector3(0, 0, 200) and d.angular_units().y < 0, "Keyboard command failed to reach staged flight response")
+	check(first.pose.origin.x < 0 and first.pose.origin.z == 200 and d.angular_units()==Vector2.ZERO, "D failed to strafe without yaw")
 	var second := d.step(200000, 1)
 	var camera: Transform3D=CameraView.fixed_eye(Vector3(0,0,-100),Transform3D.IDENTITY,true).pose
-	check(second.pose.origin.dot(camera.basis.x)>0 and second.seconds==0.1,"D turned left in the following camera")
-	for code in [KEY_A,KEY_LEFT,KEY_D,KEY_RIGHT]:
+	check(second.pose.origin.dot(camera.basis.x)>first.pose.origin.dot(camera.basis.x) and second.seconds==0.1,"Held D failed to accelerate screen-right strafe")
+	for code in [KEY_A,KEY_D]:
+		var sideways:=Driver.new();sideways.configure(bindings,catalogues,catalogues.content_id,0,[],[],0.5,Transform3D.IDENTITY)
+		sideways.step(0,1);sideways.accept(key(code,true))
+		var moved: Transform3D=sideways.step(100000,1).pose
+		var direction: int=1 if code==KEY_D else -1
+		check(moved.origin.dot(camera.basis.x)*direction>0 and sideways.angular_units()==Vector2.ZERO,"Keyboard strafe disagrees with camera screen direction: "+str(code))
+	for code in [KEY_LEFT,KEY_RIGHT]:
 		var turn:=Driver.new();turn.configure(bindings,catalogues,catalogues.content_id,0,[],[],0.5,Transform3D.IDENTITY)
 		turn.step(0,1);turn.accept(key(code,true));turn.step(100000,1)
 		var moved: Transform3D=turn.step(200000,1).pose
-		var direction: int=1 if code in [KEY_D,KEY_RIGHT] else -1
+		var direction: int=1 if code==KEY_RIGHT else -1
 		check(moved.origin.dot(camera.basis.x)*direction>0,"Keyboard steering disagrees with camera screen direction: "+str(code))
-	d.accept(key(KEY_T, true)); d.accept(key(KEY_E, true))
+	d.accept(key(KEY_S,true))
+	var braked:=d.step(210000,1)
+	check(is_equal_approx(braked.pose.origin.z,second.pose.origin.z) and braked.pose.origin.x<second.pose.origin.x,"S did not brake forward motion while retained strafe settled")
+	d.accept(key(KEY_S,false))
+	d.accept(key(KEY_TAB, true)); d.accept(key(KEY_F, true))
 	var requests := d.step(216000, 1)
 	check("time" in requests.requested_actions and "dock" in requests.requested_actions, "Unsupported actions were lost rather than returned as requests")
 	check(not d.set_pause("radio", true, 216000), "Timed radio was treated as a modal freeze")

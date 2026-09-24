@@ -88,7 +88,7 @@ func verify_training_cargo_motion(world: RefCounted, resources: RefCounted):
 		var paused:=owner.advance(0,next.random_state)
 		check(paused.state.cargo.pose==next.state.cargo.pose and paused.state.statistics_pose==paused.state.pose*Transform3D(paused.state.bank_basis,Vector3.ZERO),"Zero-delta cargo moved or retained the later statistics copy")
 		var before:=owner.snapshot()
-		check(owner.advance(151,paused.random_state).is_empty() and owner.snapshot()==before,"Oversized cargo frame committed motion")
+		check(owner.advance(751 if not bindings.fast_forward.is_empty() else 151,paused.random_state).is_empty() and owner.snapshot()==before,"Oversized cargo frame committed motion")
 		var clone: RefCounted=owner.fork_for_frame()
 		clone._state.cleanup_elapsed_ms=60000;clone._state.effect.active=false
 		var cleanup: Dictionary=clone.advance(1,paused.random_state)
@@ -137,7 +137,7 @@ func verify_training_death_pass(cat: RefCounted, world: RefCounted, resources: R
 	before=live.snapshot()
 	var bad: RefCounted=live.combat_owner();bad._actors[3]._state.body_pose.origin.x+=1
 	check(live.advance(1,player,bad).is_empty() and live.snapshot()==before,"Late pose mismatch leaked earlier death motion or RNG")
-	for delta in [-1,true,.5,151]:check(live.advance(delta,player).is_empty() and live.snapshot()==before,"Invalid death frame changed retained owners")
+	for delta in [-1,true,.5,751 if not bindings.fast_forward.is_empty() else 151]:check(live.advance(delta,player).is_empty() and live.snapshot()==before,"Invalid death frame changed retained owners")
 	check(live.advance(1,player,null,{"state":-1}).is_empty() and live.snapshot()==before,"Invalid shared RNG changed the controller")
 	for i in 22:
 		event=live.advance(150,player)

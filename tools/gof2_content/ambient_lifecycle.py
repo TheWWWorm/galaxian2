@@ -1,11 +1,11 @@
 """Original small traffic lifecycle declarations; imported executable bytes are discarded."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 from .ambient_combat import VALUES as COMBAT_VALUES
 
 def extract_ambient_lifecycle(mach,arrival,combat):
     if not isinstance(combat,dict) or any(combat.get(key)!=value for key,value in COMBAT_VALUES.items()):return {}
-    proof=hashed_declarations(mach,arrival,{**LAYOUTS,**RECYCLING_LAYOUTS})
+    _variant,proof=hashed_variants(mach,arrival,[{**LAYOUTS,**RECYCLING_LAYOUTS},{**MAC_ALTERNATE,**MAC_RECYCLING_LAYOUTS}])
     if not proof:return {}
     result=copy.deepcopy(VALUES);result['recycling']=copy.deepcopy(RECYCLING);result['provenance']=proof
     return result
@@ -127,3 +127,59 @@ RECYCLING_LAYOUTS = {'patrol_check': [112882,
                      176,
                      '__text',
                      'f9f75567832a61860218b92636f68ab668e8cb6beb1f666598fc7c95a5397c25']}
+
+
+MAC_ALTERNATE = {'park': [-77334, 26, '__text', 'a589ecbd9a495aac117c46401fa020983111bc89e441aaa4c85e8ab32ba8e219'],
+ 'parked_predicate': [-77838,
+                      16,
+                      '__text',
+                      '2408009213c5e1377a02f9da45216448c38bf392c93abb7ff5cdc656da230d19'],
+ 'travel_predicate': [-79050,
+                      14,
+                      '__text',
+                      'e5369924aff43e1f9f253a415fbf7974c29e1d850472350107a7ed2dd09b20d6'],
+ 'relaunch': [631168, 488, '__text', 'f270e9310027c3e20016b7928bb8b2d66519e2960379dc66ec60a3ea5c184f4e'],
+ 'restore_statistics': [536354,
+                        164,
+                        '__text',
+                        '43f9cd8ea7b7ed9534656284746856827c579d45f5ad361e3210b2a5db121509'],
+ 'reset_route': [722774, 60, '__text', '98a1446d8ffbfa081cc64a140407a0963cf6d951aa2fa30633e6757744493278'],
+ 'periodic_check': [112696,
+                    186,
+                    '__text',
+                    '0bb452ba827952b8a4799e715f544360101b2bd50c64cd34bb2e50fd65432b71'],
+ 'ordinary_timer_entry': [112550,
+                          21,
+                          '__text',
+                          '51b181dad025ec70284b01c36551fc49aef836e6192d98fb65f95da8b06069ff'],
+ 'world_schedule': [117678, 71, '__text', '7dfc1cfdaf9260872a5258bffa52c0c97ada7e8473da917c3a7ded29ea841b56'],
+ 'actor_timers': [611354, 75, '__text', '4e13a6b9b4fe198a066e66a237d2acd1dcb3c50bc17e00bdadccef025da92967'],
+ 'route_clock': [617276, 87, '__text', '2d9411c9893c78a5d4c8e939311c2693989e29ae5b2cf213e145d9e0ff0ceec3'],
+ 'outbound': [620100, 130, '__text', '4ed9ceec36fedbed1f8595b2f90a0c773383d5e1147682454dc919e5f0382fad'],
+ 'mode_table': [628454, 40, '__text', '03414b94bcae54c25b57a0fe3067f93f0284bda1ded55bdd145b21f6b1f37c76'],
+ 'multiplier': [1532770, 4, '__const', 'e7d9a957c3c942d3551b291f30acbb11064e373eb6adcf4dc54671f8a64f965f'],
+ 'speed_limit': [1531926, 4, '__const', '2238f30df488055daf5e8f362cf904e370011a172d20df193c1b7ae8e5db8e01']}
+
+
+MAC_RECYCLING_LAYOUTS = {'patrol_check': [112882, 327, '__text', 'b5c4ee2efc7fe4b696003a37385c60426a5825add9ff54548de51c8166c404e6'],
+ 'patrol_iteration': [113730,
+                      22,
+                      '__text',
+                      '3213af3110b3ea24f41e7c3c6a04ee6a10c06b4f4d9e8702b09b7b5bfa9eb823'],
+ 'initial_clocks': [-45856, 11, '__text', 'b724e3f689db04f7ade3c8b6539dad7c0a562a8dc6b9adbff7503fa7d7d32868'],
+ 'initial_travel_flag': [-81071,
+                         7,
+                         '__text',
+                         '146a8ca310e8a0199dfaf6dba19b55dfcb74ee0b074430df25c5315ed39112ab'],
+ 'freighter_reset_dispatch': [2377410,
+                              8,
+                              '__const',
+                              '5de62da353d5ca355edae4d5dc20bbce8e6bf852f4bab4214781dc0e1ebdd199'],
+ 'freighter_no_reset': [-76880,
+                        6,
+                        '__text',
+                        '5a96d1fb661d55552184ea24023ae8190bd1523ae1f855a8d671b07143e8b1df'],
+ 'launch_position': [609776,
+                     176,
+                     '__text',
+                     'd7f595d98dfbf167120727344ec27bdcb00027b44c1345292f575de7c9197330']}

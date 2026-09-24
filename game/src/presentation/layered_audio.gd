@@ -11,6 +11,7 @@ var _history: Array[Dictionary]=[]
 var _running := false
 var _paused := false
 var _volume_db := 0.0
+var _initial_parameter: Variant=null
 var volume_db: float:
 	get:return _volume_db
 	set(value):
@@ -27,22 +28,33 @@ var playing: bool:
 func configure(definition: Dictionary, seed_value: int) -> void:
 	_definition=definition
 	_sequence=Sequence.new();_sequence.configure(definition,seed_value)
+	_initial_parameter=null
+
+func set_initial_parameter(value: float) -> void:
+	_initial_parameter=value
 
 func play(_from_position: float=0.0) -> void:
 	_running=true
-	commit_step(_sequence.prepare_step(0))
+	commit_step(_sequence.prepare_step(0,_initial_parameter))
 
-func prepare_step(delta_ms: int) -> Dictionary:
+func prepare_step(delta_ms: int, external_value: Variant=null) -> Dictionary:
 	error=""
 	if not _running or _paused:return {"repeat":true}
-	var frame: Dictionary=_sequence.prepare_step(delta_ms)
+	var frame: Dictionary=_sequence.prepare_step(delta_ms,external_value)
 	if frame.is_empty():error=_sequence.error
 	return frame
 
 func commit_step(frame: Dictionary) -> void:
 	if frame.get("repeat",false) or not _sequence.commit_step(frame):return
 	for op in frame.operations:
-		stop_voice(op.key)
+		if op.action=="update":
+			if _voices.has(op.key):
+				var active: Dictionary=_voices[op.key]
+				active.gain_db=linear_to_db(op.gain) if op.gain>0 else -80.0
+				active.pitch=op.pitch
+				active.node.volume_db=_volume_db+active.gain_db
+				active.node.pitch_scale=op.pitch
+		else:stop_voice(op.key)
 		if op.action=="start":
 			var node:=Streams.player(op.sample.stream,_definition.spatial,category)
 			var gain_db: float=linear_to_db(op.gain) if op.gain>0 else -80.0

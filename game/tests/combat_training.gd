@@ -83,7 +83,7 @@ func verify_training_construction(args: PackedStringArray, equipment: RefCounted
 			if id<3:
 				check(actor.actor_kind==8 and actor.hull_catalogue_id==2 and actor.body_pose.origin==actor.factory_position and actor.mode==5 and not actor.active and actor.targeting_blocked,"Training pirates were activated or placed outside the source factory")
 			else:
-				check(actor.actor_kind==3 and actor.hull_catalogue_id==30 and actor.body_pose.origin==Vector3(710,60,16000) and actor.friendly and actor.current_hull_override==9999999 and actor.name_text_id==1580,"Gunant's authored identity, hull or placement changed")
+				check(actor.actor_kind==3 and actor.hull_catalogue_id==30 and actor.body_pose.origin==Vector3(710,60,16000) and actor.friendly and actor.current_hull_override==9999999 and actor.name_text_id==int(bindings.combat_training.companion_name_text_id),"Gunant's authored identity, hull or placement changed")
 				check(actor.route.waypoints==[Vector3(-4000,-3000,80000),Vector3(10000,7000,160000)] and not actor.route.loop and actor.route.index==0 and not actor.route.completed,"Gunant did not replace his generated patrol with the authored route")
 		var accepted:=constructor.snapshot()
 		check(constructor.generate({"state":int(fixture.input_state)}).is_empty() and constructor.snapshot()==accepted,"Second generation replaced the retained encounter")

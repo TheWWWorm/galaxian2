@@ -68,6 +68,7 @@ func verify_consecutive_results(bindings: RefCounted,cat: RefCounted,library: Re
 	_consecutive_results=true
 
 func after_lifecycle_prepared(bindings: RefCounted,contracts: RefCounted,controller: RefCounted) -> void:
+	verify_career_observation(controller)
 	_result_session=contracts.fork()
 	if not ResultRules.available(bindings):
 		check(not _result_session.bind_flight(controller),"An earlier pack enabled flight settlement")
@@ -83,6 +84,7 @@ func after_lifecycle_prepared(bindings: RefCounted,contracts: RefCounted,control
 
 func after_lifecycle_outcome(bindings: RefCounted,contracts: RefCounted,original: RefCounted,target: Dictionary,equipment: RefCounted) -> void:
 	if _result_session==null:return
+	verify_career_observation(original)
 	var session: RefCounted=_result_session.fork()
 	var controller: RefCounted=original.fork_for_frame()
 	var before: Dictionary=session.snapshot();var initial: Dictionary=original.snapshot()
@@ -122,6 +124,7 @@ func after_lifecycle_outcome(bindings: RefCounted,contracts: RefCounted,original
 		check(read.opened,"The actual exploded pirates did not open their earned result")
 		session=read.session;controller=read.controller
 	var pending: Dictionary=session.snapshot();var frozen: Dictionary=controller.snapshot()
+	verify_career_observation(controller)
 	check(pending.pending_result.completed==success and pending.pending_result.failed==not success and pending.pending_result.mode==(1 if success else 2),"Result confused failed and completed missions")
 	check(pending.completed_side_missions==before.completed_side_missions+(1 if success else 0) and pending.progress.other_score==before.progress.other_score+(2 if success else 0),"Flight completion counted at the wrong phase or rewarded failure")
 	check(pending.credits==before.credits and pending.campaign_cursor==13 and pending.mission==before.mission,"Opening a result paid or changed the story/side slot early")
@@ -174,6 +177,19 @@ func after_lifecycle_outcome(bindings: RefCounted,contracts: RefCounted,original
 	check(original.snapshot()==initial and contracts.snapshot().credits==before.credits,"Result component mutated its retained source fixture")
 	if success:_result_successes+=1
 	else:_result_failures+=1
+
+func verify_career_observation(controller: RefCounted) -> void:
+	var complete: Dictionary=controller.snapshot()
+	var observed: Dictionary=controller.career_snapshot()
+	for key in observed:
+		if key=="combat":
+			for field in observed.combat:
+				check(observed.combat[field]==complete.combat[field],"Career observation changed combat "+field)
+		else:check(observed[key]==complete[key],"Career observation changed "+key)
+	observed.accounting.counter_deltas.clear()
+	observed.combat.reputation.events.append({"unexpected":true})
+	if observed.has("contract_result"):observed.contract_result.elapsed_ms=-1
+	check(controller.snapshot()==complete,"Career observation aliases live accounting, reputation or result state")
 
 func advance_result_to(controller: RefCounted,target: Dictionary,elapsed: int) -> bool:
 	while controller.snapshot().contract_result.elapsed_ms<elapsed:

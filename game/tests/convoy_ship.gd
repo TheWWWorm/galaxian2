@@ -81,7 +81,7 @@ func verify_motion(bindings: RefCounted) -> void:
 	check(left.update(150,true) and left.snapshot().body_pose.origin==left_origin,"Capture started the wrong capital ship")
 	prior=staged.snapshot()
 	check(staged.update(150,false) and staged.snapshot()==prior,"World pause advanced convoy motion")
-	check(not staged.update(151,true) and staged.snapshot()==prior,"Invalid frame partially moved the capital ship")
+	check(not staged.update(751 if not bindings.fast_forward.is_empty() else 151,true) and staged.snapshot()==prior,"Invalid frame partially moved the capital ship")
 	check(not staged.apply_capture(initial) and staged.snapshot()==prior,"Older capture state reset cruise")
 	if legacy_capture!=null:check(not staged.apply_capture(legacy_capture) and staged.snapshot()==prior,"Foreign content controlled convoy motion")
 	check(not staged.apply_capture(Capture.new()) and staged.snapshot()==prior,"Unconfigured capture controlled convoy motion")

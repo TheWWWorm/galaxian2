@@ -36,6 +36,7 @@ const Kappa = preload("res://src/content/kappa_population_definitions.gd")
 const KappaFighters = preload("res://src/content/kappa_fighters_definitions.gd")
 const KappaRescue = preload("res://src/simulation/kappa_rescue.gd")
 const ShipSystems = preload("res://src/simulation/ship_systems.gd")
+const NPCSystems = preload("res://src/content/npc_systems_definitions.gd")
 const Alioth = preload("res://src/content/alioth_population_definitions.gd")
 const AliothAttack = preload("res://src/simulation/alioth_attack.gd")
 var error := ""
@@ -211,6 +212,7 @@ func configure_ambient(bindings: RefCounted,catalogues: RefCounted,construction:
 		_state.active=bool(bindings.ambient_lifecycle.initial_active)
 		_state.travel_cycle=0
 	if AmbientLife.recycling_parameters(bindings.ambient_lifecycle):_state.spawn_generation=0
+	if not _configure_ordinary_systems(bindings,int(rank),int(row.subtype)):return false
 	return set_pose(row.statistics_pose,row.body_pose)
 
 func configure_convoy(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
@@ -315,20 +317,78 @@ func systems_hit(amount: Variant) -> Dictionary:
 	var result: Dictionary=_systems.hit(amount,_vitals.snapshot().hull,_state.active,_state.damage_allowed)
 	if result.is_empty():return fail_hit(_systems.error)
 	if result.accepted:_state.systems_hit_serial+=1
+	if result.accepted and result.after.integrity==0 and _state.has("systems_motion_ms"):
+		_state.systems_motion_ms=float(result.after.recovery_ms)
 	return result
 
 func advance_systems(delta_ms: Variant) -> bool:
 	error=""
 	if _systems==null or not Vitals.integer(delta_ms):return reject("This actor has no supported systems recovery frame")
-	if _state.actor_mode in [3,4]:return true
+	var freighter: bool=_state.get("population_group")=="freighter"
+	if not freighter and _state.actor_mode in [3,4]:return true
 	if not _systems.advance(delta_ms):return reject(_systems.error)
+	if freighter and _state.systems_motion_ms>0.0:
+		_state.systems_motion_ms=maxf(0.0,Vitals.single(_state.systems_motion_ms-float(delta_ms)))
 	# Radio reads the NPC projection, updated during the actor pass. A pulse
 	# changes statistics first; it must not fabricate an earlier radio event.
-	_state.systems_disabled=bool(_systems.snapshot().disabled)
+	if freighter:_state.systems_disabled=_state.systems_motion_ms>0.0
+	elif _state.actor_mode!=6:_state.systems_disabled=bool(_systems.snapshot().disabled)
 	return true
 
 func systems_for_frame() -> RefCounted:
 	return null if _systems==null else _systems.fork()
+
+func _configure_ordinary_systems(bindings: RefCounted,rank: int,subtype: int) -> bool:
+	if not NPCSystems.available(bindings):return true
+	var rules:=NPCSystems.systems(bindings,rank,subtype)
+	var systems:=ShipSystems.new()
+	if rules.is_empty() or not systems.configure(bindings,rules.capacity,rules.recovery_ms):return reject("Ordinary systems initialization is unavailable")
+	_systems=systems
+	_state.merge({"systems_disabled":false,"systems_hit_serial":0,"script_hostile":false,"scenery":false,"permanent_friendly":false},true)
+	if subtype==1:_state.systems_motion_ms=0.0
+	return true
+
+func retain_ordinary_force(forced: bool,persistent: bool) -> bool:
+	if _systems==null or not (_state.get("ambient_traffic",false) or _state.get("authored_story",false)) or (_state.script_hostile and not persistent):return reject("Ordinary reactions lost persistent faction hostility")
+	if not retain_local_force(forced):return false
+	_state.script_hostile=persistent
+	if persistent:_state.hostile=true;_state.friendly=false
+	return true
+
+func _configure_story(bindings: RefCounted,data: Dictionary,row: Dictionary) -> bool:
+	clear()
+	var freight: bool=row.population_group=="freighter"
+	var model: String=bindings.resolve(int(row.assembly.body_resource_ids[0]),"mesh") if freight else bindings.resolve_ship_model(int(row.hull_catalogue_id))
+	if model.is_empty():return reject(bindings.error)
+	var base:=int(data.rank_base)+int(data.rank_multiplier)*int(data.rank)+int(data.cursor_multiplier)*int(data.campaign_cursor)
+	if freight:base*=int(data.freighter.hull_multiplier)
+	var factory_hull:=scaled_hull(float(base),float(data.difficulty),float(data.difficulty_offset))
+	var current_hull:=factory_hull
+	for divisor in row.get("hull_divisors",[]):
+		@warning_ignore("integer_division")
+		current_hull=current_hull/int(divisor)
+	var initial:={"actor_id":row.actor_id,"actor_kind":row.actor_kind,"hull_catalogue_id":row.hull_catalogue_id,
+		"hull_resource":model,"position":row.statistics_pose.origin,"current_hull":current_hull}
+	var policy:={"initial_hostile":bool(data.initial_hostile),"updated_hostile":row.actor_kind==9}
+	if not _initialize_body(bindings,bindings.opening_actors.npc_initialization,initial,float(data.difficulty),factory_hull,float(data.percentage_scale),policy):return false
+	_state.max_hull=current_hull
+	_state.merge({"campaign_cursor":int(data.campaign_cursor),"station_id":int(data.station_id),"rank":int(data.rank),"authored_story":true,
+		"population_group":row.population_group,"subtype":row.subtype,"friendly":bool(data.friendly),
+		"actor_mode":int(data.initial_actor_mode),"active":bool(data.initial_active),
+		"targeting_blocked":bool(data.initial_actor_targeting_blocked),"statistics_targeting_blocked":bool(data.initial_statistics_targeting_blocked),
+		"spatial_half_extent":int(data.engagement_half_extent),"model_draw_enabled":bool(data.initial_model_draw_enabled),
+		"node_draw_requested":bool(data.initial_node_draw_requested),"engine_draw_enabled":bool(data.initial_engine_draw_enabled),
+		"local_combat":true,"forced_hostile":false},true)
+	_initial_training_death=true
+	if freight:
+		_state.point_boxes=data.freighter.boxes.map(func(box):return {"offset":Vector3(box.offset[0],box.offset[1],box.offset[2]),"half_extents":Vector3(box.half_extents[0],box.half_extents[1],box.half_extents[2])})
+		_state.point_box_index=0
+	if not _configure_ordinary_systems(bindings,int(data.rank),int(row.subtype)):return false
+	return set_pose(row.statistics_pose,row.body_pose)
+
+func apply_story_guidance(decision: Dictionary) -> bool:
+	if not _state.get("authored_story",false) or _state.population_group!="fighter":return reject("Story guidance requires its retained fighter")
+	return _apply_guidance_activity(decision,true)
 
 func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
 	clear()
@@ -534,6 +594,10 @@ func relaunch_ambient(bindings: RefCounted,death_owner: RefCounted=null) -> bool
 	_state.engine_draw_enabled=true;_state.node_draw_requested=true;_state.model_draw_enabled=true
 	if _state.has("travel_cycle"):_state.travel_cycle+=1
 	if recycling:_state.spawn_generation+=1
+	if _systems!=null:
+		var systems: Dictionary=_systems.snapshot()
+		if not _systems.configure(bindings,systems.capacity,systems.recovery_ms):return reject(_systems.error)
+		_state.systems_disabled=false
 	return true
 
 func apply_ambient_guidance(decision: Dictionary) -> bool:
@@ -590,6 +654,11 @@ func _initialize_body(bindings: RefCounted, data: Dictionary, actor: Dictionary,
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
 		"actor_id":actor.actor_id,"hull_catalogue_id":actor.hull_catalogue_id,"hull_resource":actor.hull_resource,
 		"actor_kind":actor.actor_kind,"difficulty":source_difficulty,
+		# The base NPC constructor clears actor+0x5E. Its only recovered set is
+		# the separate faction-zero random-world group, absent from these
+		# supported construction records. The radar music mark requires this bit
+		# AND statistics/root+0xF8, so later root hostility cannot mark this body.
+		"radar_marked_actor":false,
 		"half_extent":int(data.special_half_extent if source_difficulty==Vitals.single(float(data.special_difficulty)) else data.ordinary_half_extent),
 		"position":actor.position,"pose":Transform3D(Basis.IDENTITY,actor.position),"active":data.initial_active,
 		"damage_allowed":data.initial_damage_allowed,"firing_allowed":data.initial_firing_allowed,
@@ -638,14 +707,18 @@ func enable_local_combat() -> bool:
 func apply_local_hostility(reputation: Dictionary, forced: bool, rules: Dictionary) -> bool:
 	if not _state.get("local_combat",false):return reject("Local hostility requires connected combat reactions")
 	var value: int=reputation.axes[int(rules.axis)]
-	_state.hostile=forced or value>int(rules.hostile_above)
-	_state.friendly=not forced and value<int(rules.friendly_below)
+	var hostile: bool=forced or _state.get("script_hostile",false)
+	_state.hostile=hostile or value>int(rules.hostile_above)
+	_state.friendly=not hostile and value<int(rules.friendly_below)
 	_state.forced_hostile=forced
 	return true
 
 func apply_free_hostility(reputation: Dictionary,forced: bool,rules: Dictionary) -> bool:
-	if not _state.get("free_traffic",false) or not _state.get("local_combat",false):return reject("Ordinary hostility requires connected faction reactions")
-	var standing:=FreeLife.standing(rules,int(_state.actor_kind),reputation,forced)
+	if not (_state.get("free_traffic",false) or _state.get("authored_story",false)) or not _state.get("local_combat",false):return reject("Ordinary hostility requires connected faction reactions")
+	if _state.get("authored_story",false) and _state.actor_kind==9:
+		_state.hostile=true;_state.friendly=false;_state.forced_hostile=forced
+		return true
+	var standing:=FreeLife.standing(rules,int(_state.actor_kind),reputation,forced or _state.get("script_hostile",false))
 	if standing.is_empty():return reject("Unsupported ordinary faction standing")
 	_state.merge(standing,true);_state.forced_hostile=forced
 	return true
@@ -665,6 +738,16 @@ func snapshot() -> Dictionary:
 	if _state.has("max_hull"):
 		var fraction := Vitals.single(Vitals.single(float(result.vitals.hull))/Vitals.single(float(result.max_hull)))
 		result.hull_percent=int(Vitals.single(fraction*_hull_percentage_scale))
+	return result
+
+## Mission/radio predicates need current NPC flags, not projectile, pose or
+## systems-pool snapshots. In particular the projected stun flag can lag a hit.
+func kappa_observation() -> Dictionary:
+	if not _state.get("kappa_rescue",false):return {}
+	var result:={}
+	for key in ["actor_id","actor_kind","hull_catalogue_id","actor_mode","hostile","scenery","active","friendly","systems_disabled"]:
+		result[key]=_state[key]
+	result.current_hull=int(_vitals.snapshot().hull)
 	return result
 
 func apply_scene(scene: Variant) -> bool:
@@ -696,7 +779,7 @@ func apply_scene(scene: Variant) -> bool:
 func set_pose(pose: Variant, physical_pose: Variant=null) -> bool:
 	error = ""
 	if _state.is_empty() or not pose is Transform3D or not pose.is_finite(): return reject("Actor pose requires a configured body and finite transform")
-	if physical_pose!=null and ((_state.get("campaign_cursor") not in [4,7,10] and not _state.get("ambient_traffic",false) and not _state.get("contract_ship",false) and not _state.get("contract_debris",false) and not _state.get("convoy",false) and not _state.get("alioth_attack",false) and not _state.get("kappa_rescue",false)) or not Flight.rigid_pose(physical_pose)):return reject("Separate physical motion requires a supported finite flight root")
+	if physical_pose!=null and ((_state.get("campaign_cursor") not in [4,7,10] and not _state.get("ambient_traffic",false) and not _state.get("contract_ship",false) and not _state.get("contract_debris",false) and not _state.get("convoy",false) and not _state.get("alioth_attack",false) and not _state.get("kappa_rescue",false) and not _state.get("authored_story",false)) or not Flight.rigid_pose(physical_pose)):return reject("Separate physical motion requires a supported finite flight root")
 	# The actor's source-space transform is also the collision-center authority.
 	var source_pose: Transform3D = pose
 	for axis in 3:
@@ -754,6 +837,18 @@ func apply_freighter_destruction(owner: RefCounted) -> bool:
 	_state.actor_mode=mode;_state.active=death.active;_state.engine_draw_enabled=false
 	_state.world_movement_enabled=false;_state.interaction_blocked=death.interaction_blocked
 	return true
+
+## Internal half of the encounter's native wreck transaction. Pulling moves the
+## physical root without refreshing statistics; model recreation updates both.
+func _retain_recovery_frame(frame: Dictionary) -> void:
+	var changes: Dictionary=frame.actor_changes
+	if changes.has("body_pose"):_state.body_pose=changes.body_pose
+	if changes.has("statistics_pose"):
+		_state.pose=changes.statistics_pose;_state.position=changes.statistics_pose.origin
+	if changes.has("active"):_state.active=changes.active
+	for event in frame.events:
+		if event.kind=="special_cargo_accepted":_state.special_cargo_accepted=true
+		elif event.kind=="special_cargo_rejected":_state.special_cargo_rejected=true
 
 func apply_debris_destruction(owner: RefCounted) -> bool:
 	error=""

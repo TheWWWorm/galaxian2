@@ -67,7 +67,7 @@ func verify_field(library: RefCounted, bindings: RefCounted, cat: RefCounted, eq
 
 func verify_rejections(owner: RefCounted, world: RefCounted, bindings: RefCounted, cat: RefCounted, rank: int, difficulty: float, target: Dictionary) -> void:
 	var before: Dictionary=owner.snapshot()
-	for delta in [-1,151,0.5]:
+	for delta in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5]:
 		check(owner.advance(delta,target).is_empty() and owner.snapshot()==before,"Invalid patrol duration partially advanced the group")
 	var wrong:=target.duplicate(true);wrong.binding_id="0".repeat(64)
 	check(owner.advance(150,wrong).is_empty() and owner.snapshot()==before,"Foreign player partially advanced patrol")

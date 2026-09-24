@@ -1,4 +1,5 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 const Contracts=preload("res://src/simulation/contract_session.gd")
 const Transit=preload("res://src/content/convoy_transit_definitions.gd")
 const ContractDefinitions=preload("res://src/content/early_contract_definitions.gd")
@@ -24,6 +25,8 @@ const Vitals = preload("res://src/simulation/combat_vitals.gd")
 const Convoy = preload("res://src/content/convoy_world_definitions.gd")
 const Kappa = preload("res://src/content/kappa_population_definitions.gd")
 const Alioth = preload("res://src/content/alioth_attack_definitions.gd")
+const Sahi = preload("res://src/content/sahi_encounter_definitions.gd")
+const Dima = preload("res://src/content/dima_encounter_definitions.gd")
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Vectors = preload("res://src/simulation/source_vectors.gd")
 var error := ""
@@ -45,6 +48,7 @@ var _authored_route: RefCounted
 var _convoy:={}
 var _alioth:={}
 var _kappa:={}
+var _sahi:={}
 
 func configure(bindings: RefCounted, catalogues: RefCounted) -> bool:
 	clear()
@@ -143,7 +147,7 @@ func configure_free_traffic(bindings: RefCounted,catalogues: RefCounted,equipmen
 	clear()
 	if bindings==null or not equipment is Equipment:return reject("Ordinary construction requires its retained equipment")
 	var owned: Dictionary=equipment.snapshot()
-	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false) or owned.get("cargo_cache_stale",true):return reject("Ordinary construction requires the retained released inventory")
+	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false) or not equipment.cargo_cache_valid():return reject("Ordinary construction requires the retained released inventory")
 	if not preload("res://src/content/ordinary_fitting_definitions.gd").available(bindings) and not equipment.requirements().satisfied:return reject("This profile requires the retained tutorial equipment")
 	var seed: Dictionary=owned.loadout
 	if seed.base_content_id!=bindings.base_content_id or seed.binding_id!=bindings.binding_id:return reject("Ordinary construction belongs to another content identity")
@@ -162,7 +166,8 @@ func configure_free_factory(bindings: RefCounted,catalogues: RefCounted,player_s
 		if not id is int or id<0 or id>=catalogues.tables.items.size():return reject("Unknown installed equipment for cargo construction")
 	var rules: Dictionary=bindings.mido_travel.free_population
 	var hulls: Dictionary=bindings.early_contracts.encounter_construction.hulls
-	for faction in [0,8,1]:
+	var local_faction: int=int(catalogues.tables.systems[int(context.system_id)].fields[int(rules.faction_field)])
+	for faction in [local_faction,int(rules.pirate_faction),int(rules.enemy_factions[local_faction])]:
 		for hull in int(hulls.draw_bound):
 			if int(hulls.factions[hull])!=faction or (hull<=int(hulls.mask_limit) and (int(hulls.excluded_mask)&(1<<hull))!=0):continue
 			if bindings.resolve_ship_model(hull).is_empty():return reject(bindings.error)
@@ -171,7 +176,7 @@ func configure_free_factory(bindings: RefCounted,catalogues: RefCounted,player_s
 		for resource in assembly.body_resource_ids+assembly.child_resource_ids[0]:
 			if bindings.resolve(int(resource),"mesh").is_empty():return reject(bindings.error)
 	var data: Dictionary=bindings.mido_travel.departure_traffic.duplicate(true)
-	data.merge({"station_id":int(context.station_id),"system_id":int(context.system_id),"campaign_cursor":int(context.campaign_cursor),"actor_kind":0,"ambient":true,"free_context":context.duplicate(true),"free_player_ship_id":player_ship_id},true)
+	data.merge({"station_id":int(context.station_id),"system_id":int(context.system_id),"campaign_cursor":int(context.campaign_cursor),"actor_kind":local_faction,"ambient":true,"free_context":context.duplicate(true),"free_player_ship_id":player_ship_id},true)
 	var seed:={"ship_id":player_ship_id,"equipment_ids":equipment_ids.duplicate(),"station_id":int(context.station_id)}
 	if not _configure(bindings,catalogues,seed,{},{},{},data):return false
 	_traffic.unix_seconds=unix_seconds;_ambient=bindings.ambient_population.duplicate(true)
@@ -180,11 +185,33 @@ func configure_free_factory(bindings: RefCounted,catalogues: RefCounted,player_s
 	if context.special_arrival:_free.arrival=bindings.mido_travel.free_arrival.duplicate(true)
 	return true
 
+## Detached ordinary Void actor factory. The caller supplies earned equipment
+## and the selected world context; this owner does not advance cursor33.
+func configure_void_factory(bindings: RefCounted,catalogues: RefCounted,player_ship_id: int,equipment_ids: Array,context: Dictionary) -> bool:
+	clear()
+	var population:=TrafficPopulation.new()
+	if not population.configure_void(bindings,context):return reject(population.error)
+	if catalogues==null or catalogues.content_id!=bindings.base_content_id:return reject("Void construction requires its matching imported catalogue")
+	if not Numbers.integer(player_ship_id,0,catalogues.tables.ships.size()-1):return reject("Void construction requires an earned catalogue ship")
+	for id in equipment_ids:
+		if not Numbers.integer(id,0,catalogues.tables.items.size()-1):return reject("Void construction requires installed catalogue equipment")
+	var rules: Dictionary=bindings.mido_travel.void_crystals.void_population
+	if bindings.resolve_ship_model(int(rules.hull_id)).is_empty():return reject(bindings.error)
+	var traffic:={"campaign_cursor":int(context.campaign_cursor),"station_id":int(context.selected_station_id),
+		"system_id":int(context.selected_system_id),"actor_kind":int(rules.actor_kind),"subtype":int(rules.actor_subtype),
+		"void_context":context.duplicate(true),"void_rules":rules.duplicate(true),
+		"void_maximum_count":population.maximum_void_actor_count(),"void_player_ship_id":player_ship_id}
+	var seed:={"ship_id":player_ship_id,"equipment_ids":equipment_ids.duplicate(),"station_id":-1,"system_id":-1}
+	if not _configure(bindings,catalogues,seed,{},{},{},traffic):return false
+	_population_owner=population
+	_identity.station_id=-1;_identity.system_id=-1
+	return true
+
 func configure_contract(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,contracts: RefCounted,player_position: Vector3,field_center: Vector3) -> bool:
 	clear()
 	if bindings==null or catalogues==null or not ContractDefinitions.encounter_parameters(bindings.early_contracts) or not contracts is Contracts or not equipment is Equipment:return reject("Contract construction requires its native accepted contract, inventory and declarations")
 	var owned: Dictionary=equipment.snapshot()
-	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false) or owned.get("cargo_cache_stale",true) or not equipment.requirements().satisfied:return reject("Contract construction requires the retained released inventory")
+	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false) or not equipment.cargo_cache_valid() or not equipment.requirements().satisfied:return reject("Contract construction requires the retained released inventory")
 	var seed: Dictionary=owned.loadout
 	var context: Dictionary=contracts.flight_context(int(seed.station_id))
 	if context.is_empty():return reject(contracts.error)
@@ -228,7 +255,7 @@ func configure_convoy(bindings: RefCounted,catalogues: RefCounted,equipment: Ref
 	clear()
 	if not Convoy.context_valid(bindings,context) or catalogues==null or not equipment is Equipment:return reject("Convoy construction requires its active Kernstal story and retained inventory")
 	var owned: Dictionary=equipment.snapshot()
-	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false) or owned.get("cargo_cache_stale",true) or not equipment.requirements().satisfied:return reject("Convoy construction requires the completed equipment tutorial and exchange")
+	if not owned.get("training_inventory_released",false) or not owned.get("prototype_drill_replaced",false) or not equipment.cargo_cache_valid() or not equipment.requirements().satisfied:return reject("Convoy construction requires the completed equipment tutorial and exchange")
 	var seed: Dictionary=owned.loadout
 	if seed.base_content_id!=bindings.base_content_id or seed.binding_id!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id:return reject("Convoy construction belongs to another content identity")
 	if seed.ship_id!=0 or seed.station_id!=context.station_id or seed.system_id!=context.system_id:return reject("Convoy construction requires the retained ship at Kernstal")
@@ -280,13 +307,43 @@ func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,seed: Di
 	data.loadout=seed.duplicate(true)
 	return _configure(bindings,catalogues,seed,{},{},{},{},{},{},{},data)
 
-func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, arrival: Dictionary, full_hold: Dictionary={}, training: Dictionary={}, traffic: Dictionary={}, contract: Dictionary={}, convoy: Dictionary={}, alioth: Dictionary={}, kappa: Dictionary={}) -> bool:
+func configure_sahi(bindings: RefCounted,catalogues: RefCounted,seed: Dictionary,context: Dictionary) -> bool:
+	clear()
+	var post_rules=load("res://src/content/post_sahi_definitions.gd")
+	var post: bool=bindings!=null and post_rules.selected(bindings.mido_travel,context)
+	var dima: bool=bindings!=null and Dima.selected(bindings.mido_travel,context)
+	if bindings==null or catalogues==null or not (post or dima or Sahi.selected(bindings.mido_travel,context)):return reject("Story construction requires its selected source context")
+	for key in ["base_content_id","binding_id"]:
+		if seed.get(key)!=bindings.get(key) or context.get(key)!=bindings.get(key):return reject("Sahi construction belongs to another content identity")
+	for key in ["station_id","system_id"]:
+		if seed.get(key)!=context.get(key):return reject("Sahi construction requires retained equipment at the selected world")
+	if catalogues.content_id!=bindings.base_content_id or not Numbers.integer(seed.get("ship_id"),0,catalogues.tables.ships.size()-1):return reject("Sahi construction requires a valid retained ship")
+	var ids: Variant=seed.get("equipment_ids")
+	if not ids is Array or ids.any(func(id):return not Numbers.integer(id,0,catalogues.tables.items.size()-1)):return reject("Sahi construction requires installed catalogue equipment")
+	var data: Dictionary=post_rules.population(bindings.mido_travel,context) if post else (Dima.population(bindings.mido_travel,context) if dima else bindings.mido_travel.sahi_encounter.population.duplicate(true))
+	if data.is_empty():return reject("Dima construction requires its relocated portal position")
+	if post and context.campaign_cursor==26:
+		if not load("res://src/simulation/npc_flight.gd").rigid_pose(context.get("player_pose")):return reject("Pursuers require the actual returning player pose")
+		data.player_pose=context.player_pose
+	var factory: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("construction",{})
+	if data.factory_spawn_offset!=factory.get("spawn_origin") or int(data.factory_spawn_bound)!=int(factory.get("spawn_bound",-1)):return reject("Sahi construction disagrees with the shared source factory")
+	for row in data.actors:
+		if int(row.subtype)==0 and bindings.resolve_ship_model(int(row.hull_catalogue_id)).is_empty():return reject(bindings.error)
+	for id in data.freighter_assembly.body_resource_ids:
+		if bindings.resolve(int(id),"mesh").is_empty():return reject(bindings.error)
+	for children in data.freighter_assembly.child_resource_ids:
+		for id in children:
+			if bindings.resolve(int(id),"mesh").is_empty():return reject(bindings.error)
+	data.context=context.duplicate(true);data.loadout=seed.duplicate(true)
+	return _configure(bindings,catalogues,seed,{},{},{},{},{},{},{},{},data)
+
+func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, arrival: Dictionary, full_hold: Dictionary={}, training: Dictionary={}, traffic: Dictionary={}, contract: Dictionary={}, convoy: Dictionary={}, alioth: Dictionary={}, kappa: Dictionary={}, sahi: Dictionary={}) -> bool:
 	var data: Variant = bindings.opening_actors.get("npc_initialization",{}).get("construction",{})
 	if not Definitions.parameters(data): return reject("NPC construction is unavailable in this pack")
 	if bindings.resolve(int(data.fragment_resource),"mesh").is_empty(): return reject(bindings.error)
 	var expected_ship:=10 if full_hold.is_empty() else 0
 	var expected_equipment: Array=[2,2,36,54,59,82,73] if full_hold.is_empty() else [90,81]
-	if kappa.is_empty() and not traffic.has("free_context") and alioth.is_empty() and convoy.is_empty() and contract.is_empty() and ((training.is_empty() and traffic.is_empty() and (seed.ship_id!=expected_ship or seed.equipment_ids!=expected_equipment)) or ((not training.is_empty() or not traffic.is_empty()) and seed.ship_id!=0) or seed.station_id!=(int(traffic.station_id) if not traffic.is_empty() else 78)):
+	if sahi.is_empty() and kappa.is_empty() and not traffic.has("free_context") and not traffic.has("void_context") and alioth.is_empty() and convoy.is_empty() and contract.is_empty() and ((training.is_empty() and traffic.is_empty() and (seed.ship_id!=expected_ship or seed.equipment_ids!=expected_equipment)) or ((not training.is_empty() or not traffic.is_empty()) and seed.ship_id!=0) or seed.station_id!=(int(traffic.station_id) if not traffic.is_empty() else 78)):
 		return reject("NPC construction requires its supported retained loadout")
 	var items: Variant = catalogues.tables.get("items")
 	if not items is Array or items.size()!=233: return reject("Unsupported NPC cargo catalogue")
@@ -316,23 +373,27 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, 
 	for id in seed.equipment_ids:
 		if staged[id].type==int(data.special_equipment_type): return reject("Special cargo override is outside fresh opening construction")
 	var routes := []
-	var count: int=int(traffic.empty_population_fallback) if not traffic.is_empty() else (int(training.actor_count) if not training.is_empty() else (3 if arrival.is_empty() and full_hold.is_empty() else 1))
+	var count: int=0 if traffic.has("void_context") else (int(traffic.empty_population_fallback) if not traffic.is_empty() else (int(training.actor_count) if not training.is_empty() else (3 if arrival.is_empty() and full_hold.is_empty() else 1)))
 	if not contract.is_empty():count=0 if int(contract.context.mission.kind)==7 else int(contract.actor_count)
 	if not convoy.is_empty():count=int(convoy.actor_count)
 	if not alioth.is_empty():count=int(alioth.actor_count)
 	if not kappa.is_empty():count=int(kappa.actor_count)
+	if not sahi.is_empty():count=int(sahi.actor_count)
 	if traffic.has("free_context"):count=FreePopulation.maximum_actor_count(bindings,int(traffic.free_context.rank),float(traffic.free_context.difficulty),traffic.free_context)
+	elif traffic.has("void_context"):count=int(traffic.void_maximum_count)
 	elif traffic.get("ambient",false):count=AmbientDefinitions.maximum_actor_count(bindings.ambient_population,traffic)
 	for id in count:
 		if not alioth.is_empty() and int(alioth.actors[id].subtype)!=0:routes.append(null);continue
 		if not convoy.is_empty() and int(convoy.actors[id].subtype)!=0:routes.append(null);continue
 		var route := Route.new()
 		var ready: bool
-		if not kappa.is_empty():ready=route.configure_kappa_generated(bindings,id)
+		if not sahi.is_empty():ready=route.configure_sahi_generated(bindings,id,sahi.context)
+		elif not kappa.is_empty():ready=route.configure_kappa_generated(bindings,id)
 		elif not alioth.is_empty():ready=route.configure_alioth_generated(bindings,id)
 		elif not convoy.is_empty():ready=route.configure_convoy_generated(bindings,id)
 		elif not contract.is_empty():ready=route.configure_contract_generated(bindings,id,int(contract.context.campaign_cursor))
 		elif traffic.has("free_context"):ready=route.configure_free_generated(bindings,id,traffic.free_context)
+		elif traffic.has("void_context"):ready=route.configure_void_generated(bindings,id,traffic.void_context)
 		elif traffic.get("ambient",false):ready=route.configure_ambient_generated(bindings,id,int(traffic.campaign_cursor))
 		elif not traffic.is_empty():ready=route.configure_local_generated(bindings,id)
 		elif not training.is_empty():ready=route.configure_training_generated(bindings,id)
@@ -346,6 +407,10 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, seed: Dictionary, 
 		_identity.campaign_cursor=int(kappa.context.campaign_cursor)
 		_identity.station_id=int(kappa.context.station_id)
 		_kappa=kappa.duplicate(true)
+	if not sahi.is_empty():
+		_identity.campaign_cursor=int(sahi.context.campaign_cursor)
+		_identity.station_id=int(sahi.context.station_id)
+		_sahi=sahi.duplicate(true)
 	if not alioth.is_empty():
 		_identity.campaign_cursor=int(alioth.context.campaign_cursor)
 		_identity.station_id=int(alioth.context.station_id)
@@ -386,6 +451,8 @@ func generate(random_state: Variant) -> Dictionary:
 	if _identity.is_empty() or not _actors.is_empty() or _generated: return fail("Configure fresh NPC construction before generating once")
 	var random := Random.new()
 	if not random.restore(random_state): return fail(random.error)
+	if not _sahi.is_empty():return _generate_sahi(random)
+	if _traffic.has("void_context"):return _generate_void(random)
 	if not _kappa.is_empty():return _generate_kappa(random)
 	if not _alioth.is_empty():return _generate_alioth(random)
 	if not _convoy.is_empty():return _generate_convoy(random)
@@ -605,6 +672,79 @@ func _generate_alioth(random: RefCounted) -> Dictionary:
 	_actors=actors;_routes=routes;_random_state=random.snapshot();_generated=true
 	return snapshot()
 
+func _generate_sahi(random: RefCounted) -> Dictionary:
+	var actors:=[];var routes:=[]
+	actors.resize(int(_sahi.actor_count));routes.resize(int(_sahi.actor_count))
+	var waypoint:=Poses.vec(_sahi.waypoints[0])
+	for value in _sahi.construction_order:
+		var id:=int(value);var source: Dictionary=_sahi.actors[id]
+		var freighter: bool=int(source.subtype)==1
+		# The shared factory selects the concrete subtype before construction.
+		# Freighters have no patrol or initial debris; Sahi replaces Void routes.
+		var sampled:=_sample_actor(id,waypoint,random,freighter)
+		if sampled.is_empty():return {}
+		var actor: Dictionary=sampled.actor;var route: RefCounted=sampled.route
+		if freighter:
+			var cargo_rules: Dictionary=_sahi.freighter_cargo
+			_scale_freighter_cargo(actor.discarded_cargo,random,int(cargo_rules.multiplier_offset),int(cargo_rules.multiplier_bound),int(cargo_rules.floor_offset),int(cargo_rules.floor_bound))
+			actor.assembly=_sahi.freighter_assembly.duplicate(true);actor.model_assembly_required=true
+			actor.cruise_enabled=bool(_sahi.freighter_cruise_enabled);actor.hull_divisors=[int(_sahi.freighter_hull_divisor)]
+			actor.cargo=[]
+		else:
+			if not _sahi.has("post_sahi") and not _sahi.has("dima"):
+				if not route.replace_with_sahi_patrol():return fail(route.error)
+				actor.discarded_route=actor.route;actor.route=route.snapshot()
+			actor.cargo=actor.discarded_cargo;actor.discarded_cargo=[]
+		if _sahi.has("post_sahi"):
+			var rules: Dictionary=_sahi.post_sahi
+			var position:=Vector3.ZERO
+			var placement_draws:=[]
+			if _sahi.context.campaign_cursor in [25,29]:
+				for axis in 3:
+					var sign_draw: int=random.next_int(int(rules.sign_bound));var magnitude_draw: int=random.next_int(int(rules.magnitude_bound))
+					position[axis]=(1 if sign_draw==int(rules.positive_sign_draw) else -1)*(int(rules.magnitude_offset)+magnitude_draw)
+					placement_draws.append([sign_draw,magnitude_draw])
+			else:
+				position=Vectors.added(_sahi.player_pose.origin,Vectors.scaled(Vectors.normalized(_sahi.player_pose.basis.z),float(rules.forward_distance)))
+				for axis in 3:
+					var draw: int=random.next_int(int(rules.axis_bound));placement_draws.append(draw)
+					position[axis]=Vitals.single(position[axis]+int(rules.axis_offset)+draw)
+			actor.factory_position_before_relocation=actor.factory_position
+			actor.factory_position=position;actor.placement_draws=placement_draws
+		for key in ["actor_kind","subtype","hull_catalogue_id"]:actor[key]=int(source[key])
+		actor.population_group="freighter" if freighter else "fighter"
+		actor.body_pose=Transform3D(Basis.IDENTITY,actor.factory_position);actor.statistics_pose=actor.body_pose;actor.model_local_pose=Transform3D.IDENTITY
+		actors[id]=actor;routes[id]=route
+	_actors=actors;_routes=routes;_random_state=random.snapshot();_generated=true
+	return snapshot()
+
+func _generate_void(random: RefCounted) -> Dictionary:
+	var population: Dictionary=_sample_traffic(random)
+	if population.is_empty() or int(population.actor_count)>_routes.size():return fail("Void actor count exceeds its configured routes")
+	var rules: Dictionary=_traffic.void_rules
+	var actors:=[];var routes:=[]
+	for id in int(population.actor_count):
+		# The same kind9/subtype0/hull8 factory used by the earlier Void casts
+		# consumes its position, route, cargo and fragment draws first.
+		var sampled:=_sample_actor(id,Vector3.ZERO,random)
+		if sampled.is_empty():return {}
+		var actor: Dictionary=sampled.actor;var route: RefCounted=sampled.route
+		var position:=Vector3.ZERO;var draws:=[]
+		for axis in 3:
+			var drawn: int=random.next_int(int(rules.position_bounds[axis]))
+			draws.append(drawn)
+			position[axis]=int(rules.position_offsets[axis])+drawn
+		var body:=Transform3D(Basis.IDENTITY,position)
+		actor.merge({"actor_kind":int(rules.actor_kind),"hull_catalogue_id":int(rules.hull_id),
+			"subtype":int(rules.actor_subtype),"population_group":"void","factory_position_before_relocation":actor.factory_position,
+			"factory_position":position,"placement_draws":draws,"cargo":actor.discarded_cargo,"discarded_cargo":[],
+			"body_pose":body,"statistics_pose":body,"model_local_pose":Transform3D.IDENTITY,
+			"activation_setter_argument":int(rules.shared_activation_setter_argument),
+			"activation_fields":{"f8":1,"b60":1,"b61":0,"ec":1}},true)
+		actors.append(actor);routes.append(route)
+	_actors=actors;_routes=routes;_random_state=random.snapshot();_traffic_sample=population;_generated=true
+	return snapshot()
+
 func _sample_actor(id: int,origin: Vector3,random: RefCounted,freighter:=false) -> Dictionary:
 	var position:=Vector3.ZERO
 	for axis in 3:position[axis]=origin[axis]+int(_definition.spawn_origin[axis])+random.next_int(int(_definition.spawn_bound))
@@ -755,7 +895,7 @@ func _sample_cargo(random: RefCounted) -> Array:
 
 func sample_relaunch_cargo(random_state: Variant) -> Dictionary:
 	error=""
-	if _ambient.is_empty() or _actors.is_empty() or (_identity.get("campaign_cursor") not in [11,12,13,14,18,19] or (_identity.get("campaign_cursor") in [18,19] and _free.is_empty())):return fail("Traffic cargo regeneration requires its retained generated population")
+	if _ambient.is_empty() or _actors.is_empty() or (_identity.get("campaign_cursor") not in FlightStages.REGENERATING or (_identity.get("campaign_cursor") in FlightStages.FREE and _free.is_empty())):return fail("Traffic cargo regeneration requires its retained generated population")
 	var random:=Random.new()
 	if not random.restore(random_state):return fail(random.error)
 	return {"cargo":_sample_cargo(random),"random_state":random.snapshot()}
@@ -789,14 +929,19 @@ func snapshot() -> Dictionary:
 	if not _alioth.is_empty():value.alioth_context=_alioth.context.duplicate(true)
 	if not _kappa.is_empty():
 		value.kappa_context=_kappa.context.duplicate(true);value.kappa_loadout=_kappa.loadout.duplicate(true)
+	if not _sahi.is_empty():
+		value.sahi_context=_sahi.context.duplicate(true);value.player_ship_id=int(_sahi.loadout.ship_id)
 	if _traffic.has("free_context"):
 		value.free_context=_traffic.free_context.duplicate(true);value.player_ship_id=int(_traffic.free_player_ship_id)
 		value.station_id=int(_traffic.station_id)
+	if _traffic.has("void_context"):
+		value.void_context=_traffic.void_context.duplicate(true);value.player_ship_id=int(_traffic.void_player_ship_id)
+		value.station_id=-1;value.system_id=-1
 	return value
 
 func clear() -> void:
 	error="";_identity={};_definition={};_items=[];_routes=[];_actors=[];_random_state={};_arrival={};_full_hold={};_training={};_traffic={};_traffic_sample={};_authored_route=null;_ambient={};_free={};_population_owner=null
-	_contract={};_contract_layout={};_generated=false;_convoy={};_alioth={};_kappa={}
+	_contract={};_contract_layout={};_generated=false;_convoy={};_alioth={};_kappa={};_sahi={}
 
 var _contract:={}
 var _contract_layout:={}

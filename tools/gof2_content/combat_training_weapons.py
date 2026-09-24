@@ -1,5 +1,6 @@
 """Optional Mac training weapon/player constants. Static import, no code output."""
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_combat_training_weapons(mach,arrival,training,control,equipment,actors,weapons):
@@ -10,12 +11,12 @@ def extract_combat_training_weapons(mach,arrival,training,control,equipment,acto
         if not weapons['ordinary_hit_policy'] or not weapons['player_hit_policy'] or not weapons['collision_bounds'] or not weapons['audio']:return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'combat_training_ordinary_weapons',
@@ -186,3 +187,43 @@ LAYOUTS = {'npc_setup': [54772,
                4,
                '__const',
                'sha256:140efb356462f70dd1c7f1dfb10bcc07d0f14d439043fb9e9d50f4d7be71ea96']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'npc_setup': [54772, 4266, '__text', 'sha256:3f2a1241cc0c6a3b727f4b1e1e83eb9328004ecc7ee2d56d85d10163057bf0d3'],
+ 'weapon_constructor': [-190526,
+                        1052,
+                        '__text',
+                        'sha256:0d46de6f95e493fc2a0c353d0f33e25cad4e4678ebd72dfa35b1c7a38d05dea5'],
+ 'item_setter': [-189192, 356, '__text', 'sha256:549578b4a8d139aeb21819c03e2a69130554ad105eb89faf7d11210f35c6a92b'],
+ 'nonplayer_setter': [-188818, 14, '__text', 'sha256:56fb4708b51db8473a556671ad05fbcb6e5acda136b1ffc4b9cc745236913c8c'],
+ 'world_setter': [-188328, 10, '__text', 'sha256:f32fa1facba93f311868735c6e7da4d4bde6742a6e26f5f9fe021d3dc995180c'],
+ 'spread_setter': [-188836, 18, '__text', 'sha256:927d86e6419e8a53a0c3181171b9e9f0eb58f50971e7b894006e09cb6bcbe20b'],
+ 'mount_setter': [-188766, 68, '__text', 'sha256:6a30a310d28ea8b642197c73d046d099b73f48f66729b1e9bfbebfb0048e5788'],
+ 'ordinary_launch': [-188290,
+                     3176,
+                     '__text',
+                     'sha256:9411e1de70cd54d11251e4f8650dc7128912700b0665aee0ec503048acb485e3'],
+ 'ordinary_update': [-180858, 710, '__text', 'sha256:e591e7e82ceadf82cba3504357a15d97d1d3950db93ab413642a69444cf5cfd9'],
+ 'contacts': [-183568, 2704, '__text', 'sha256:95db4cd298c721650cdb2404b89369161f9ff093fb25dbcaee789e1548a72c3e'],
+ 'normal_damage': [539472, 1846, '__text', 'sha256:407b208cd78b7b7e70b5bc505bc9509f70781ad9d1af9c2b9a9f80104cd54242'],
+ 'player_factory': [-37352, 2046, '__text', 'sha256:336ea8b85ccab161993f9d90974fb994f051e0f742847246a42534557ce31a95'],
+ 'weapon_factory': [64358, 2880, '__text', 'sha256:6fe1557f355730ee3310898ecb965bce0b67fae080d269c760ca1466d0e17dc7'],
+ 'cache_reset_and_state': [432316,
+                           113,
+                           '__text',
+                           'sha256:f3de56aa4b643ba9b5cc37a3c2b5291426a189229a16fe58370da10741fcf5f0'],
+ 'world_entry': [334920, 77, '__text', 'sha256:4b4d616ea9b0dc66d5e9277035f0f0f48c2b15df901a53b334f963501de6f179'],
+ 'refresh_equipment': [858597, 93, '__text', 'sha256:ca675b06817328cdf2ff0e5a751b2abe9f12a033d6c832890c88b0038c6cbb00'],
+ 'equipment_departure_gate': [437523,
+                              262,
+                              '__text',
+                              'sha256:7f09346020c2ed731652b3e520d8c7d98ed3126c1e6cb4659b123862910b8a32'],
+ 'player_mount_assignment': [-35754,
+                             56,
+                             '__text',
+                             'sha256:c047bd09340ad1ed822891b8be6e668aa7f53dcc17626e4a99d95e1a2cd48f36'],
+ 'weapon_dispatch': [67166, 12, '__text', 'sha256:da0539709d33338afecfe1a11fff68db652d01c4439e15d1cf11db2053ae1eb5'],
+ 'npc_dispatch': [58994, 36, '__text', 'sha256:fc5b001250e8975b3c3e1f02e89ac3c7424ae54434e597ed02569bd596679033'],
+ 'spread_scale': [1531914, 4, '__const', 'sha256:0d66bd808e9247acb560fe33efaa62ad6f11ee6f85cc4f61bd17673263de04ee'],
+ 'spread_center': [1547254, 4, '__const', 'sha256:1229f28c7e699bf60a4b44363dcb39610e8b7206037302d7f69ba6f80d4009e7'],
+ 'npc_speed': [1550414, 4, '__const', 'sha256:140efb356462f70dd1c7f1dfb10bcc07d0f14d439043fb9e9d50f4d7be71ea96']}

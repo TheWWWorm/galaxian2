@@ -6,6 +6,7 @@ const Host=preload("res://src/presentation/opening_preview.gd")
 const StationSession=preload("res://src/presentation/station_session.gd")
 const FlightSession=preload("res://src/presentation/first_flight_session.gd")
 const Visuals=preload("res://src/content/visual_library.gd")
+const CaptureSupport=preload("res://tests/fixtures/model_capture.gd")
 var source: RefCounted
 var definitions: RefCounted
 var catalogue: RefCounted
@@ -15,13 +16,16 @@ var app: Control
 var now_us:=1000000
 var completed_cases:=[]
 
+func flight_world_seconds() -> int:
+	return 1789100000
+
 func _initialize() -> void:call_deferred("run_application")
 
 func after_contract_intro(bindings: RefCounted,cat: RefCounted,library: RefCounted,station: RefCounted) -> void:
 	definitions=bindings;catalogue=cat;source=library;origin=station.fork()
 
 func run_application() -> void:
-	var args:=OS.get_cmdline_user_args()
+	var args:=CaptureSupport.arguments()
 	check(args.size() in [3,4],"Expected explicit content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:verify(args.slice(0,3))
 	if failures==0 and origin!=null:
@@ -66,6 +70,8 @@ func verify_application_kind(kind: int,args: PackedStringArray) -> void:
 	var before: Dictionary=session.snapshot()
 	check(app.contract_action("open",-1),session.error)
 	check(app.lounge_panel.visible and not app._launch_button.visible,"Opening the lounge did not select the retained contacts")
+	check(app.lounge_panel.label_text(850)=="Accept this mission?" and app.lounge_panel.label_text(753)=="#C reward.","The lounge used another source's confirmation or reward text")
+	check(app.lounge_panel.label_text(847)=="Okay." and app.lounge_panel.label_text(848)=="No thanks.","The lounge used another source's action labels")
 	if session.lounge_scene==null:check(false,"The lounge has no original room");return
 	for tick in 30:
 		if not application_step():return
@@ -149,7 +155,7 @@ func release_application_flight() -> bool:
 func travel_application(destination: int) -> bool:
 	if not await acquire_application_planet(destination):return false
 	var before: Dictionary=app.session.snapshot()
-	if not app.enter_local_arrival(now_us,4096,1789100000):check(false,app.status.text);return false
+	if not app.enter_local_arrival(now_us,4096,flight_world_seconds()):check(false,app.status.text);return false
 	print("Lounge application arrival: station "+str(destination))
 	check(app.session.snapshot().location.station_id==destination and app.session.snapshot().contracts.mission==before.contracts.mission,"The actual arrival lost its destination or accepted contract")
 	return await release_application_flight()

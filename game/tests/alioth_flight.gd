@@ -41,13 +41,14 @@ func verify_alioth_station(station: RefCounted) -> void:
 	check(station.snapshot()==before and frame.convoy_career_owner().snapshot()==before.contracts,"Preparing flight changed the retained career")
 	var seen:=[];var lines:=[];var first_motion:=false;var escape_suspended:=false
 	var seen_deaths:=[]
+	var text_shift: int=14 if catalogue.tables.ships.size()==64 else 0
 	print("Alioth production scene prepared at ",initial.player_pose.origin)
 	for tick in 4000:
 		var previous: Dictionary=frame.snapshot()
 		if frame.dialogue_visible():
 			var id:=int(previous.dialogue.text_id)
 			lines.append(id)
-			if id in [1811,1820]:await capture_alioth_view(live,frame,"alioth-line-%d"%id,true)
+			if id in [1811+text_shift,1820+text_shift]:await capture_alioth_view(live,frame,"alioth-line-%d"%id,true)
 			var frozen: RefCounted=frame.evaluate(150,Vector2.ONE,1.0)
 			if frozen==null:check(false,frame.error);break
 			var frozen_state: Dictionary=frozen.snapshot()
@@ -88,7 +89,7 @@ func verify_alioth_station(station: RefCounted) -> void:
 	check(final.campaign_cursor==17 and final.combat_objective_satisfied and final.combat_objective_acknowledged,"Alioth did not reach its acknowledged return mission")
 	check(seen==[0,1,2,3,4,5,6] and seen_deaths.size()==3,"Alioth omitted source choreography or actual freighter deaths")
 	check(first_motion and escape_suspended,"Alioth did not preserve the two different player update policies")
-	check(lines==[1811,1812,1818,1819,1820],"Alioth skipped an acknowledged source line: "+str(lines))
+	check(lines==([1825,1826,1832,1833,1834] if text_shift else [1811,1812,1818,1819,1820]),"Alioth skipped an acknowledged source line: "+str(lines))
 	check(final.radio.finished==[true,true,true,true,true] and live.flight_audio.snapshot().voice_displayed==[true,true,true,true,true],"Alioth omitted original timed dialogue or voice")
 	check(final.progress.player_kills==initial.progress.player_kills and final.mission=={"kind":11,"station_id":98,"reward":0,"bonus":0,"source_parameter":0},"Scripted departure invented player kills or a mission reward")
 	check(station.snapshot()==before,"Detached flight changed its original station")
@@ -108,6 +109,7 @@ func release_alioth_flight(live: Node3D) -> void:
 
 func capture_alioth_view(live: Node3D,frame: RefCounted,label: String,with_mobile:=false) -> void:
 	var directory:=OS.get_environment("GOF2_ALIOTH_CAPTURE_DIR")
+	if directory.is_empty():directory=OS.get_environment("GOF2_CAPTURE_DIR")
 	if directory.is_empty() or DisplayServer.get_name()=="headless":return
 	if not AliothCheckpoint.private_path(directory+"/capture.png"):check(false,"Keep Alioth captures outside engine source");return
 	DirAccess.make_dir_recursive_absolute(directory)
@@ -119,7 +121,7 @@ func capture_alioth_view(live: Node3D,frame: RefCounted,label: String,with_mobil
 	if not with_mobile:return
 	var before: Dictionary=frame.snapshot()
 	root.size=Vector2i(960,540);live.scene.set_mobile_layout(true)
-	if is_instance_valid(app) and app.session==live:app.set_mobile_layout(true);app.set_touch_controls(true)
+	if is_instance_valid(app) and app.session==live:app.set_mobile_layout(true);TouchInput.set_preference(app,true)
 	await process_frame
 	_refresh_capture_host(live)
 	var mobile: RefCounted=frame.evaluate(0,Vector2.ZERO,0.0,false,Vector2i(live.get_viewport().get_visible_rect().size))

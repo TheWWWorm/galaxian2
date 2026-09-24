@@ -1,19 +1,17 @@
 """Bounded first-mining notice declarations; no executable runtime payload."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 def extract_flight_notices(mach, arrival, flight):
     if mach.architecture!='x86_64' or flight.get('scope')!='first_mining_flight_construction':return {}
     try:
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=section_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
@@ -114,3 +112,81 @@ LAYOUTS = {'queue_allocation': [-127697,
  'dispatch_11': [-111890, 4, '__text', '5af2ffff'],
  'dispatch_20': [-111854, 4, '__text', '4ef9ffff'],
  'dispatch_27': [-111826, 4, '__text', 'b2f9ffff']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'queue_allocation': [-128062,
+                      69,
+                      '__text',
+                      'bf18000000e8ac1419004989c6bf08000000e8991419004989460841c746100100000048c7000000000041c706000000004d89b5f0020000bf140000004c89f6e8a04cffff'],
+ 'queue_resize': [-173913,
+                  86,
+                  '__text',
+                  '554889e54156534889f34189fe8b43104439f07506488b7b08eb284585f6b801000000410f45c689431089c648c1e603488b7b08e8acc819004889c748897b088b431089c648c1e603e8bfc719004489335b415e5dc3'],
+ 'queue_initial': [-127731,
+                   67,
+                   '__text',
+                   '41c685fc0200000041c685b00200000041c685b10200000041c685b20200000041c645010141c685040300000041c785f80200000000000041c7850003000000000000'],
+ 'queue_update': [-118528,
+                  203,
+                  '__text',
+                  '554889e54156534889fb03b3f802000089b3f802000081fea10f00000f8c89000000c783f802000000000000488b83f0020000488b40084c8b304d85f6741b4c89f7e8096e05004c89f7e81def1800488b83f0020000488b400848c70000000000488b83f00200008338027220b901000000488b4008488b14c8488954c8f848ffc1488b83f00200003b0872e5488b400848837808007507c683fc02000000c7830003000000000000eb1b83bb0003000000751281fed10700007c0ac78300030000010000005b415e5dc3'],
+ 'duplicate_check': [-117532,
+                     87,
+                     '__text',
+                     '554889e54157415653504989f64989ff498b87f00200008b18ffcb30c085db7e2b4863c3498b8ff0020000488b4908488b04c14885c074e1488b78384c89f6e8ca98160088c1b00184c975cd4883c4085b415e415f5dc3'],
+ 'insert_dispatch': [-112789,
+                     196,
+                     '__text',
+                     '4d8dbd40020000488d9d58fcffff4889df4c89fe31d2e88c6f16004c89ef4889dee853edffff88c3488dbd58fcffffe8e369160084db0f8562ffffffbf70000000e8c7d818004989c44183fe2f0f87ec0000004489f048b9000000c800800000480fa3c10f83d5000000bf10000000e899d818004889c34889df4c89fe31d2e8236f16004c89e74889deba01000000e8fd500500498b85f00200008b08be010000004889f239ca731b488d7201488b780848833cd70075ea4c8924d741c685fc02000001'],
+ 'ordinary_insert': [-112470,
+                     83,
+                     '__text',
+                     'bf10000000e8c4d718004889c34889df4c89fe31d2e84e6e16004c89e74889dee8654f0500498b85f00200008b08be010000004889f239ca0f8347ffffff488d7201488b780848833cd7000f8428ffffffebe0'],
+ 'ordinary_style': [235642, 32, '__text', '48c743400000000048c743380000000048c74354ffffffff48c7434cffffffff'],
+ 'colored_style': [235943, 13, '__text', '4d89663841895e5441c6464800'],
+ 'alpha': [-119062,
+           75,
+           '__text',
+           '488b3bf3410f2a87f8020000f30f5e0588731900f30f590584731900f30f2cc8b8fe01000029c881f9ff0000000f4ec1440fb6f0beff000000baff000000b9ff0000004589f0e84dbb1300'],
+ 'colors_and_text': [-118865,
+                     197,
+                     '__text',
+                     '418b475483f802741b83f8017529488d05a6b32600488b38beff000000ba2a000000eb2c488d0590b32600488b3831f6baed000000eb19488d0d7db32600488b39beff00000083f8037509ba8000000031c9eb0abaff000000b9ff0000004589f0e86dba1300488d059ab92600448b304d8b7f38488d0550b32600448b20488d0536b326004c8b284c89ef4489e64c89fae8ed1f130089c1c1e91f01c1d1f9448b45cc440345d4440345d041d1fe4129ce4c89ef4489e64c89fa4489f14531c9e82e1a1300'],
+ 'alpha_constants': [1548934, 8, '__const', '0000fa4400007f43'],
+ 'drill_gate': [-107862,
+                65,
+                '__text',
+                '4889df48899d28fdffffe8e32d0a0088851cfdffff41f685fc02000001745c80bd1cfdffff00755341f685d00500000175494c89ef488bb520fdffffe815d6ffff'],
+ 'dispatcher': [-117416, 29, '__text', '418d46ff83f82e0f8706120000488d0db6130000486304814801c8ffe0'],
+ 'cancel_text': [-116582,
+                 126,
+                 '__text',
+                 '488d05d1aa2600488b38be30020000e804dd12004889c34c8dbd18ffffff488d3521111b004c89ff31d2e8797b1600488dbd28ffffff4889de4c89fae8e7921600488d0590aa2600488b38be27000000e8c3dc1200488dbd38ffffff488db528ffffff4889c2e8bd921600498dbd40020000488db538ffffffe81a821600'],
+ 'failure_text': [-115884, 20, '__text', '488d0517a82600488b38be10020000e9ef0b0000'],
+ 'tractor_text': [-115864, 20, '__text', '488d0503a82600488b38be11020000e9db0b0000'],
+ 'target_text': [-115844,
+                 126,
+                 '__text',
+                 '488d05efa72600488b38be17020000e822da12004889c34c8dbd88feffff488d353c0e1b004c89ff31d2e897781600488dbd98feffff4889de4c89fae805901600488d05aea72600488b38be1b020000e8e1d91200488dbda8feffff488db598feffff4889c2e8db8f1600498dbd40020000488db5a8feffffe8387f1600'],
+ 'drill_text': [-114064, 20, '__text', '488d05fba02600488b38be12020000e9d3040000'],
+ 'full_hold_text': [-113964, 20, '__text', '488d0597a02600488b38be37010000e96f040000'],
+ 'text_separators': [1657309, 5, '__cstring', '3a20002000'],
+ 'action_notices': [344040,
+                    191,
+                    '__text',
+                    '498b7d60e8ab48030084c00f85e3f7ffff498b7d60e86a3e030084c00f85d2f7ffff498bbda0000000e8522805004885c0745b498b7d60e8e6ec030084c0754e4488f8340184c075454489a570ffffff488d051ba31f00488b38e83fda07004889c7e8cbe50500498b5560498bbd8800000085c07f11be1b00000031c9e8d2f4f8ffe9b2050000be0b000000eb274489a570ffffff498b7d60e884ec03004530e484c0741a498b5560498bbd88000000be0600000031c9e898f4f8ff41b401'],
+ 'background_lookup': [-131732, 20, '__text', '498d95f0030000488b3bbec3040000e892811300'],
+ 'background_alias': [-531038,
+                      64,
+                      '__text',
+                      'bf18000000e8cc3a1f004889c3bf04000000e8bf3a1f0066c7004e2766c74002760066c703c304c7430403000000c74308ffffffff4889431048899d38d4ffff'],
+ 'background_draw': [-118987,
+                     70,
+                     '__text',
+                     '4584ed410f95c5488d057ffb2600410fb79780040000418bb7f0030000488b3bf600017408450fb7a782040000488d0531b42600488b00442ba0e40100004489e1e8672f1300'],
+ 'dispatch_6': [-112330, 4, '__text', '78efffff'],
+ 'dispatch_8': [-112322, 4, '__text', '32f2ffff'],
+ 'dispatch_9': [-112318, 4, '__text', '46f2ffff'],
+ 'dispatch_11': [-112310, 4, '__text', '5af2ffff'],
+ 'dispatch_20': [-112274, 4, '__text', '4ef9ffff'],
+ 'dispatch_27': [-112246, 4, '__text', 'b2f9ffff']}

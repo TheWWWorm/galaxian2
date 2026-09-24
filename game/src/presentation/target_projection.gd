@@ -4,6 +4,10 @@ extends RefCounted
 ## uses the center frame ellipse for failed projections, including rear targets.
 ## This component neither chooses targets nor advances a scanner clock.
 const Definitions = preload("res://src/content/flight_projection_definitions.gd")
+# Keep extreme offscreen displacements within both float32 and signed pixels.
+# This limit is far outside every supported viewport and preserves direction.
+const SCREEN_DELTA_LIMIT := 1073741824.0
+const STABLE_ELLIPSE_DISTANCE := 1048576.0
 var error := ""
 var _size := Vector2i.ZERO
 var _center := Vector2i.ZERO
@@ -42,14 +46,28 @@ func project_point(camera: Transform3D, position: Vector3) -> Dictionary:
 	for axis in 3:
 		local[axis] = single(dot_single(camera.basis[axis],position) - dot_single(camera.basis[axis],camera.origin))
 	if not local.is_finite(): return failure("Target camera coordinates exceed source precision")
-	var screen := Vector2(local.x,local.y)
+	var x := float(local.x)
+	var y := float(local.y)
 	var projected := false
 	# This is the recovered HUD predicate. Godot's near clip and behind-camera
 	# helpers have different behavior: the source accepts Z equal to +near.
 	var depth := Vector2(single(_tangents.x * local.z),single(_tangents.y * local.z))
 	if local.z <= _near and depth.x != 0 and depth.y != 0:
-		screen = Vector2(single(-float(_size.x) * (float(local.x) / 2.0 / depth.x) + _center.x),single(float(_size.y) * (float(local.y) / 2.0 / depth.y) + _center.y))
+		x = -float(_size.x) * (float(local.x) / 2.0 / depth.x) + _center.x
+		y = float(_size.y) * (float(local.y) / 2.0 / depth.y) + _center.y
 		projected = true
+	# A finite target crossing the camera plane can have arbitrarily large
+	# projected coordinates. Bound its displacement radially in double precision
+	# before float32 storage/integer conversion; it stays offscreen and retains
+	# the same ellipse intersection. Ordinary pixel positions remain unchanged.
+	var dx := x - _center.x
+	var dy := y - _center.y
+	var magnitude := maxf(absf(dx),absf(dy))
+	if magnitude > SCREEN_DELTA_LIMIT:
+		var scale := SCREEN_DELTA_LIMIT / magnitude
+		x = _center.x + dx * scale
+		y = _center.y + dy * scale
+	var screen := Vector2(single(x),single(y))
 	if not screen.is_finite(): return failure("Target projection exceeds source precision")
 	var in_view := projected and screen.x >= 0 and screen.y >= 0 and screen.x < _size.x and screen.y < _size.y
 	return {"camera_position":local,"projected":projected,"in_view":in_view,"screen_position":screen}
@@ -69,12 +87,19 @@ func project(camera: Transform3D, position: Vector3) -> Dictionary:
 		var fallback := Vector2(local.x,-local.y)
 		var delta := Vector2(float(_center.x)-pixels.x,float(_center.y)-pixels.y)
 		if not safe_pixel(delta.x) or not safe_pixel(delta.y): return failure("Target ellipse displacement exceeds signed pixel coordinates")
-		var q := single(single(single(delta.x * delta.x) * _inverse_squared_radii.x) + single(single(delta.y * delta.y) * _inverse_squared_radii.y))
-		if is_finite(q) and q > 0:
-			var weight := single(single(q - single(sqrt(q))) / q)
-			if weight >= 0 and weight <= 1:
-				fallback = Vector2(single(float(pixels.x) + single(delta.x * weight)),single(float(pixels.y) + single(delta.y * weight)))
-				clamped = true
+		if maxf(absf(delta.x),absf(delta.y)) > STABLE_ELLIPSE_DISTANCE:
+			# Adding nearly opposite large float32 values loses the small marker
+			# offset. Normalize first, then add the viewport center instead.
+			var distance := sqrt(float(delta.x)*delta.x*_inverse_squared_radii.x + float(delta.y)*delta.y*_inverse_squared_radii.y)
+			fallback = Vector2(single(_center.x-float(delta.x)/distance),single(_center.y-float(delta.y)/distance))
+			clamped = true
+		else:
+			var q := single(single(single(delta.x * delta.x) * _inverse_squared_radii.x) + single(single(delta.y * delta.y) * _inverse_squared_radii.y))
+			if is_finite(q) and q > 0:
+				var weight := single(single(q - single(sqrt(q))) / q)
+				if weight >= 0 and weight <= 1:
+					fallback = Vector2(single(float(pixels.x) + single(delta.x * weight)),single(float(pixels.y) + single(delta.y * weight)))
+					clamped = true
 		if not safe_pixel(fallback.x) or not safe_pixel(fallback.y): return failure("Target marker exceeds signed pixel coordinates")
 		pixels = Vector2i(int(fallback.x),int(fallback.y))
 	result.pixels=pixels;result.ellipse_clamped=clamped

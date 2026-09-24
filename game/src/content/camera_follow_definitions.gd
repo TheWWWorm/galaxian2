@@ -33,7 +33,10 @@ static func validate(data: Variant, executable_bytes: int, architecture: String)
 	var spans := []
 	for key in expected:
 		var row: Variant = provenance.get(key)
-		if not Fonts.extent(row, "offset", "bytes", [expected[key]], executable_bytes): return "Invalid camera follow extent: " + key
+		var lengths: Array = [expected[key]]
+		if architecture == "x86_64" and key in ["add", "point"]:
+			lengths.append(128 if key == "add" else 256)
+		if not Fonts.extent(row, "offset", "bytes", lengths, executable_bytes): return "Invalid camera follow extent: " + key
 		var start := int(row.offset)
 		var end := start + int(row.bytes)
 		for span in spans:

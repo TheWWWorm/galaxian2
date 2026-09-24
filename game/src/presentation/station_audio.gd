@@ -5,6 +5,7 @@ const Resources=preload("res://src/content/audio_resources.gd")
 const Streams=preload("res://src/presentation/audio_stream_control.gd")
 const MiningStory=preload("res://src/content/ordinary_flight_definitions.gd")
 const StationReturn=preload("res://src/content/ordinary_flight_definitions.gd")
+const StationEntry=preload("res://src/content/station_entry_definitions.gd")
 var error:=""
 var diagnostics:={}
 var _resources: RefCounted
@@ -20,7 +21,20 @@ var _effect_history:=[]
 func configure(library: RefCounted, bindings: RefCounted) -> bool:
 	clear();_resources=Resources.new()
 	if not _resources.configure_station(library,bindings):return reject(_resources.error)
-	if not _prepare_voices(bindings.station_presentation.dialogue.voice_event_ids):return false
+	if not StationEntry.parameters(bindings.station_entry):return reject("Initial station dialogue declarations are unavailable")
+	# The initial presentation stores spoken event IDs separately from its
+	# full dialogue. Resolve the explicitly declared silent instruction into
+	# a real slot, just like later briefings with voice_event_id = -1.
+	var presentation: Dictionary=bindings.station_presentation.dialogue
+	var spoken: Array=presentation.voice_event_ids
+	var ids:=[];var voice_index:=0
+	for event in bindings.station_entry.dialogue.events:
+		if event.text_id==presentation.silent_text_id:ids.append(-1)
+		else:
+			if voice_index>=spoken.size():return reject("Initial station dialogue has an unbound voice")
+			ids.append(int(spoken[voice_index]));voice_index+=1
+	if voice_index!=spoken.size():return reject("Initial station has unused voice declarations")
+	if not _prepare_voices(ids):return false
 	# This event has authored envelopes that require their own native owner.
 	# Keep its unsupported status explicit rather than substituting another loop.
 	diagnostics.atmosphere="Station atmosphere envelopes are not connected"
@@ -30,7 +44,7 @@ func configure_mining_briefing(library: RefCounted, bindings: RefCounted, campai
 	clear();_resources=Resources.new()
 	if not _resources.configure_mining_briefing(library,bindings,campaign_cursor):return reject(_resources.error)
 	var ids:=[]
-	for event in MiningStory.briefing(bindings,campaign_cursor).events:
+	for event in MiningStory.briefing_presentation(bindings,campaign_cursor).events:
 		ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
 
@@ -42,12 +56,18 @@ func configure_mining_objective(library: RefCounted, bindings: RefCounted, campa
 		ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
 
-func configure_campaign_visit(library: RefCounted,bindings: RefCounted,cursor: int,mission: Dictionary) -> bool:
+func configure_campaign_visit(library: RefCounted,bindings: RefCounted,cursor: int,mission: Dictionary,station_only:=false) -> bool:
 	clear();_resources=Resources.new()
-	if not _resources.configure_campaign_visit(library,bindings,cursor,mission):return reject(_resources.error)
+	if not _resources.configure_campaign_visit(library,bindings,cursor,mission,station_only):return reject(_resources.error)
 	var ids:=[]
-	for event in bindings.mido_travel.suttnar_visit.events:ids.append(int(event.voice_event_id))
+	for event in load("res://src/content/free_campaign_definitions.gd").dialogue_rules(bindings,cursor,mission,station_only).events:ids.append(int(event.voice_event_id))
 	return _prepare_voices(ids)
+
+func configure_campaign_result(library: RefCounted,bindings: RefCounted,cursor: int,mission: Dictionary,failed:=false) -> bool:
+	clear();_resources=Resources.new()
+	if not _resources.configure_campaign_result(library,bindings,cursor,mission,failed):return reject(_resources.error)
+	var events: Array=load("res://src/content/free_campaign_definitions.gd").result_presentation(bindings,cursor,mission,failed).events
+	return _prepare_voices(events.map(func(event):return int(event.voice_event_id)))
 
 func configure_station_return(library: RefCounted, bindings: RefCounted, campaign_cursor:=3) -> bool:
 	clear();_resources=Resources.new()
@@ -114,7 +134,9 @@ func prepare_contract_effect(library: RefCounted,bindings: RefCounted) -> bool:
 	_effect_clips[id]=clip
 	return true
 
-func valid_line(line: int) -> bool:return line>=-1 and line<=_clips.size()
+# Silent pages occupy real null slots. Only -1 closes a conversation; accepting
+# the one-past-end index would silently stop a valid voice on a malformed frame.
+func valid_line(line: int) -> bool:return line>=-1 and line<_clips.size()
 
 func present(line: int) -> bool:
 	if not valid_line(line):return reject("Invalid station speech line")

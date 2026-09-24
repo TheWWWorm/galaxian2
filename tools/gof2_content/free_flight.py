@@ -1,9 +1,9 @@
 """Static ordinary-entry declarations; native owners supply the implementation."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_free_flight(mach, arrival):
-    proof=hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'augmenta_ordinary_entry',
@@ -35,3 +35,19 @@ LAYOUTS = {'free_flight_convoy_clear': [155626,
                                    50,
                                    '__text',
                                    'af22ec2ec52120661d0ffef3d141992d7b35f64e7308f256c821185cb785abed']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'free_flight_convoy_clear': [155626, 87, '__text', 'e84f2428b2ab8847821a24b56900a9043a8dbeaa770f4bd3e671b43e71d4ed01'],
+ 'free_flight_scene_clear': [134971, 325, '__text', 'ef7f1f500c4cb5f4fd1dc13a682ba3d60b7e2194ecbe1587ceb6471448c34f91'],
+ 'free_flight_confirmation': [432231,
+                              192,
+                              '__text',
+                              '997c660d0feb870c51d477943f8afa63087cb5321ec5d721eea1e37cf90aff6c'],
+ 'free_flight_launch_clear': [151066,
+                              205,
+                              '__text',
+                              '6752221780dc46c0708db9d6cff1f81cc49767fabd5d8807e218bd1a1b868579'],
+ 'free_flight_ordinary_dispatch': [152236,
+                                   50,
+                                   '__text',
+                                   '7ded36b69d2387b406f26b359d55f04fa5593a921ab697e19b062a10a25f43ae']}

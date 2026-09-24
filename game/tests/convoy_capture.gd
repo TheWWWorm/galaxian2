@@ -41,6 +41,9 @@ func verify(content: String,pack: String) -> void:
 		var changed: Dictionary=bindings.mido_travel.duplicate(true)
 		changed.convoy_capture[key]=null
 		check(not Travel.parameters(changed),"Changed capture value accepted: "+key)
+	var mixed: Dictionary=bindings.mido_travel.duplicate(true)
+	mixed.convoy_capture=Rules.VALUES.duplicate(true) if bindings.early_contracts.briefing_text_base==775 else Rules.MAC_VALUES.duplicate(true)
+	check(not Travel.parameters(mixed),"Another source's convoy events were accepted")
 	var resources:=Resources.new()
 	if not resources.prepare(library,bindings,null,14):check(false,resources.error);return
 	counts=resources.line_counts.duplicate()
@@ -61,7 +64,7 @@ func fresh_radio() -> RefCounted:
 func finish(radio: RefCounted,event: int,at: int,targets: Dictionary) -> int:
 	var visible_at:=at+2000
 	check(radio.step_convoy(visible_at,targets).is_empty() and not radio.snapshot().visible,"Radio became visible at the strict delay boundary")
-	check(radio.step_convoy(visible_at+1,targets)==[{"kind":"display","event":event,"text_id":1795+event}],"Original radio text did not appear")
+	check(radio.step_convoy(visible_at+1,targets)==[{"kind":"display","event":event,"text_id":1795+event+(14 if bindings.early_contracts.briefing_text_base==775 else 0)}],"Original radio text did not appear")
 	var end:=visible_at+1500+2000*int(counts[event])
 	check(radio.step_convoy(end,targets).is_empty() and not radio.snapshot().finished[event],"Radio finished at the inclusive duration boundary")
 	check(radio.step_convoy(end+1,targets)==[{"kind":"finished","event":event}],"Original radio line did not finish once")
@@ -108,7 +111,7 @@ func verify_sequence() -> void:
 	check(owner.advance(100,radio,player_pose,freighter_pose),owner.error)
 	check(owner.snapshot().phase==Capture.Stage.INTERCEPTION and not owner.snapshot().input_blocked,"The untriggered encounter disabled the player")
 	var prior:=owner.snapshot()
-	for invalid in [int(bindings.frame_clock.max_frame_milliseconds)+1,-1,1.5]:check(not owner.advance(invalid,radio,player_pose,freighter_pose) and owner.snapshot()==prior,"Invalid frame changed capture")
+	for invalid in [751 if not bindings.fast_forward.is_empty() else 151,-1,1.5]:check(not owner.advance(invalid,radio,player_pose,freighter_pose) and owner.snapshot()==prior,"Invalid frame changed capture")
 	radio.started[1]=true
 	check(owner.advance(0,radio,player_pose,freighter_pose),owner.error)
 	var pulse:=owner.snapshot()
@@ -185,7 +188,7 @@ func verify_clocked_sequence() -> void:
 			if event.kind=="display":displayed.append(event.text_id)
 		if not radio.error.is_empty():check(false,radio.error);return
 	check(stages==[0,1,2,3,4,5],"Clocked radio skipped or repeated a capture stage")
-	check(displayed==[1795,1796,1797,1798,1799] and sounds==["start","start_spatial"],"Clocked capture lost original radio or repeated EMP sounds")
+	check(displayed==([1809,1810,1811,1812,1813] if bindings.early_contracts.briefing_text_base==775 else [1795,1796,1797,1798,1799]) and sounds==["start","start_spatial"],"Clocked capture lost original radio or repeated EMP sounds")
 	check(entered_wait>=0 and now-entered_wait==4000 and capture.snapshot().arrival.station_id==98,"Clocked narrator/transfer boundary changed")
 	print("Convoy source-layout clock: arrival request at %d ms; %s lines"%[now,str(counts)])
 

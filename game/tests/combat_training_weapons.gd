@@ -147,7 +147,9 @@ func verify_mixed_training_contacts(cat: RefCounted, world: RefCounted, equipmen
 	check(passed.combat.snapshot().actors[3].vitals.hull==9999990,"Gunant was invulnerable or skipped pirate contacts")
 	for id in 3:check(passed.combat.snapshot().actors[id].vitals.hull==45 and not passed.combat.snapshot().actors[id].nonplayer_kill,"Nonlethal Gunant hit was marked as a kill")
 	var invalid: RefCounted=combat.fork_for_frame();invalid._actors[2]._state.position=Vector3(NAN,0,0)
+	var invalid_hulls: Array=invalid.snapshot().actors.map(func(actor):return actor.vitals.hull)
 	check(guns.evaluate_combat_training_update(player,player_pose,invalid,false,1).is_empty() and guns.snapshot()==before_guns and player.snapshot()==before_player,"Late NPC geometry failure leaked earlier player contacts")
+	check(invalid.snapshot().actors.map(func(actor):return actor.vitals.hull)==invalid_hulls,"Late NPC geometry failure leaked earlier NPC damage")
 	for bad_delta in [-1,true,1.5]:check(guns.evaluate_combat_training_update(player,player_pose,combat,false,bad_delta).is_empty() and guns.snapshot()==before_guns,"Invalid mixed delta committed a frame")
 	check(guns.evaluate_player_update(player,player_pose,combat.shooter_states(),false,1).is_empty() and guns.snapshot()==before_guns,"Training weapons accepted an incomplete player-only pass")
 	# Three near-lethal pirates overlap the same Gunant projectile. They must

@@ -8,8 +8,10 @@ const Training=preload("res://src/content/combat_training_weapon_definitions.gd"
 const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const Alioth=preload("res://src/content/alioth_lifecycle_definitions.gd")
 const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
+const Sahi=preload("res://src/content/sahi_encounter_definitions.gd")
 const Cache=preload("res://src/simulation/flight_player_cache.gd")
-const KINDS={0:"opening",1:"arrival",2:"mining",4:"full_hold",7:"training",10:"local",11:"local",12:"local",13:"local",14:"convoy",16:"alioth",18:"free",19:"free"}
+const FlightStages=preload("res://src/content/flight_stages.gd")
+const KINDS={0:"opening",1:"arrival",2:"mining",4:"full_hold",7:"training",10:"local",11:"local",12:"local",13:"local",14:"convoy",16:"alioth",21:"kappa"}
 var error:=""
 var cursor:=-1
 var is_arrival:=false
@@ -26,9 +28,11 @@ var _travel:={}
 func configure(bindings: RefCounted, value: int, station_id: int=-1, restoring_local:=false,ship_id: int=-1) -> bool:
 	error="";cursor=-1;is_arrival=false;is_departure=false;uses_equipment=false
 	equipped_entry={};_kind="";_departure={};_training={};_pirate={};_travel={};restores_local=false
-	if bindings==null or not KINDS.has(value):return reject("Unsupported player entry")
-	var kind: String=KINDS[value]
+	if bindings==null or (not KINDS.has(value) and value not in FlightStages.FREE and value not in FlightStages.POST_SAHI):return reject("Unsupported player entry")
+	var kind: String="post_sahi" if value in FlightStages.POST_SAHI else KINDS.get(value,"free")
+	if value==21 and FreeFlight.Campaign.supported(bindings.mido_travel,value) and not FreeFlight.Campaign.rescue_at(bindings.mido_travel,value,station_id):kind="free"
 	if value==14 and Travel.navigation_available(bindings.mido_travel,value):kind="local"
+	if value in [24,28] and Cache.sahi_entry(bindings.mido_travel,ship_id,value).get("station_id")==station_id:kind="sahi"
 	var departure:=kind in ["mining","full_hold","training"]
 	if departure and not Departure.parameters(bindings.station_departure):return reject("This profile has no supported first departure")
 	if kind=="full_hold" and (not FullHold.parameters(bindings.full_hold_departure) or not FullHold.StationReturn.parameters(bindings.station_return)):return reject("This profile has no supported second mining departure")
@@ -38,6 +42,20 @@ func configure(bindings: RefCounted, value: int, station_id: int=-1, restoring_l
 		_travel=bindings.mido_travel.duplicate(true)
 		equipped_entry=Cache.alioth_entry(_travel)
 		departure=true
+	if kind=="kappa":
+		if not load("res://src/content/kappa_lifecycle_definitions.gd").available(bindings):return reject("Kappa requires its retained equipment and source encounter")
+		equipped_entry=Cache.kappa_entry(bindings.mido_travel)
+		if equipped_entry.is_empty() or station_id!=int(equipped_entry.station_id) or ship_id!=int(equipped_entry.ship_id):return reject("Kappa player entry differs from its supported ship or location")
+		_travel=bindings.mido_travel.duplicate(true);departure=not restoring_local;restores_local=restoring_local
+	if kind=="sahi":
+		_travel=bindings.mido_travel.duplicate(true)
+		equipped_entry=Cache.sahi_entry(_travel,ship_id,value)
+		if equipped_entry.is_empty() or station_id!=int(equipped_entry.station_id):return reject("Sahi player entry requires its selected equipped location")
+		departure=not restoring_local;restores_local=restoring_local
+	if kind=="post_sahi":
+		equipped_entry=Cache.post_sahi_entry(bindings.mido_travel,value,ship_id)
+		if equipped_entry.is_empty() or station_id!=int(equipped_entry.station_id):return reject("The post-Sahi player entry differs from its source world")
+		_travel=bindings.mido_travel.duplicate(true);departure=not restoring_local;restores_local=restoring_local
 	if kind=="free":
 		if not FreeFlight.available(bindings):return reject("Ordinary player entry is unavailable")
 		equipped_entry=FreeFlight.player_entry(bindings.mido_travel,station_id,ship_id,value)
@@ -55,13 +73,16 @@ func configure(bindings: RefCounted, value: int, station_id: int=-1, restoring_l
 	if uses_equipment:
 		_training=bindings.combat_training_weapons.duplicate(true)
 		equipped_entry=_training.player_entry.duplicate(true)
-	if kind in ["local","convoy","alioth","free"]:uses_equipment=true
+	if kind in ["local","convoy","alioth","free","kappa","sahi","post_sahi"]:uses_equipment=true
 	if kind=="full_hold":_pirate=bindings.full_hold_pirate.duplicate(true)
 	return true
 
 func player_cache(parameters: Dictionary, seed: Dictionary, hull: int, capacities: Dictionary, reset:=false) -> Dictionary:
 	if cursor<0:return {}
 	if _kind=="alioth":return Cache.alioth_attack_cache(parameters,_travel,seed,hull,capacities,reset)
+	if _kind=="kappa":return Cache.kappa_rescue_cache(parameters,_travel,seed,hull,capacities,reset)
+	if _kind=="sahi":return Cache.sahi_cache(parameters,_travel,seed,hull,capacities,reset,cursor)
+	if _kind=="post_sahi":return Cache.post_sahi_cache(parameters,_travel,seed,hull,capacities,reset,cursor)
 	if _kind=="free":return Cache.free_flight_cache(parameters,_travel,seed,hull,capacities,reset,cursor)
 	if _kind in ["local","convoy"]:return Cache.local_travel_cache(parameters,_travel,seed,hull,capacities,reset,cursor)
 	if _kind=="training":return Cache.combat_training_cache(parameters,_training,seed,hull,capacities,reset)
@@ -71,7 +92,7 @@ func player_cache(parameters: Dictionary, seed: Dictionary, hull: int, capacitie
 
 func contact_weapons(opening_weapon: Dictionary) -> Dictionary:
 	if cursor<0:return {}
-	if _kind in ["convoy","alioth","free"]:return {"candidates":[],"enabled":false,"context":{}}
+	if _kind in ["convoy","alioth","free","kappa","sahi","post_sahi"]:return {"candidates":[],"enabled":false,"context":{}}
 	if _kind=="local":
 		var armed:=is_departure or Travel.navigation_available(_travel,cursor)
 		return {"candidates":[Travel.ordinary_weapon(_travel,cursor)] if armed else [],

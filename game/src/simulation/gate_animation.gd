@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Native clocks for the original gate layers. Activation replaces only the
 ## second child; base geometry and emissive layers keep their ordinary clocks.
 const Definitions=preload("res://src/content/gate_transit_definitions.gd")
@@ -17,6 +19,10 @@ func configure(bindings: RefCounted,catalogues: RefCounted,library: RefCounted,s
 	if not Definitions.available(bindings) or library==null or library.manifest.get("content_id")!=bindings.base_content_id:return reject("Gate animation requires matching original content and transit declarations")
 	var layout:=Layout.new()
 	if not layout.configure(bindings,catalogues,station_id):return reject(layout.error)
+	return configure_layout(bindings,library,layout)
+
+func configure_layout(bindings: RefCounted,library: RefCounted,layout: RefCounted) -> bool:
+	if not layout is Layout or layout.snapshot().is_empty() or library.manifest.get("content_id")!=bindings.base_content_id:return reject("Gate animation requires its accepted native layout and content")
 	var next: Dictionary=layout.snapshot();var decoded:={};var objects:=[]
 	for gate in next.objects:
 		var models:=[]
@@ -37,6 +43,7 @@ func configure(bindings: RefCounted,catalogues: RefCounted,library: RefCounted,s
 		if models[3].end_ms<=int(bindings.mido_travel.gate_transit.animation.acceleration_after_ms):return reject("Gate jump animation ends before its acceleration threshold")
 		objects.append({"index":gate.index,"active":false,"models":models})
 	_rules=bindings.mido_travel.gate_transit.animation.duplicate(true)
+	_max_ms=Frames.simulation_limit(bindings,150)
 	_state={"layout":next,"objects":objects,"elapsed_ms":0};_identity=RefCounted.new()
 	return true
 
@@ -54,7 +61,7 @@ func activate(index: int) -> bool:
 
 func advance(milliseconds: int,paused:=false) -> bool:
 	error=""
-	if _state.is_empty() or not Numbers.integer(milliseconds,0,150):return reject("Gate animation requires a bounded ordinary frame")
+	if _state.is_empty() or not Numbers.integer(milliseconds,0,_max_ms):return reject("Gate animation requires a bounded ordinary frame")
 	if paused:return true
 	if _state.elapsed_ms>9223372036854775807-milliseconds:return reject("Gate clock exceeds the native time range")
 	var next:=_state.duplicate(true);next.elapsed_ms+=milliseconds
@@ -84,5 +91,5 @@ func snapshot() -> Dictionary:return _state.duplicate(true)
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy._state=_state.duplicate(true);copy._rules=_rules.duplicate(true);copy._identity=_identity
-	return copy
+	copy._max_ms=_max_ms;return copy
 func reject(message: String) -> bool:error=message;return false

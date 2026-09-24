@@ -34,9 +34,12 @@ func run():
 func verify(args: Array):
 	lib=Library.new();bindings=Bindings.new();cat=Catalogues.new();var bodies:=Bodies.new();var effects:=Effects.new()
 	if not lib.open(args[0]) or not bindings.open(args[1],lib.manifest) or not cat.open(lib) or not lib.select_language("gb") or not bodies.configure(lib,bindings) or not effects.configure(lib,bindings):check(false,lib.error+bindings.error+cat.error+bodies.error+effects.error);return
-	if bindings.mining_objective.is_empty():check(not Objective.new().configure(bindings,lib,Construction.new(),"A","E"),"Legacy pack invented a cargo objective");return
+	if bindings.mining_objective.is_empty():check(not Objective.new().configure(bindings,lib,Construction.new(),"Q","F"),"Legacy pack invented a cargo objective");return
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
 	check(Definitions.validate(bindings.mining_objective,header.source_executable_bytes,header.architecture,bindings.arrival_staging,bindings.first_flight).is_empty(),"Objective declarations were refused")
+	var other: Dictionary=(Definitions.VALUES if int(bindings.mining_objective.events[0].text_id)==int(Definitions.MAC_VALUES.events[0].text_id) else Definitions.MAC_VALUES).duplicate(true)
+	other.provenance=bindings.mining_objective.provenance.duplicate(true)
+	check(not Definitions.validate(other,header.source_executable_bytes,header.architecture,bindings.arrival_staging,bindings.first_flight).is_empty(),"Objective accepted another source's text with these proofs")
 	for key in Definitions.VALUES:
 		var bad: Dictionary=bindings.mining_objective.duplicate(true);bad[key]=null
 		check(not Definitions.parameters(bad),"Changed objective parameter accepted: "+key)
@@ -58,7 +61,7 @@ func verify(args: Array):
 	verify_flight()
 	if failures==0:await verify_presentation(args)
 func fresh() -> RefCounted:
-	var objective:=Objective.new();check(objective.configure(bindings,lib,construction,"A","E"),objective.error);return objective
+	var objective:=Objective.new();check(objective.configure(bindings,lib,construction,"Q","F"),objective.error);return objective
 func hold() -> RefCounted:
 	var cargo:=Cargo.new();check(cargo.configure_departure(bindings,cat,construction),cargo.error);return cargo
 func verify_objective():
@@ -66,7 +69,7 @@ func verify_objective():
 	var initial: Dictionary=objective.snapshot()
 	check(not initial.cargo_objective_satisfied and initial.required_cargo==10 and initial.phase=="collecting","Cargo objective started earned")
 	check(not objective.navigate("next") and objective.snapshot()==initial,"Unseen completion was acknowledged")
-	check(not objective.configure(bindings,lib,construction,"#KEY_AUTOPILOT","E") and objective.snapshot()==initial,"Invalid input label replaced a valid objective")
+	check(not objective.configure(bindings,lib,construction,"#KEY_AUTOPILOT","F") and objective.snapshot()==initial,"Invalid input label replaced a valid objective")
 	check(not objective.poll(Cargo.new(),world) and objective.snapshot()==initial,"Unprepared cargo satisfied the objective")
 	var foreign: RefCounted=cargo.fork_for_frame();foreign._field_identity=RefCounted.new()
 	check(not objective.poll(foreign,world) and objective.snapshot()==initial,"Cargo from another field was accepted")
@@ -84,8 +87,8 @@ func verify_objective():
 	check(not branch.navigate("previous") and not branch.navigate("skip") and branch.snapshot()==opened,"Return dialogue skipped its first line")
 	for i in 3:
 		var line: Dictionary=branch.snapshot().dialogue
-		check(line.index==i and line.text_id==1706+i and line.speaker_id==[2,0,16][i] and line.voice_event_id==[327,328,-1][i],"Return dialogue or voice differs from source")
-		if i==2:check(line.desktop_text_id==1709 and "#KEY_" not in line.desktop_text and "A" in line.desktop_text and "E" in line.desktop_text,"Return instruction lost its mapped desktop bindings")
+		check(line.index==i and line.text_id==int(bindings.mining_objective.events[i].text_id) and line.speaker_id==[2,0,16][i] and line.voice_event_id==[327,328,-1][i],"Return dialogue or voice differs from source")
+		if i==2:check(line.desktop_text_id==int(bindings.mining_objective.desktop_instruction[1]) and "#KEY_" not in line.desktop_text and "Q" in line.desktop_text and "F" in line.desktop_text,"Return instruction lost its mapped desktop bindings")
 		check(branch.navigate("next"),branch.error)
 	var finished: Dictionary=branch.snapshot()
 	check(finished.campaign_cursor==3 and finished.phase=="return_required" and finished.station_return_required and finished.cargo_objective_acknowledged,"Final acknowledgement did not select the return mission")
@@ -96,12 +99,12 @@ func verify_objective():
 
 func live() -> RefCounted:
 	var flight:=Frame.new()
-	if not flight.configure(bindings,cat,lib,construction,"E",0.5,Vector2i(960,720)):check(false,flight.error);return null
+	if not flight.configure(bindings,cat,lib,construction,"F",0.5,Vector2i(960,720)):check(false,flight.error);return null
 	for i in 130:
 		flight=flight.evaluate(100)
 		if flight==null:check(false,"First flight failed before briefing");return null
 		if flight.dialogue_visible():break
-	check(flight.snapshot().hud_elapsed_ms==0 and flight.snapshot().dialogue.text_id==1699,"Initial briefing did not reset its unsuccessful poll")
+	check(flight.snapshot().hud_elapsed_ms==0 and flight.snapshot().dialogue.text_id==int(bindings.mining_briefing.events[0].text_id),"Initial briefing did not reset its unsuccessful poll")
 	for i in 5:
 		flight=flight.navigate("next")
 		if flight==null:check(false,"First briefing failed to acknowledge");return null
@@ -121,10 +124,14 @@ func verify_flight():
 	var opened: RefCounted=flight.evaluate(1)
 	if opened==null:check(false,flight.error);return
 	var modal: Dictionary=opened.snapshot();captures["return-gunant"]=opened
-	check(modal.cargo_objective_satisfied and modal.phase=="return_instructions" and modal.dialogue.text_id==1706 and modal.hud_elapsed_ms==5001,"Due cargo check did not open its acknowledged instructions")
+	check(modal.cargo_objective_satisfied and modal.phase=="return_instructions" and modal.dialogue.text_id==int(bindings.mining_objective.events[0].text_id) and modal.hud_elapsed_ms==5001,"Due cargo check did not open its acknowledged instructions")
 	check(modal.world_elapsed_ms==before.world_elapsed_ms+1 and modal.player_pose!=before.player_pose and modal.camera_view==before.camera_view and modal.detail_reference==before.detail_reference,"Completion opening must advance the player but hold the later camera")
 	check(flight.snapshot()==before and modal.cargo==before.cargo and modal.progress==before.progress and modal.random_state==before.random_state,"Opening return dialogue changed cargo, progress, RNG or its parent")
-	for i in 80:check(opened.evaluate(150,Vector2.ONE,0.0).snapshot()==modal,"Return dialogue advanced the world or auto-dismissed")
+	for i in 80:
+		var visited: Dictionary=opened.evaluate(150,Vector2.ONE,0.0).snapshot()
+		check(int(visited.flight_audio.serial)==int(modal.flight_audio.serial)+1,"Modal zero-time pass did not advance its audio serial once")
+		visited.flight_audio.serial=modal.flight_audio.serial
+		check(visited==modal,"Return dialogue advanced the world or auto-dismissed")
 	check(opened.navigate("next",true)==null and opened.start_mining()==null and opened.stop_mining()==null and opened.cancel_mining()==null,"Paused or modal flight accepted gameplay input")
 	var line2: RefCounted=opened.navigate("next")
 	check(line2!=null and line2.navigate("previous").snapshot()==modal,"Previous return instruction altered world state")

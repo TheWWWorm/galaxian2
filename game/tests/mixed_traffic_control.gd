@@ -45,7 +45,7 @@ func verify_population(bindings: RefCounted,catalogues: RefCounted,equipment: Re
 	if failures:return
 	populations+=1
 	before=control.snapshot()
-	for dt in [-1,151,0.5,true]:
+	for dt in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5,true]:
 		check(control.evaluate_ambient_world_logic(dt,control.combat_owner(),before.random_state).is_empty() and control.snapshot()==before,"Invalid world duration mutated traffic")
 		check(control.advance(dt,player).is_empty() and control.snapshot()==before,"Invalid actor duration mutated traffic")
 	check(control.evaluate_ambient_world_logic(0,control.combat_owner(),{"state":-1}).is_empty() and control.snapshot()==before,"Invalid world RNG partly launched traffic")

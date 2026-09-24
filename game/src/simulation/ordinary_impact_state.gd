@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Per-projectile-slot impact clocks. A contact restarts time after sampling, so
 ## the last sampled pose survives until the following ordinary weapon update.
 const Definitions=preload("res://src/content/projectile_impact_definitions.gd")
@@ -45,11 +47,12 @@ func configure(bindings: RefCounted, library: RefCounted, world: Dictionary) -> 
 		weapons.append({"key":entry.key,"item_id":int(weapon.item_id),"kind":int(weapon.kind),"capacity":slots.size(),"model_id":id,"resource":path,"slots":slots})
 	_state={"base_content_id":world.base_content_id,"binding_id":world.binding_id,"elapsed_ms":0,"rules":rules.duplicate(true),"weapons":weapons,"hits":[]}
 	_identity=RefCounted.new()
+	_max_ms=Frames.simulation_limit(bindings,150)
 	return true
 
 func advance(delta_ms: Variant) -> bool:
 	error=""
-	if _state.is_empty() or _pending or not Numbers.integer(delta_ms,0,150):return reject("Invalid or unfinished impact frame")
+	if _state.is_empty() or _pending or not Numbers.integer(delta_ms,0,_max_ms):return reject("Invalid or unfinished impact frame")
 	_previous_elapsed=_state.elapsed_ms
 	for weapon in _state.weapons:
 		for slot in weapon.slots:
@@ -107,5 +110,5 @@ func apply_contacts(previous_world: Dictionary, primary_events: Array, npc_event
 func snapshot() -> Dictionary:return _state.duplicate(true)
 func presentation_identity() -> RefCounted:return _identity
 func fork_for_frame() -> RefCounted:
-	var next: RefCounted=get_script().new();next._state=_state.duplicate(true);next._identity=_identity;next._pending=_pending;next._previous_elapsed=_previous_elapsed;return next
+	var next: RefCounted=get_script().new();next._state=_state.duplicate(true);next._identity=_identity;next._pending=_pending;next._previous_elapsed=_previous_elapsed;next._max_ms=_max_ms;return next
 func reject(message: String) -> bool:error=message;return false

@@ -27,6 +27,9 @@ func build_departure(library: RefCounted, visuals: RefCounted, bindings: RefCoun
 func build_lounge(library: RefCounted,visuals: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int,cursor: int,quality:="high") -> bool:
 	return _build(library,visuals,bindings,catalogues,quality,false,3,{"station_id":station_id,"campaign_cursor":cursor})
 
+func build_station(library: RefCounted,visuals: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int,cursor: int,quality:="high") -> bool:
+	return _build(library,visuals,bindings,catalogues,quality,false,4,{"station_id":station_id,"campaign_cursor":cursor})
+
 func _build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, catalogues: RefCounted, quality: String, with_escape: bool, cursor: int, location_cache: Variant, equipment: RefCounted=null) -> bool:
 	clear()
 	if visuals.base_content_id!=bindings.base_content_id:return reject("Planet textures belong to another content identity")
@@ -37,6 +40,7 @@ func _build(library: RefCounted, visuals: RefCounted, bindings: RefCounted, cata
 		1:_layout=layout.for_arrival(bindings,catalogues,location_cache,quality)
 		2:_layout=layout.for_departure(bindings,catalogues,location_cache,quality,equipment)
 		3:_layout=layout.for_lounge(bindings,catalogues,location_cache.station_id,location_cache.campaign_cursor,quality)
+		4:_layout=layout.for_station(bindings,catalogues,location_cache.station_id,location_cache.campaign_cursor,quality)
 		_:return reject("Unsupported planet scene")
 	if _layout.is_empty():return reject(layout.error)
 	if _layout.sky_index in [11,12]:return reject("Fogged planet drawing is not yet supported")

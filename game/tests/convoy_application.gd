@@ -5,6 +5,7 @@ const Transit=preload("res://src/content/convoy_transit_definitions.gd")
 const TravelRules=preload("res://src/content/mido_travel_definitions.gd")
 const OrdinaryRules=preload("res://src/content/ordinary_flight_definitions.gd")
 const TransitCheckpoint=preload("res://tests/fixtures/transit_station_scenario.gd")
+const TouchInput=preload("res://tests/fixtures/touch_input.gd")
 
 func _initialize() -> void:
 	call_deferred("run_transit_checkpoint" if not OS.get_environment("GOF2_CONVOY_STATION_SCENARIO").is_empty() else "run_progression")
@@ -34,8 +35,9 @@ func after_four_successes() -> void:
 		var checkpoint:=TransitCheckpoint.new()
 		if not checkpoint.capture(capture_path,app.session.station_owner(),definitions):check(false,checkpoint.error);return
 	check(Transit.available(definitions.mido_travel),"The transit declaration is missing")
+	var text_shift: int=14 if catalogue.tables.ships.size()==64 else 0
 	var before: Dictionary=app.session.snapshot()
-	check(before.campaign_cursor==13 and before.loadout.station_id!=79 and before.dialogue.text_id==1792,"Four distant jobs did not open the original story in the application")
+	check(before.campaign_cursor==13 and before.loadout.station_id!=79 and before.dialogue.text_id==1792+text_shift,"Four distant jobs did not open the original story in the application")
 	check(before.contracts.credits==7850 and before.completed_side_missions==4,"The continuous career changed its earned balance")
 	check(not app.request_departure(),"The unacknowledged story allowed departure")
 	for station in [75,76,77,78,79]:
@@ -45,7 +47,7 @@ func after_four_successes() -> void:
 	app.session.rebase_time(now_us)
 	for tick in 11:
 		if not application_step():return
-	for id in [1792,1793]:
+	for id in [1792+text_shift,1793+text_shift]:
 		check(app.session.snapshot().dialogue.text_id==id,"Story acknowledgement skipped a line")
 		app.station_navigation("next")
 		if app._transition_failed:check(false,app.status.text);return
@@ -69,11 +71,13 @@ func after_four_successes() -> void:
 	check(app.current_locations().snapshot().current_station_id==79,"The application lost its location cache entering the convoy")
 	if failures:return
 	var lethal:=false;var death_checked:=false;var seen_modal:=false;var disabled:=false
+	var previous_phase:=-1;var phase_ticks:=0
 	for tick in 1000:
 		var frame: RefCounted=app.session.flight_owner()
 		if frame.dialogue_visible():
 			seen_modal=true
-			check(frame.snapshot().dialogue.text_id==1794,"The convoy opened an unrelated instruction")
+			check(frame.snapshot().dialogue.text_id==1794+text_shift,"The convoy opened an unrelated instruction")
+			await capture_view("application-convoy-instruction")
 			if not app.session.navigate("next"):check(false,app.session.error);return
 			frame=app.session.flight_owner()
 		if frame.snapshot().world_elapsed_ms>=10000 and not death_checked:
@@ -87,6 +91,10 @@ func after_four_successes() -> void:
 			lethal=true
 		if not application_step():return
 		disabled=disabled or app.session.flight_owner().convoy_input_blocked()
+		var phase:=int(app.session.snapshot().convoy_capture.phase)
+		phase_ticks=phase_ticks+1 if phase==previous_phase else 0
+		previous_phase=phase
+		if phase_ticks==2:await capture_view("application-convoy-phase-%d"%phase)
 		if app.session.status=="convoy_arrival_transition_required":break
 		if tick%100==0:await process_frame
 	check(seen_modal and disabled and death_checked and app.session.status=="convoy_arrival_transition_required","Application capture did not reach its station boundary")
@@ -100,7 +108,7 @@ func after_four_successes() -> void:
 	for tick in 11:
 		if not application_step():return
 	await capture_view("application-alioth-desktop")
-	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.set_touch_controls(true)
+	root.size=Vector2i(960,540);app.set_mobile_layout(true);TouchInput.set_preference(app,true)
 	app.present_session()
 	await capture_view("application-alioth-phone-landscape")
 	root.size=Vector2i(1280,720);app.set_mobile_layout(false);app.set_touch_controls(false)

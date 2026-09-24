@@ -1,4 +1,5 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
 ## One ordinary scenery actor's destruction lifecycle. The world supplies its
 ## current body, pose and shared RNG state, and commits returned body/accounting
 ## changes. Cargo remains an actor-owned candidate, never player inventory.
@@ -42,8 +43,8 @@ func configure(bindings: RefCounted, catalogues: RefCounted, body_state: Diction
 		_cargo_models.append({"model_id":id,"resource":path})
 	for key in ["index","item_id","model_id","source_size_value","scale"]:_body[key]=row[key]
 	_identity={"base_content_id":descriptor.base_content_id,"binding_id":descriptor.binding_id}
-	_state={"actor_state":0,"update_enabled":true,"drop_allowed":true,"cargo":{}}
-	_effect=effect;_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_state={"actor_state":0,"update_enabled":true,"drop_allowed":true,"cargo":{},"cargo_model_exists":false}
+	_effect=effect;_max_ms=Frames.simulation_limit(bindings)
 	if current_body(body_state).is_empty():var message:=error;clear();return reject(message)
 	return true
 
@@ -54,7 +55,7 @@ func update(delta_ms: Variant, body_state: Dictionary, pose: Transform3D, random
 	if not Numbers.integer(delta_ms,0,_max_ms):return fail("Invalid scenery destruction frame duration")
 	var body := current_body(body_state)
 	if body.is_empty():return {}
-	if not pose.is_finite() or pose.origin!=body.position:return fail("Scenery destruction pose differs from its body")
+	if not pose.is_finite() or (_state.actor_state==0 and pose.origin!=body.position):return fail("Scenery destruction pose differs from its body")
 	var random := Random.new()
 	if not random.restore(random_state):return fail(random.error)
 	var result := {"object_index":_body.index,"statistics_active":body.active,
@@ -74,7 +75,7 @@ func update(delta_ms: Variant, body_state: Dictionary, pose: Transform3D, random
 			# The source positions a fresh junk model. It does not copy the
 			# asteroid's rotation or scale into that model.
 			if not cargo.is_empty():cargo.pose=Transform3D(Basis.IDENTITY,pose.origin)
-			next.actor_state=3;next.cargo=cargo
+			next.actor_state=3;next.cargo=cargo;next.cargo_model_exists=not cargo.is_empty()
 			if cargo.is_empty():next.drop_allowed=false
 			result.events.append({"kind":"destruction_started","object_index":_body.index,
 				"world_scenery_count_delta":-1,"destruction_count_delta":1,"cargo":cargo.duplicate(true)})
@@ -117,6 +118,17 @@ func disable_drop() -> void:
 	# A future mining owner must separately own earned quantity and accounting.
 	# This eligibility change alone never means mining succeeded.
 	if not _state.is_empty():_state.drop_allowed=false
+
+## Applied only to a detached world branch after its typed tractor transaction.
+## Physical junk and its remaining item are separate: removing the model does
+## not normalize the source remainder or restart the completed destruction.
+func _retain_recovery_frame(frame: Dictionary) -> void:
+	_read_snapshot={}
+	var changes: Dictionary=frame.actor_changes
+	if changes.has("cargo_pose"):_state.cargo.pose=changes.cargo_pose
+	if changes.has("cargo_eligible"):_state.drop_allowed=changes.cargo_eligible
+	if changes.has("cargo_model_exists"):_state.cargo_model_exists=changes.cargo_model_exists
+	if changes.has("cargo_entries"):_state.cargo.quantity=changes.cargo_entries[0].quantity
 
 func snapshot() -> Dictionary:
 	if _effect==null:return {}

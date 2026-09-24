@@ -2,7 +2,8 @@
 
 Only semantic declarations and file extents leave this static reader.
 """
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_station_equipment(mach,arrival,station_return):
@@ -10,12 +11,12 @@ def extract_station_equipment(mach,arrival,station_return):
     try:
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=MAC_VALUES if proof['tutorial_stock']['offset']==origin['offset']+MAC_ALTERNATE['tutorial_stock'][0] else VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'var_hastra_equipment_tutorial',
@@ -158,3 +159,69 @@ LAYOUTS = {'tutorial_stock': [-244274,
                34,
                '__text',
                'sha256:c1bc514e4f2869732eeaa634cf8b7e6d94740e48d315546baf4c04c0a9086e1c']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'tutorial_stock': [-245762, 214, '__text', 'sha256:fa6e49ad711415bd498158fd89caafbbf5cebec2812397b5a7ee4ae5a2c0e00e'],
+ 'stock_clone': [-81912, 30, '__text', 'sha256:1a4d404a9683c1cb330d20a98d88e4b9e9dfe51f6755bb8a32a899dd887680e8'],
+ 'zero_price_preserved': [878631,
+                          16,
+                          '__text',
+                          'sha256:b05c8aa692bd57e5c9bc967dbfe7aca8db23608962f04dd9b99ef81a3a90f433'],
+ 'stock_install': [857917, 73, '__text', 'sha256:9d229f4799b75f82aba148e2336283b87796497bdb58708f9e72b11b163ab3e7'],
+ 'item_fields': [-84866, 152, '__text', 'sha256:8127444b7f76cb5a680ad490608fd344c85cb70ebfb755041ec85e8739065c17'],
+ 'category': [-84670, 20, '__text', 'sha256:dd26ef8fa0592dcce19559f3bec7401362ec9ae4075321cca8ead6301998cf95'],
+ 'subtype': [-84650, 10, '__text', 'sha256:621e90acd3f836981429c6021728b1c774228945b4c4293838a6ed302dc7528f'],
+ 'protected': [-81574, 10, '__text', 'sha256:ea135a0d4008ca1db7e40ca2f99234a3b98aa6210b3fab14763e62ed5fbe247a'],
+ 'multiple_subtypes': [-84704, 26, '__text', 'sha256:e1294e41b304e3795686896c0db3e8f8e95f6e3e822c4bba10514cd431004bc1'],
+ 'item_transfer': [-84322, 104, '__text', 'sha256:6a49d8936842a624dc9e86c983e56b6f46f8bb4c1d444a041c7685aa6a54221f'],
+ 'quantity_commit': [-167046, 146, '__text', 'sha256:38950d4cfd2f80271b75d91f4a35335e806bc9c60f6040fbceeb8b56a191d6dc'],
+ 'mount': [-138042, 784, '__text', 'sha256:24a1436b1281f068abc16addd9db2f1d16888dac47813726284e8bdfbb4701de'],
+ 'unmount': [-138614, 572, '__text', 'sha256:98ccb33c4f8934e657dac7a8a45251bc154e82766db2bfededea0cef70b7c65b'],
+ 'first_free_slot': [732542, 100, '__text', 'sha256:6222af3d74b20625c9a87588069691ae6b2b2089756f1561a40d5704b1077ef1'],
+ 'cargo_refresh': [731558, 112, '__text', 'sha256:f76d4d7ff55b56e546388ab231a0ea296c2e2f34eff1c1dbfe47e9e0e30af373'],
+ 'protected_action': [-135469, 64, '__text', 'sha256:5f5a6a1d95cff930e2fa9b7fa85a42c139bc80579f1fe06f5de9cf3f86950bda'],
+ 'equipment_check': [875164, 119, '__text', 'sha256:6afac5764aa4e49261fc6b7fff21470b7febfdc179a2a75896031ffa7c3791cd'],
+ 'equipment_result': [875518, 38, '__text', 'sha256:3af5ae4d06633ba760099a852e479e9230cc4b0f7c05a685526a05a927ba2da6'],
+ 'station_check': [446607, 78, '__text', 'sha256:3eb425503ab958efd58b92b5660980b8e43813143bf96e5afc1ba658c87f167e'],
+ 'completion_dialogue': [447844,
+                         69,
+                         '__text',
+                         'sha256:f515790ae6100b965b4bea3dababdd8f5037a5bf3206420792f217526568be58'],
+ 'mode1_counts': [1530242, 28, '__const', 'sha256:cc862f1924c24b46dd1c7329395ba8723f32c20674dd1548488b2a7192dbbfe9'],
+ 'mode1_event': [1521626, 8, '__const', 'sha256:f9a05e0daa0933331a7cf81e10412d56b5e8fbb0987f3e7457818877e03b5c67'],
+ 'voice_table': [1535218, 12032, '__const', 'sha256:71d7f260f073a866f0c2c15cbb1de4360add0790bba948ac33ff006cea251e5d'],
+ 'cursor7_dispatch': [872062, 4, '__text', 'sha256:a8314455b6ae9b2127063daed7be663b4ab389cd680de9410a5c0c5d2ebc547e'],
+ 'cursor7_factory': [861388, 38, '__text', 'sha256:a6a3538dbbefd99782fe2be31f4bd310fcaad4a9dae0458f4a5b01dd58ff1d07'],
+ 'factory_install': [861177, 16, '__text', 'sha256:7fb7e2d89e6362bc92e05d9dfe4dcb43a8a0695157f8269f37f96656af249708'],
+ 'station_acknowledgement': [430231,
+                             1908,
+                             '__text',
+                             'sha256:32b8a28aa5620d75f849b0ce6e464cf3ab23adf56835b7f67d042ec8f2347892'],
+ 'item_text': [-135082, 34, '__text', 'sha256:a3348cdfc47123250d4ad380785e71d799684edd98470cf9b9147cc30faf0dbe']}
+MAC_VALUES = {'scope': 'var_hastra_equipment_tutorial',
+ 'station_id': 78,
+ 'system_id': 15,
+ 'campaign_cursor': 6,
+ 'mission_kind': 158,
+ 'stock_maximum_cursor': 6,
+ 'stock': [{'item_id': 0, 'quantity': 1, 'unit_price': 0},
+           {'item_id': 22, 'quantity': 1, 'unit_price': 0},
+           {'item_id': 55, 'quantity': 1, 'unit_price': 0}],
+ 'protected_item_ids': [90, 81],
+ 'item_category_value_index': 3,
+ 'item_subtype_value_index': 5,
+ 'item_text_offset': 1263,
+ 'multiple_subtype_mask': 6137572235519,
+ 'weapon_category': 0,
+ 'armor_subtype': 10,
+ 'refresh_cargo_on_transaction': True,
+ 'reward_credits': 0,
+ 'bonus_credits': 0,
+ 'cursor_after_acknowledgement': 7,
+ 'next_mission_kind': 4,
+ 'next_mission_parameter': 0,
+ 'next_text_id': 179,
+ 'final_text_id': 180,
+ 'events': [{'speaker_id': 2, 'text_id': 1736, 'voice_event_id': 438}],
+ 'mount_audio_id': 98,
+ 'unmount_audio_id': 96}

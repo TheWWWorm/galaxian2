@@ -1,10 +1,10 @@
 """Verified Mac contract ship setup, without original code payloads."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 
 def extract_contract_ship_combat(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 
@@ -113,6 +113,56 @@ LAYOUTS = {'ship_combat_weapon_level': [54868,
                               '__text',
                               '21d90d923b1e1db17fd9656c01bb679fe363b145e04296874be0dd9cbf518ee4'],
  'ship_combat_level_constants': [1575346,
+                                 12,
+                                 '__const',
+                                 '06244f5e4fbb94d40185233cdcf67b55473e367d2a5d8170cf096999e2211546']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'ship_combat_weapon_level': [54868,
+                              245,
+                              '__text',
+                              '2f735bcfec3269e4e248951e67e599efd6f414130aaa9b43368af8c242c8529a'],
+ 'ship_combat_damage': [55500,
+                        423,
+                        '__text',
+                        '5235fe7141ad21b27a86f7d8f32b2181dbe83e82eb561cce1d0c80f4700c622e'],
+ 'ship_combat_weapon_factions': [55923,
+                                 217,
+                                 '__text',
+                                 '206247744cf8325c83f79308819e2c508aa980c3ee3fb1e081453e0d09ebaba0'],
+ 'ship_combat_special_guards': [56140,
+                                1125,
+                                '__text',
+                                'cdec16de783afc122bc8eac99af372f16eac9f07d0368a82d69cd5e919a22d93'],
+ 'ship_combat_weapon_constructor': [57315,
+                                    197,
+                                    '__text',
+                                    'f8da36b0412faa2d5727dbf8848eb7ae49fcc3e4722ef7ab37eab19ae0cc66ab'],
+ 'ship_combat_weapon_table': [58994,
+                              44,
+                              '__text',
+                              '56b780f213eb310ffbe8fa79ac02aae5cba180e63b51d9b9f550b6b58d8b072e'],
+ 'ship_combat_targets': [59632,
+                         1421,
+                         '__text',
+                         '93fe593ccf508a8e4f2d7a4cc5fb47438d2c58be2a7f2c6ce956e4e308803762'],
+ 'ship_combat_boost_gate': [621961,
+                            474,
+                            '__text',
+                            'de16cec1ae34b0b653a3ec8968f5d2f542502959688bfa9c4a9c240ade0a7205'],
+ 'ship_combat_hostility': [611506,
+                           487,
+                           '__text',
+                           '0bebc0a6dd584d95ac05762acde9295c25e55e6ae387f6f83437070b1be76b4f'],
+ 'ship_combat_speed_initialization': [607492,
+                                      55,
+                                      '__text',
+                                      '26550a0aaffd1bc09bf32b85f452f4292a526301190af3dd3de71298d98cd2dd'],
+ 'ship_combat_motion_speed': [627581,
+                              118,
+                              '__text',
+                              '1915e004c72d987d0498b8c51ee9bc1120bed3dde92be53f74faf6d2b0f0765b'],
+ 'ship_combat_level_constants': [1550410,
                                  12,
                                  '__const',
                                  '06244f5e4fbb94d40185233cdcf67b55473e367d2a5d8170cf096999e2211546']}

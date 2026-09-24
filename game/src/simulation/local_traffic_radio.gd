@@ -59,10 +59,12 @@ func evaluate(elapsed_ms: int, reaction: Dictionary, random_state: Dictionary) -
 			next._portrait={"status":"fixed","family":family,"parts":parts}
 			events=next._step(elapsed_ms)
 	else:events=next._step(elapsed_ms)
+	if not next.error.is_empty():return fail(next.error)
 	return {"radio":next,"random_state":random.snapshot(),"events":events}
 
 func _step(elapsed_ms: int) -> Array:
 	var events: Array=_active.step(elapsed_ms,{},0)
+	if not _active.error.is_empty():reject(_active.error);return []
 	for event in events:
 		event.message_kind=_message.kind
 		event.merge(_message)

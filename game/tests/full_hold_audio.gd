@@ -73,7 +73,7 @@ func accept(audio: Node,world: RefCounted) -> bool:
 	return true
 
 func step(audio: Node,world: RefCounted,ms: int,throttle:=0.0) -> RefCounted:
-	var next: RefCounted=world.evaluate(ms,Vector2.ZERO,throttle)
+	var next: RefCounted=world.evaluate(ms,Vector2.ZERO,throttle,false,Vector2i.ZERO,Vector2.ZERO,false,false,false,audio.current_music_id())
 	if next==null:check(false,world.error);return null
 	return next if accept(audio,next) else null
 
@@ -114,7 +114,7 @@ func verify_player(audio: Node):
 	check(stops.size()==10 and stops[0].action=="stop_music" and stops[1].action=="stop_player_engine","Death stop order changed")
 	for i in bindings.player_destruction.stop_sound_ids.size():
 		check(stops[i+2].action=="stop" and stops[i+2].source_id==bindings.player_destruction.stop_sound_ids[i],"Death stop ID/order changed")
-	check(not state.active.has(143) and not state.active.has(44) and state.retiring==2,"Cached music/engine stop ignored source fades")
+	check(not state.active.has(143) and not state.active.has(44) and state.retiring==before.retiring+2,"Cached music/engine stop ignored source fades")
 	check(world.snapshot().player_destruction.events.stop_current_music and not world.snapshot().player_destruction.events.has("stop_primary_sound"),"Death mislabeled current music as a primary sound")
 	var repeat: Dictionary=audio.prepare_full_hold(world);audio.commit_frame(repeat)
 	check(repeat.get("repeat",false) and audio.snapshot()==state,"Repeated death frame replayed stops")
@@ -147,7 +147,14 @@ func verify_pirate():
 	if not audio.configure_full_hold(lib,bindings,initial,777):check(false,audio.error);audio.free();return
 	var world:=released(audio)
 	if world==null:audio.free();return
+	world=Fixture.fork_world_fixture(world)
 	world._pose=Transform3D(Basis(Vector3.UP,PI),world.snapshot().actors[0].pose.origin+Vector3(0,0,5000));world._pilot.angular_units=Vector2.ZERO
+	# This disclosed placement is not continuous flight. Start its exhaust at
+	# the new position instead of emitting across the test-only teleport.
+	if world._engine_particles!=null:
+		world._engine_particles=world._engine_particles.fork_for_frame()
+		for emitter in world._engine_particles._emitters:
+			if not emitter.reset():check(false,emitter.error);audio.free();return
 	var shot:=false
 	for i in 30:
 		world=step(audio,world,150)

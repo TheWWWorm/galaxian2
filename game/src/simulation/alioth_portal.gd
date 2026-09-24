@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Native portal clock and sequence operations. Animation keeps advancing while
 ## hidden; only visible portals advance their opening/closing and facing state.
 const AEM=preload("res://src/content/aem.gd")
@@ -30,6 +32,7 @@ func configure(bindings: RefCounted,entry: Dictionary,library: RefCounted) -> bo
 	if timing.is_empty():return reject("Unsupported original portal animation")
 	timing.time_ms=timing.start_ms;timing.playing=true
 	_rules=rules.duplicate(true);_revision=0
+	_max_ms=Frames.simulation_limit(bindings,150)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":16,
 		"slot":int(rules.environment_slot),"model_id":int(rules.model_id),"position":position,"pose":Transform3D(Basis.IDENTITY,position),
 		"animation":timing,"elapsed_ms":int(rules.initial_elapsed_ms),"animation_elapsed_ms":0,"extent":int(rules.initial_extent),"visible":true,"scale":1.0}
@@ -52,32 +55,42 @@ func apply_sequence(attack: RefCounted) -> bool:
 
 func advance(milliseconds: int,camera: Transform3D) -> bool:
 	error=""
-	if _state.is_empty() or not Numbers.integer(milliseconds,0,150) or not camera.is_finite():return reject("Portal requires a finite ordinary frame")
-	var next:=_state.duplicate(true)
+	if _state.is_empty() or not Numbers.integer(milliseconds,0,_max_ms) or not camera.is_finite():return reject("Portal requires a finite ordinary frame")
+	var next:=evaluate_clock(_state,_rules,milliseconds,camera)
+	if next.has("error"):return reject(next.error)
+	_state=next
+	return true
+
+## Callers own source admission, frame limits and any relocation policy. A
+## relocation preserves this frame's closing extent before facing its new site.
+static func evaluate_clock(state: Dictionary,rules: Dictionary,milliseconds: int,camera: Transform3D,relocation: Dictionary={}) -> Dictionary:
+	var next:=state.duplicate(true)
 	next.animation_elapsed_ms+=milliseconds
 	Playback.advance([next.animation],milliseconds,true)
 	if next.visible:
 		next.elapsed_ms+=milliseconds
 		if next.elapsed_ms<0:
-			next.extent=int(_rules.extent_scale)-int(Vitals.single(Vitals.single(float(-next.elapsed_ms)/float(_rules.open_duration_ms))*float(_rules.extent_scale)))
-		elif next.elapsed_ms>int(_rules.close_start_ms):
-			next.extent=int(_rules.extent_scale)-int(Vitals.single(Vitals.single(float(next.elapsed_ms-int(_rules.close_start_ms))/float(_rules.open_duration_ms))*float(_rules.extent_scale)))
-			if next.elapsed_ms>=int(_rules.hide_at_ms):next.visible=false
-		next.scale=Vitals.single(float(int(next.extent)<<int(_rules.model_scale_shift))*float(_rules.model_scale_fraction))
+			next.extent=int(rules.extent_scale)-int(Vitals.single(Vitals.single(float(-next.elapsed_ms)/float(rules.open_duration_ms))*float(rules.extent_scale)))
+		elif next.elapsed_ms>int(rules.close_start_ms):
+			next.extent=int(rules.extent_scale)-int(Vitals.single(Vitals.single(float(next.elapsed_ms-int(rules.close_start_ms))/float(rules.open_duration_ms))*float(rules.extent_scale)))
+			if next.elapsed_ms>=int(rules.hide_at_ms):
+				if relocation.is_empty():next.visible=false
+				else:
+					next.elapsed_ms=relocation.elapsed_ms;next.position=relocation.position
+		next.scale=Vitals.single(float(int(next.extent)<<int(rules.model_scale_shift))*float(rules.model_scale_fraction))
 		var forward:=Vectors.normalized(camera.origin-next.position)
-		forward.x=Vitals.single(forward.x+float(_rules.facing_x_offset))
+		forward.x=Vitals.single(forward.x+float(rules.facing_x_offset))
 		var right:=Vectors.normalized(Vectors.cross(Vector3.UP,forward))
 		forward=Vectors.normalized(forward)
 		var up:=Vectors.normalized(Vectors.cross(forward,right))
 		var pose:=Transform3D(Basis(right,up,forward),next.position)
-		if not Flight.rigid_pose(pose):return reject("Portal facing exceeds source coordinates")
+		if not Flight.rigid_pose(pose):return {"error":"Portal facing exceeds source coordinates"}
 		next.pose=pose
-	_state=next
-	return true
+	return next
 
 func snapshot() -> Dictionary:return _state.duplicate(true)
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy._rules=_rules.duplicate(true);copy._state=_state.duplicate(true);copy._revision=_revision
-	return copy
+	copy._max_ms=_max_ms;return copy
 func reject(message: String) -> bool:error=message;return false

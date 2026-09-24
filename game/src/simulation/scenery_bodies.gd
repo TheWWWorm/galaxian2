@@ -1,4 +1,5 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Intact source scenery bodies and ordinary weapon damage. Zero hull is an
 ## explicit boundary: effect playback, destruction accounting and mining are
 ## separate owners and are not completed or rewarded by this component.
@@ -80,8 +81,9 @@ func configure(bindings: RefCounted, field: Dictionary, resources: RefCounted) -
 			if bindings.early_contracts.has("world_initialization") and Travel.navigation_available(bindings.mido_travel,13):_primary_cursors.append(13)
 			if not Convoy.flight(bindings,79).is_empty():_primary_cursors.append(14)
 			if not Alioth.flight(bindings,98).is_empty():_primary_cursors.append(16)
-			if load("res://src/content/free_flight_definitions.gd").available(bindings):_primary_cursors.append(18)
-			if load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,19):_primary_cursors.append(19)
+			for cursor in FlightStages.FREE:
+				if load("res://src/content/free_flight_definitions.gd").available(bindings) and load("res://src/content/free_campaign_definitions.gd").supported(bindings.mido_travel,cursor):_primary_cursors.append(cursor)
+			if load("res://src/content/kappa_lifecycle_definitions.gd").available(bindings):_primary_cursors.append(21)
 	return true
 
 func snapshot() -> Dictionary:
@@ -114,7 +116,7 @@ func collision_context(object_index: Variant) -> Dictionary:
 func supports_weapon_hit(weapon: Variant) -> bool:
 	var kinds:=[0]
 	if weapon is Dictionary and weapon.get("campaign_cursor") in _primary_cursors and TrainingWeapons.dispersed_primary(weapon):kinds.append(2)
-	if weapon is Dictionary and weapon.get("campaign_cursor") in [18,19] and preload("res://src/content/ordinary_fitting_definitions.gd").ordinary(weapon):kinds=[0,1,2]
+	if weapon is Dictionary and weapon.get("campaign_cursor") in FlightStages.FREE and _primary_cursors.has(weapon.get("campaign_cursor")) and preload("res://src/content/ordinary_fitting_definitions.gd").ordinary(weapon):kinds=[0,1,2]
 	error=WeaponHit.validate(weapon,_identity,_hit_policy,kinds)
 	return error.is_empty()
 

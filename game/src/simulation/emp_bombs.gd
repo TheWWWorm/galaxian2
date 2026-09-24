@@ -28,15 +28,17 @@ func configure(bindings: RefCounted,cat: RefCounted,item_id: Variant,equipment_i
 	_weapon=weapon;_shot={};_elapsed_ms=weapon.interval_ms
 	return true
 
+func discard_flying() -> void:
+	_shot={}
+
 func trigger(pose: Transform3D,ammunition: Variant,targets: Variant,permitted: Variant=true) -> Dictionary:
 	error=""
 	if _weapon.is_empty():return fail("Configure the EMP bomb before firing")
 	if not Vitals.integer(ammunition) or not permitted is bool or not pose.origin.is_finite() or not pose.basis.is_finite() or not _valid_targets(targets):return fail("Invalid EMP firing context")
 	var result:=_event()
-	if not permitted:return result
-	# A second press detonates the live round even after the last round was used.
-	if _shot.get("phase")=="flying":return detonate(_shot.id,targets)
-	if ammunition==0 or _elapsed_ms<=_weapon.interval_ms:return result
+	var action:=trigger_action(ammunition,permitted)
+	if action=="none":return result
+	if action=="detonated":return detonate(_shot.id,targets)
 	if _next_id>=Vitals.MAX_INTEGER:return fail("The EMP projectile handle limit was reached")
 	var offset: Array=Definitions.VALUES.muzzle_offset
 	var position:=pose*Vector3(offset[0],offset[1],offset[2])
@@ -47,6 +49,14 @@ func trigger(pose: Transform3D,ammunition: Variant,targets: Variant,permitted: V
 	_next_id+=1;_elapsed_ms=0
 	result.action="launched";result.ammunition_consumed=int(Definitions.VALUES.ammunition_per_launch);result.shot=_shot.duplicate(true)
 	return result
+
+## Read-only readiness shared with the control display. A live last round is
+## still detonatable; readiness never advances clocks or consumes ammunition.
+func trigger_action(ammunition: int,permitted:=true) -> String:
+	if not permitted or _weapon.is_empty():return "none"
+	if _shot.get("phase")=="flying":return "detonated"
+	if ammunition<=0 or _elapsed_ms<=_weapon.interval_ms:return "none"
+	return "launched"
 
 func advance(delta_ms: Variant,targets: Variant) -> Dictionary:
 	error=""

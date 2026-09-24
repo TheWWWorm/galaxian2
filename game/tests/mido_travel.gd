@@ -5,6 +5,7 @@ const Library=preload("res://src/content/library.gd")
 const Bindings=preload("res://src/content/resource_bindings.gd")
 const Catalogues=preload("res://src/content/catalogues.gd")
 const Definitions=preload("res://src/content/mido_travel_definitions.gd")
+const Ordinary=preload("res://src/content/ordinary_flight_definitions.gd")
 const Travel=preload("res://src/simulation/local_travel.gd")
 const Planets=preload("res://src/simulation/opening_planet_layout.gd")
 const Scenario=preload("res://tests/fixtures/equipment_scenario.gd")
@@ -31,10 +32,29 @@ func verify(args: PackedStringArray) -> void:
 	for key in Definitions.VALUES:
 		var bad:=rules.duplicate(true);bad[key]=null
 		check(not Definitions.parameters(bad),"Changed travel data accepted: "+key)
-	for key in Definitions.SPANS:
+	for key in rules.provenance:
 		var bad:=rules.duplicate(true);bad.provenance[key].offset+=1
 		check(not Definitions.validate(bad,header.source_executable_bytes,"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Disconnected travel source accepted: "+key)
 	check(rules.conversations[1].events.map(func(row):return int(row.voice_event_id))==[190,191,194,195,196,197,198,199,200,201,192,193],"Kernstal voices lost their independent table order")
+	if rules.has("continuation"):
+		var mixed:=rules.duplicate(true)
+		mixed.continuation=Definitions.CONTINUATION if int(rules.conversations[0].events[0].text_id)==1761 else Definitions.MAC_CONTINUATION
+		check(not Definitions.parameters(mixed),"Travel accepted conversations from different source layouts")
+		if int(rules.conversations[0].events[0].text_id)==1761:
+			mixed=rules.duplicate(true);mixed.contract_completion=Definitions.ContractStory.VALUES.duplicate(true)
+			check(not Definitions.parameters(mixed),"The newer layout accepted an unverified older campaign extension")
+		check(Ordinary.briefing(bindings,11,false,79).events.is_empty(),"Departure selected the destination's modal")
+		var arrival_rules:=Ordinary.briefing(bindings,11,false,76)
+		check(arrival_rules.events==(rules.arrival_briefing.events if rules.has("arrival_briefing") else []),"Arrival ignored its optional source-bound modal")
+		for cursor in [10,11,12]:
+			var returned:=Definitions.station_return(bindings,cursor)
+			var events: Array=rules.conversations[1].events if cursor==10 else rules.continuation.events if cursor==11 else rules.return_visit.events
+			check(Definitions.station_return_parameters(returned) and Definitions.Equal.equal_value(returned.events,events),"Station return substituted another source's dialogue")
+	if rules.has("arrival_briefing"):
+		var earlier:=rules.duplicate(true);earlier.erase("arrival_briefing")
+		for key in rules.provenance:
+			if key.begins_with("yrdal_briefing_"):earlier.provenance.erase(key)
+		check(Definitions.validate(earlier,header.source_executable_bytes,"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"The optional arrival briefing broke an earlier pack")
 	var scenario:=Scenario.new()
 	var equipment: RefCounted=scenario.open(OS.get_environment("GOF2_SCENARIO_INPUT"),bindings,cat)
 	if equipment==null:check(false,scenario.error);return
@@ -70,7 +90,7 @@ func verify(args: PackedStringArray) -> void:
 	check(travel.snapshot().acquisition_duration_ms==4000,"The installed scanner's duration was discarded")
 	check(travel.snapshot().event_serial==0,"Local travel invented a sound before acquisition")
 	var before:=travel.snapshot()
-	check(not travel.sample_acquisition(151,79,79,true) and travel.snapshot()==before,"An oversized travel frame committed state")
+	check(not travel.sample_acquisition(751 if not bindings.fast_forward.is_empty() else 151,79,79,true) and travel.snapshot()==before,"An oversized travel frame committed state")
 	check(not travel.sample_acquisition(1,76,76,true) and travel.snapshot()==before,"An unsupported destination entered travel")
 	check(not travel.sample_acquisition(1,78,78,true) and travel.snapshot()==before,"The current planet became a travel destination")
 	check(travel.sample_acquisition(150,79,79,true,true) and travel.snapshot()==before,"Paused acquisition advanced")
@@ -121,7 +141,7 @@ func verify_planets() -> void:
 	check(kernstal.entries[5].scale==0.581512451171875,"Kernstal near size lost its type-specific source draw")
 	check(kernstal.random_state.state==126403623076768,"Kernstal placement changed the source RNG continuation")
 	check(layout.arrange(79,11,[75,76,77,78,79],true).is_empty(),"Opening scale was applied to an unsupported initial planet")
-	check(layout.arrange(79,10,[75,76,77,78,79],false).is_empty(),"Unverified planet placement became supported")
+	check(layout.arrange(79,3,[75,76,77,78,79],false).is_empty(),"Unverified planet placement became supported")
 
 func check(ok: bool, message: String) -> void:
 	checks+=1

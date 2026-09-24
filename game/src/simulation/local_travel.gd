@@ -1,4 +1,5 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
 ## Planet acquisition and the ordinary departure timer. The flight frame owns
 ## guidance, movement and preparation of the destination world.
 ## No mission, reward, current location or inventory changes during acquisition.
@@ -50,7 +51,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, equipment: RefCount
 	if not Definitions.navigation_mission(content,cursor,mission):return reject("Local travel requires the retained source-defined story objective")
 	var stations:=[]
 	for id in destinations:
-		if Definitions.free_local_navigation(content,cursor) and id!=seed.station_id and not load("res://src/content/free_navigation_definitions.gd").ordinary_departure_at(bindings,cursor,mission,id):continue
+		if Definitions.free_local_navigation(content,cursor) and id!=seed.station_id and not load("res://src/content/free_navigation_definitions.gd").destination_supported(bindings,cursor,mission,id):continue
 		if not Numbers.integer(id,0,catalogues.tables.stations.size()-1):return reject("Local destination is absent from the catalogue")
 		var row: Dictionary=catalogues.tables.stations[int(id)]
 		if not Definitions.location_supported(content,int(id),int(row.system_id),int(row.planet_type)):return reject("Local destination uses an unsupported environment")
@@ -64,7 +65,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, equipment: RefCount
 		duration=int(value);break
 	if not Numbers.integer(bindings.frame_clock.get("max_frame_milliseconds"),1,2147483647):return reject("Local travel needs the ordinary flight clock")
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
-	_rules=rules.duplicate(true);_stations=stations;_max_frame_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_rules=rules.duplicate(true);_stations=stations;_max_frame_ms=Frames.simulation_limit(bindings)
 	_state={"campaign_cursor":cursor,"station_id":int(seed.station_id),"system_id":int(seed.system_id),
 		"phase":"flight","candidate_station_id":-1,"acquired_station_id":-1,
 		"acquisition_ms":0,"acquisition_duration_ms":duration,"launch_ms":0,"destination_station_id":-1,"event_serial":0,"events":[]}
@@ -79,9 +80,11 @@ func target_position(station_id: int) -> Variant:
 
 func rebase_campaign(bindings: RefCounted,cursor: int,mission: Dictionary) -> bool:
 	error=""
-	if _state.get("phase")!="flight" or not load("res://src/content/free_campaign_definitions.gd").visit_at(bindings.mido_travel,_state.get("campaign_cursor"),_state.get("station_id")) or cursor!=int(bindings.mido_travel.suttnar_visit.next_cursor) or not Definitions.navigation_mission(bindings.mido_travel,cursor,mission):return reject("Local navigation lost its acknowledged campaign visit")
+	var campaign=load("res://src/content/free_campaign_definitions.gd")
+	var visit: Dictionary=campaign.dialogue_rules(bindings,_state.get("campaign_cursor"),campaign.mission(bindings.mido_travel,int(_state.get("campaign_cursor",-1))))
+	if _state.get("phase")!="flight" or not campaign.visit_at(bindings.mido_travel,_state.get("campaign_cursor"),_state.get("station_id")) or visit.is_empty() or cursor!=int(visit.next_cursor) or not Definitions.navigation_mission(bindings.mido_travel,cursor,mission):return reject("Local navigation lost its acknowledged campaign visit")
 	_state.campaign_cursor=cursor
-	_stations=Definitions.navigation_stations(bindings.mido_travel,cursor,_state.station_id).filter(func(id):return id==_state.station_id or load("res://src/content/free_navigation_definitions.gd").ordinary_departure_at(bindings,cursor,mission,id))
+	_stations=Definitions.navigation_stations(bindings.mido_travel,cursor,_state.station_id).filter(func(id):return id==_state.station_id or load("res://src/content/free_navigation_definitions.gd").destination_supported(bindings,cursor,mission,id))
 	if not _stations.has(_state.candidate_station_id):_state.candidate_station_id=-1;_state.acquisition_ms=0
 	if not _stations.has(_state.acquired_station_id):_state.acquired_station_id=-1
 	return true

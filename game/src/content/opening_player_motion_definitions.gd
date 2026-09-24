@@ -2,8 +2,11 @@ extends RefCounted
 ## Scripted forward player motion through the first ordinary handoff.
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Fonts = preload("res://src/content/font_definitions.gd")
+const Layouts = preload("res://src/content/declaration_layouts.gd")
 const VALUES := {"initial_scripted_flight":true,"scripted_ignores_throttle":true,"ordinary_motion_suppressed":true,"initial_update_enabled":true,"release_after_event_finished":8,"release_phase":4,"motion_before_controller":true}
 const SPANS := {"x86_64":{"player_before_weapons":[244328,40],"controller_call":[255610,5],"player_delta":[449268,7],"initial_scripted":[65,18],"scripted_setter":[440389,13],"initial_update_enabled":[428577,4],"update_gate":[449205,11],"scripted_gate":[454099,68],"scripted_travel":[454167,23],"ordinary_suppression":[456905,13],"release":[17756,46],"speed":[429564,27],"forward_helper":[-844729,42]},"armv7":{"player_before_weapons":[253418,40],"controller_call":[264340,4],"player_delta":[400308,4],"initial_scripted":[26,16],"scripted_setter":[394182,6],"constructor_zero":[384198,2],"initial_update_enabled":[384452,4],"update_gate":[400264,10],"scripted_gate":[404284,60],"scripted_travel":[404344,36],"ordinary_suppression":[406570,6],"release":[51082,48],"speed":[384956,20],"forward_helper":[-1191394,36]}}
+
+const MAC_ALTERNATE := {"player_before_weapons":[244051,40],"controller_call":[256122,5],"player_delta":[449804,7],"initial_scripted":[65,18],"scripted_setter":[440925,13],"initial_update_enabled":[429113,4],"update_gate":[449741,11],"scripted_gate":[454635,68],"scripted_travel":[454703,23],"ordinary_suppression":[457441,13],"release":[17756,46],"speed":[430100,27],"forward_helper":[-850625,42]}
 
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.size()!=VALUES.size()+1 or not data.get("provenance") is Dictionary: return false
@@ -28,8 +31,6 @@ static func validate(data: Variant, executable_bytes: int, architecture: String,
 	var initial: Variant=staging.get("provenance",{}).get("initial")
 	if not Fonts.extent(initial,"offset","bytes",[366 if architecture=="x86_64" else 320],executable_bytes): return "Scripted player motion lacks its staging anchor"
 	if data.provenance.size()!=SPANS[architecture].size(): return "Invalid scripted player motion provenance"
-	for key in SPANS[architecture]:
-		var rule: Array=SPANS[architecture][key]
-		var span: Variant=data.provenance.get(key)
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],executable_bytes) or int(span.offset)!=int(initial.offset)+int(rule[0]): return "Disconnected scripted player motion declaration"
-	return ""
+	var layouts: Array = [SPANS[architecture]]
+	if architecture=="x86_64":layouts.append(MAC_ALTERNATE)
+	return "" if Layouts.matches(data.provenance,int(initial.offset),executable_bytes,layouts) else "Disconnected scripted player motion declaration"

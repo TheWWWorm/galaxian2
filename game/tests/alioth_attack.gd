@@ -4,6 +4,8 @@ extends SceneTree
 const Bindings=preload("res://src/content/resource_bindings.gd")
 const Library=preload("res://src/content/library.gd")
 const Rules=preload("res://src/content/alioth_attack_definitions.gd")
+const ReturnRules=preload("res://src/content/alioth_return_definitions.gd")
+const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const Attack=preload("res://src/simulation/alioth_attack.gd")
 const Radio=preload("res://src/simulation/radio_sequence.gd")
@@ -43,6 +45,21 @@ func verify(content: String,pack: String) -> void:
 		var changed: Dictionary=bindings.mido_travel.duplicate(true)
 		changed.alioth_attack[key]=null
 		check(not Travel.parameters(changed),"Changed attack value accepted: "+key)
+	var alternate: bool=bindings.early_contracts.briefing_text_base==775
+	var mixed: Dictionary=bindings.mido_travel.duplicate(true)
+	mixed.alioth_attack=Rules.VALUES.duplicate(true) if alternate else Rules.MAC_VALUES.duplicate(true)
+	check(not Travel.parameters(mixed),"Mixed-source Alioth attack events were accepted")
+	if bindings.mido_travel.has("alioth_return"):
+		mixed=bindings.mido_travel.duplicate(true)
+		mixed.alioth_return=ReturnRules.VALUES.duplicate(true) if alternate else ReturnRules.MAC_VALUES.duplicate(true)
+		check(not Travel.parameters(mixed),"Mixed-source Alioth return events were accepted")
+		var docked:=OrdinaryFlight.station_return(bindings,17)
+		check(not docked.is_empty() and OrdinaryFlight.docking_parameters(docked),"Alioth return overlay failed its source-specific validator")
+		check(docked.events.map(func(event):return int(event.text_id))==range(1835 if alternate else 1821,1852 if alternate else 1838),"Actual docking selected another source's return dialogue")
+		check(docked.events==bindings.mido_travel.alioth_return.events,"Docking changed the source speakers or voice bindings")
+		var changed:=docked.duplicate(true)
+		changed.events[0].text_id=1821 if alternate else 1835
+		check(not OrdinaryFlight.docking_parameters(changed),"Mixed-source docking dialogue was accepted")
 	var resources:=Resources.new()
 	if not resources.prepare(library,bindings,null,16):check(false,resources.error);return
 	counts=resources.line_counts.duplicate()
@@ -68,7 +85,7 @@ func fresh_radio() -> RefCounted:
 
 func finish(radio: RefCounted,event: int,at: int,actors: Dictionary) -> int:
 	check(radio.step_alioth_attack(at+2000,actors).is_empty() and not radio.snapshot().visible,"Radio appeared at the strict delay boundary")
-	check(radio.step_alioth_attack(at+2001,actors)==[{"kind":"display","event":event,"text_id":1813+event}],"Original radio text did not appear")
+	check(radio.step_alioth_attack(at+2001,actors)==[{"kind":"display","event":event,"text_id":1813+event+(14 if bindings.early_contracts.briefing_text_base==775 else 0)}],"Original radio text did not appear")
 	var end:=at+2000+1500+2000*int(counts[event])
 	check(radio.step_alioth_attack(end,actors).is_empty() and not radio.snapshot().finished[event],"Radio finished at the strict duration boundary")
 	check(radio.step_alioth_attack(end+1,actors)==[{"kind":"finished","event":event}],"Original radio line did not finish once")
@@ -112,7 +129,7 @@ func verify_sequence() -> void:
 	var radio:=flags();var actors:=context()
 	check(advance(owner,100,radio,actors) and owner.snapshot().phase==0 and not owner.snapshot().input_blocked,"Untriggered attack removed player control")
 	var prior:=owner.snapshot()
-	for invalid in [-1,151,1.5]:check(not owner.advance(invalid,radio,actors,player_pose,portal_pose,random_state) and owner.snapshot()==prior,"Invalid frame changed attack")
+	for invalid in [-1,751 if not bindings.fast_forward.is_empty() else 151,1.5]:check(not owner.advance(invalid,radio,actors,player_pose,portal_pose,random_state) and owner.snapshot()==prior,"Invalid frame changed attack")
 	radio.started[0]=true
 	check(advance(owner,0,radio,actors),owner.error)
 	var first:=owner.snapshot()
@@ -183,7 +200,7 @@ func verify_clocked_sequence() -> void:
 		for event in radio.step_alioth_attack(now,actors):
 			if event.kind=="display":displayed.append(event.text_id)
 		if not radio.error.is_empty():check(false,radio.error);return
-	check(stages==[0,1,2,3,4,5,6] and displayed==[1813,1814,1815,1816,1817],"Clocked attack skipped a camera stage or original line")
+	check(stages==[0,1,2,3,4,5,6] and displayed==([1827,1828,1829,1830,1831] if bindings.early_contracts.briefing_text_base==775 else [1813,1814,1815,1816,1817]),"Clocked attack skipped a camera stage or original line")
 	check(owner.snapshot().completion_ready and owner.snapshot().campaign_cursor==16,"Clocked attack skipped the retained campaign owner")
 	print("Alioth source-layout clock: final radio/camera at %d ms; %s lines"%[now,str(counts)])
 

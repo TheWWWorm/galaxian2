@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Player DMG import worker. Reports progress and supports cooperative cancellation."""
+"""Player Mac import worker. Reports progress and supports cooperative cancellation."""
 import argparse
 import json
 import os
@@ -31,7 +31,7 @@ def write_status(path, record):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('dmg', type=Path)
+    parser.add_argument('source', type=Path, help='Mac .dmg file or extracted .app directory')
     parser.add_argument('--store', type=Path, required=True)
     parser.add_argument('--status', type=Path)
     parser.add_argument('--cancel-file', type=Path)
@@ -58,7 +58,7 @@ def main():
     signal.signal(signal.SIGINT, cancel)
     signal.signal(signal.SIGTERM, cancel)
     try:
-        receipt, record = prepare(args.dmg, args.store, checkpoint)
+        receipt, record = prepare(args.source, args.store, checkpoint)
         write_status(args.status, {'state': 'ready', 'message': 'Mac game is ready', 'receipt': str(receipt)})
         if args.status is None:
             print(json.dumps({'receipt': str(receipt), **record}, indent=2))

@@ -1,4 +1,5 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Shared native projectile pools for the verified ordinary NPC populations.
 ## The encounter owner decides who requests fire and when updates run. Target
 ## selection, shooter state, AI and mission consequences remain outside this owner.
@@ -150,6 +151,10 @@ func _configure_encounter_weapons(bindings: RefCounted,catalogues: RefCounted,da
 	_identity.campaign_cursor=int(data.campaign_cursor);_training=data
 	return true
 
+func _clear_story_targets() -> void:
+	_training=_training.duplicate()
+	_training.target_memberships=_training.target_memberships.map(func(_targets):return [])
+
 func apply_alioth_sequence(owner: RefCounted) -> bool:
 	error=""
 	if _alioth_revision<0 or not owner is AliothSequence:return reject("Alioth target changes require their retained weapon owner")
@@ -169,7 +174,7 @@ func apply_alioth_sequence(owner: RefCounted) -> bool:
 func _configure_rows(bindings: RefCounted, catalogues: RefCounted, rows: Array, cursor: int=-1) -> bool:
 	var guns:=[];var sounds:=[]
 	for data in rows:
-		if cursor in [11,12,13,14,16,18,19] and data.get("unarmed",false):guns.append(null);sounds.append({});continue
+		if cursor in ([11,12,13,14,16]+FlightStages.FREE) and data.get("unarmed",false):guns.append(null);sounds.append({});continue
 		var weapon:=_resolve_weapon(bindings,catalogues,data,cursor)
 		if weapon.is_empty():return false
 		var gun:=Projectiles.new()
@@ -200,7 +205,7 @@ func _resolve_weapon(bindings: RefCounted, catalogues: RefCounted, data: Diction
 		var properties: Dictionary=items[int(data.item_id)].get("properties",{})
 		var extra: Variant=properties.get(int(policy.get("additional_damage_property",-1)),int(policy.get("missing_additional_damage",0)))
 		if extra!=int(policy.get("missing_additional_damage",0)) or policy.is_empty():return fail("NPC weapon requires unsupported additional damage")
-		if cursor not in [7,10,11,12,13,14,16,18,19,21]:return fail("NPC contacts require an explicit supported encounter")
+		if cursor not in FlightStages.EQUIPPED:return fail("NPC contacts require an explicit supported encounter")
 		weapon.campaign_cursor=cursor
 		weapon.nonplayer_source=bool(data.nonplayer_source)
 		weapon.ordinary_hit_policy={"additional_damage":int(extra),"additional_damage_required":false,"nonplayer_damage":weapon.damage}
@@ -352,7 +357,9 @@ func evaluate_combat_training_update(player: RefCounted, pose: Variant, combat: 
 				gun=contact.projectiles;staged_player=contact.player;player_hits.append_array(contact.contacts)
 				if not contact.contacts.is_empty():last=contact.last_contact_actor
 			else:
-				var npc:=npc_contacts.evaluate(gun,staged_combat,[int(target)])
+				# Both owners were detached above. Keep the outer transaction's
+				# actors across target passes; a later failure discards them all.
+				var npc:=npc_contacts.evaluate_staged(gun,staged_combat,[int(target)])
 				if npc.is_empty():return fail(npc_contacts.error)
 				gun=npc.projectiles;staged_combat=npc.combat;npc_hits.append_array(npc.contacts)
 				if npc.last_contact_actor_id!=null:last={"group":"npc","index":npc.last_contact_actor_id}

@@ -1,9 +1,9 @@
 """Static ordinary local-arrival declarations, without executable payloads."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_free_arrival(mach, arrival):
-    proof=hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'augmenta_ordinary_arrival',
@@ -59,6 +59,36 @@ LAYOUTS = {'free_arrival_marker': [382634,
                                 '__text',
                                 '0f9a27951abc4649ee11912bd405691eeabe646f5e30faa689d964ba79547f03'],
  'free_arrival_hard_constant': [1545698,
+                                4,
+                                '__const',
+                                'c0e336a5f371ef22cd534e094269f2c1a9635cd080b71ffa671086832d3b60b7']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'free_arrival_marker': [383150, 133, '__text', '496b468c5b0b689ab4ae06e9be9c42c24ea62d4a9a5c9b02cf5a361a698402f5'],
+ 'free_arrival_ambush': [-19839, 241, '__text', 'cbd3789ad2e57cdd6591d0b136697b1b04b1e66201fb8ab76e96435d7f66d0ab'],
+ 'free_arrival_rank': [876982, 12, '__text', '1847659543b75281d1875a91cb669f7023d2e352208c89e5c69e2cc33a63d323'],
+ 'free_arrival_player_position': [562920,
+                                  14,
+                                  '__text',
+                                  '6b974b73bfd965f5b86686bff7eb833b826897ff281fc77648780734f535f38a'],
+ 'free_arrival_entity_position': [-730252,
+                                  26,
+                                  '__text',
+                                  'cdfdc367ae782b1b2c866a6baf2c66d3aef870696cfdeef3554f84dbc75f2600'],
+ 'free_arrival_matrix_position': [1234194,
+                                  96,
+                                  '__text',
+                                  '75a2032bb9fc753fff283f0ba674c5947d97ca4e3687d53eeb473f94c9105cca'],
+ 'free_arrival_position_scale': [1531910,
+                                 4,
+                                 '__const',
+                                 'ea2845900b5856c9bf354b1aa9761b5aa6888e5ed61738fe9579ca42bc0f6054'],
+ 'free_arrival_hard_mode': [873738, 34, '__text', '076648f688f537e222fb0b777cb3bce1534326a36c5b5004940cbeb4f3b451c3'],
+ 'free_arrival_other_systems': [873656,
+                                82,
+                                '__text',
+                                '0f9a27951abc4649ee11912bd405691eeabe646f5e30faa689d964ba79547f03'],
+ 'free_arrival_hard_constant': [1520682,
                                 4,
                                 '__const',
                                 'c0e336a5f371ef22cd534e094269f2c1a9635cd080b71ffa671086832d3b60b7']}

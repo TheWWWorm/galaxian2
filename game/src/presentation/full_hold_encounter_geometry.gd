@@ -1,4 +1,5 @@
 extends Node3D
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Original NPC hulls, lights, engines, cargo and effects. Each complete cast is
 ## prepared before drawing; lifetime and gameplay stay in the encounter owner.
 const Encounter=preload("res://src/simulation/full_hold_encounter.gd")
@@ -7,6 +8,7 @@ const Models=preload("res://src/presentation/model_resources.gd")
 const DeathEffect=preload("res://src/presentation/npc_death_effect_geometry.gd")
 const Projectiles=preload("res://src/presentation/projectile_geometry.gd")
 const Impacts=preload("res://src/presentation/ordinary_impact_geometry.gd")
+const Secondaries=preload("res://src/presentation/secondary_geometry.gd")
 const Pose=preload("res://src/presentation/opening_geometry.gd")
 const OrdinaryFlight=preload("res://src/content/ordinary_flight_definitions.gd")
 const FreightGeometry=preload("res://src/presentation/freighter_destruction_geometry.gd")
@@ -23,6 +25,7 @@ var cargo: Node3D
 var explosion: Node3D
 var projectiles: Node3D
 var impacts: Node3D
+var secondaries: Node3D
 var actors: Array=[]
 var _identity:={}
 var _library: RefCounted
@@ -34,7 +37,7 @@ func build(owner: RefCounted, library: RefCounted, visuals: RefCounted, bindings
 	if not owner is Encounter or owner.snapshot().is_empty():return fail("Prepare the ordinary encounter before its geometry")
 	var state: Dictionary=owner.snapshot()
 	if bindings==null or state.base_content_id!=bindings.base_content_id or state.binding_id!=bindings.binding_id:return fail("NPC geometry belongs to another content identity")
-	var local_traffic: bool=state.campaign_cursor in [10,11,12,13,14,16,18,19]
+	var local_traffic: bool=state.campaign_cursor in (FlightStages.LOCAL+FlightStages.POST_SAHI)
 	if local_traffic:
 		if not OrdinaryFlight.combat_population(bindings,state.combat):return fail("Unsupported local encounter population")
 	elif state.campaign_cursor not in [4,7] or state.combat.actors.size()!=(4 if state.campaign_cursor==7 else 1):return fail("Unsupported ordinary encounter population")
@@ -44,13 +47,13 @@ func build(owner: RefCounted, library: RefCounted, visuals: RefCounted, bindings
 			if not _build_debris(owner,id,actor,library,visuals,bindings):return false
 			continue
 		var ship_id: int=int(actor.hull_catalogue_id) if local_traffic else (30 if id==3 else 2)
-		if actor.actor_id!=id or actor.hull_catalogue_id!=ship_id or (state.campaign_cursor not in [13,14,16,18,19] and actor.actor_kind!=(3 if local_traffic or id==3 else 8)):return fail("Unsupported ordinary NPC model construction")
+		if actor.actor_id!=id or actor.hull_catalogue_id!=ship_id or (state.campaign_cursor not in FlightStages.FACTIONS and actor.actor_kind!=(3 if local_traffic or id==3 else 8)):return fail("Unsupported ordinary NPC model construction")
 		if actor.get("population_group") in ["freighter","capital"]:
 			if not _build_freighter(owner,id,actor,library,visuals,bindings):return false
 			continue
 		var exhaust: Dictionary
 		if local_traffic:
-			if state.campaign_cursor not in [13,14,16,18,19] and not bindings.mido_travel.departure_traffic.hull_candidates.any(func(value):return int(value)==ship_id):return fail("Unsupported local NPC hull")
+			if state.campaign_cursor not in FlightStages.FACTIONS and not bindings.mido_travel.departure_traffic.hull_candidates.any(func(value):return int(value)==ship_id):return fail("Unsupported local NPC hull")
 			var engine_id:=int(bindings.mido_travel.traffic_presentation.engine_model_base)+ship_id
 			exhaust={"id":engine_id,"path":bindings.resolve(engine_id,"mesh")}
 		else:exhaust=ENGINES[ship_id]
@@ -76,6 +79,9 @@ func build(owner: RefCounted, library: RefCounted, visuals: RefCounted, bindings
 	if not projectiles.build(owner.projectile_visual_owner(),library,visuals,bindings):return fail(projectiles.error)
 	impacts=Impacts.new();add_child(impacts)
 	if not impacts.build(owner.impact_visual_owner(),library,visuals,bindings):return fail(impacts.error)
+	if owner.has_secondaries():
+		secondaries=Secondaries.new();add_child(secondaries)
+		if not secondaries.build(owner.secondary_owner(),library,visuals,bindings):return fail(secondaries.error)
 	_identity={"base_content_id":state.base_content_id,"binding_id":state.binding_id,"campaign_cursor":state.campaign_cursor}
 	_library=library;_visuals=visuals;_bindings=bindings
 	return true
@@ -132,7 +138,7 @@ func _prepare_freighter(owner: RefCounted,actor: Dictionary,nodes: Dictionary,de
 func prepare_world(owner: RefCounted, camera: Transform3D, detail: Dictionary) -> Dictionary:
 	error=""
 	if _identity.is_empty() or not owner is Encounter:return failed("Build the NPC assemblies before presenting them")
-	var state: Dictionary=owner.snapshot()
+	var state: Dictionary=owner.presentation_snapshot()
 	for key in _identity:
 		if state.get(key)!=_identity[key]:return failed("NPC frame belongs to another encounter")
 	if state.combat.actors.size()!=actors.size():return failed("NPC population changed")
@@ -179,6 +185,10 @@ func prepare_world(owner: RefCounted, camera: Transform3D, detail: Dictionary) -
 	if hits.is_empty():return failed(impacts.error)
 	var result: Dictionary={} if prepared.is_empty() else prepared[0].duplicate(true)
 	result.merge({"actors":prepared,"shots":shots,"hits":hits})
+	if owner.has_secondaries()!=(secondaries!=null):return failed("EMP presentation lost its equipped owner")
+	if secondaries!=null:
+		result.secondaries=secondaries.prepare_world(owner.secondary_owner(),camera)
+		if result.secondaries.is_empty():return failed(secondaries.error)
 	return result
 
 func commit_world(frame: Dictionary) -> void:
@@ -200,10 +210,11 @@ func commit_world(frame: Dictionary) -> void:
 			if id==0:explosion=nodes.explosion
 		nodes.explosion.commit_effect(current.effect)
 	projectiles.commit_world(frame.shots);impacts.commit_world(frame.hits)
+	if secondaries!=null:secondaries.commit_world(frame.secondaries)
 
 func clear() -> void:
 	for child in get_children():child.free()
-	hull=null;engine=null;cargo=null;explosion=null;projectiles=null;impacts=null
+	hull=null;engine=null;cargo=null;explosion=null;projectiles=null;impacts=null;secondaries=null
 	actors=[];_identity={};_library=null;_visuals=null;_bindings=null;error=""
 func fail(message: String) -> bool:clear();error=message;return false
 func failed(message: String) -> Dictionary:error=message;return {}

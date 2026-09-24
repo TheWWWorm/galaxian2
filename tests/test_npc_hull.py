@@ -4,8 +4,12 @@ from types import SimpleNamespace
 from gof2_content import npc_hull as reader
 
 
-def fixture(arch, shift=0):
-    rows=reader.LAYOUTS[arch]
+def layouts():
+    return [*reader.LAYOUTS.items(), ('x86_64', reader.MAC_ALTERNATE)]
+
+
+def fixture(arch, shift=0, rows=None):
+    rows=reader.LAYOUTS[arch] if rows is None else rows
     low=min(v[0] for v in rows.values())-32
     high=max(v[0]+v[1] for v in rows.values())+32
     offset=128;bias=4096;base=0x400000+shift-low
@@ -27,27 +31,27 @@ def fixture(arch, shift=0):
 
 class NpcHullTests(unittest.TestCase):
     def test_profiles_relocation_and_data_only_output(self):
-        for arch in reader.LAYOUTS:
+        for arch,rows in layouts():
             for shift in [0,0x700000]:
-                m,a,*_=fixture(arch,shift);data=reader.extract_npc_hull(m,a)
+                m,a,*_=fixture(arch,shift,rows);data=reader.extract_npc_hull(m,a)
                 self.assertEqual({k:v for k,v in data.items() if k!='provenance'},reader.VALUES)
                 for key,span in data['provenance'].items():
                     self.assertEqual(set(span),{'offset','bytes'})
-                    self.assertEqual(span['offset'],a['npc_initialization']['provenance']['factory_entry']['offset']+reader.LAYOUTS[arch][key][0])
+                    self.assertEqual(span['offset'],a['npc_initialization']['provenance']['factory_entry']['offset']+rows[key][0])
 
     def test_every_changed_span_and_truncation(self):
-        for arch in reader.LAYOUTS:
-            m,a,offset,low=fixture(arch)
-            for key,(delta,_,_) in reader.LAYOUTS[arch].items():
+        for arch,rows in layouts():
+            m,a,offset,low=fixture(arch,rows=rows)
+            for key,(delta,_,_) in rows.items():
                 bad=copy.copy(m);raw=bytearray(m.data);raw[offset+delta-low]^=255;bad.data=bytes(raw)
                 self.assertFalse(reader.extract_npc_hull(bad,a),key)
             m.data=m.data[:offset+16]
             self.assertFalse(reader.extract_npc_hull(m,a))
 
     def test_fresh_context_and_section_boundaries(self):
-        for arch in reader.LAYOUTS:
+        for arch,rows in layouts():
             for key in ['world','cursor','population','hull','origin','size','section','arch','hull_setter','cursor_getter']:
-                m,a,*_=fixture(arch);npc=a['npc_initialization']
+                m,a,*_=fixture(arch,rows=rows);npc=a['npc_initialization']
                 if key=='world':npc['world_initialization']={}
                 elif key=='cursor':npc['world_initialization']['campaign_cursor']=1
                 elif key=='population':a['actors'].pop()

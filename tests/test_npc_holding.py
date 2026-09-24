@@ -8,7 +8,7 @@ from test_font_selection import expand
 from test_ship_models import branch
 
 
-def fixture(mac,shift=0):
+def fixture(mac,shift=0,alternate=False):
     m,actors,_,_,offset=base_fixture(mac,shift);data=bytearray(m.data)
     origin=m.text['address'];positions={};bases={'constructor':4000,'update':20000,'world':30000,'activation':36000}
     def extent(at,n):return {'offset':m.slice_offset+offset+at,'bytes':n}
@@ -18,6 +18,7 @@ def fixture(mac,shift=0):
         raw[p:p+n]=struct.pack('<i',destination-at-p-n) if mac else branch(origin+at+p,origin+destination)
         write(at,raw)
     for key,(base,delta,_,pattern) in reader.LAYOUTS[m.architecture].items():
+        if mac and alternate and key=='activation':pattern=reader.MAC_ACTIVATION_ALTERNATE
         at=bases[base]+delta;positions[key]=at
         if key=='range':linked(at,pattern,'getter',35500)
         else:write(at,expand(pattern)[0])
@@ -37,16 +38,16 @@ def fixture(mac,shift=0):
 
 class HoldingTests(unittest.TestCase):
     def test_both_relocated_layouts(self):
-        for mac in [False,True]:
+        for mac,alternate in [(False,False),(True,False),(True,True)]:
             for shift in [0,0x600000]:
-                m,a,p,_,_=fixture(mac,shift);result=reader.extract_npc_holding(m,a,p)
+                m,a,p,_,_=fixture(mac,shift,alternate);result=reader.extract_npc_holding(m,a,p)
                 self.assertTrue(result,(mac,shift))
                 self.assertEqual({k:v for k,v in result.items() if k!='provenance'},reader.VALUES)
                 self.assertEqual(len(result['provenance']),8)
 
     def test_corruption_and_missing_dependencies(self):
-        for mac in [False,True]:
-            m,a,p,positions,offset=fixture(mac)
+        for mac,alternate in [(False,False),(True,False),(True,True)]:
+            m,a,p,positions,offset=fixture(mac,alternate=alternate)
             for key,at in positions.items():
                 altered=copy.copy(m);data=bytearray(m.data);data[offset+at]^=255;altered.data=bytes(data)
                 self.assertFalse(reader.extract_npc_holding(altered,a,p),(mac,key))

@@ -1,23 +1,19 @@
 """Bounded cargo/return declarations; executable bytes are never runtime data."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 def extract_mining_objective(mach, arrival, flight, presentation, desktop, briefing):
     if mach.architecture!='x86_64' or flight.get('scope')!='first_mining_flight_construction':return {}
     if presentation.get('scope')!='first_station_presentation' or briefing.get('scope')!='first_mining_briefing':return {}
-    if [1708,1709] not in desktop.get('pairs',[]):return {}
     try:
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=section_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        # Shared presentation validates the complete text/voice lookup and the
-        # null mission actor: missing instruction lookup means no voice.
-        result=copy.deepcopy(VALUES);result['provenance']=proof
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts)
+        if not proof:return {}
+        values=MAC_VALUES if proof['mode1_events']['offset']==origin['offset']+MAC_ALTERNATE['mode1_events'][0] else VALUES
+        if values['desktop_instruction'] not in desktop.get('pairs',[]):return {}
+        result=copy.deepcopy(values);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
@@ -119,3 +115,99 @@ LAYOUTS = {'mode1_counts': [1555258, 12, '__const', '000000002600000006000000'],
                                '49817d50891300007c4541f6456a01753e488d059e7f1f00488b38e8605c07004889c7e87460000084c07523488d05837f1f00488b38e8455c07004889c7e86d60000084c075084c89efe89d240000498b7d60e82ecc02003c010f858f060000498b7d60e86137030084c00f857e060000'],
  'initial_player_mode': [550660, 7, '__text', 'c6838c01000000'],
  'player_mode_getter': [559186, 14, '__text', '554889e58a878c01000024015dc3']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'mode1_counts': [1530242, 12, '__const', '000000002600000006000000'],
+ 'mode1_events': [1521498, 24, '__const', '02000000b506000000000000b606000010000000b7060000'],
+ 'voice_events': [1536530, 16, '__const', 'b506000047010000b606000048010000'],
+ 'cargo_getter': [730596, 10, '__text', '554889e58b47105dc390'],
+ 'parameter_getter': [401090, 12, '__text', '554889e58b87900000005dc3'],
+ 'shown_getter': [401024, 10, '__text', '554889e58a470124015d'],
+ 'shown_setter': [401014, 10, '__text', '554889e5408877015dc3'],
+ 'cargo_dispatch': [875882, 4, '__text', '5dfaffff'],
+ 'cargo_predicate': [874423, 24, '__text', '498bbd00020000e821cefdff89c3e9500300008b45d43c01'],
+ 'cargo_compare': [875290, 22, '__text', '4c89ffe8a0c3f8ff39c30f8cdd000000e9f50100004c'],
+ 'cargo_success': [875812, 18, '__text', '4c89ffbe01000000e845c1f8ff4c89f8ebdf'],
+ 'poll_gate': [386369,
+               89,
+               '__text',
+               '49817f50891300007c0a41f68720010000017427488d05fefd1e00488b38e84c3507004889c7e86239000089c130c081f9aa0000000f8520090000488d05d7fd1e00488b38498b8798000000488b480831f631d2e8c2700700'],
+ 'poll_reset': [389260, 22, '__text', '48817b50891300000f8cf400000048c7435000000000'],
+ 'completion_order': [378043,
+                      73,
+                      '__text',
+                      '41f6456c017542498b7d60e8bbc8020084c0752b488d05841e1f00488b38e8e65507004889c7e88659000084c075104c89efe8e21f000084c00f85ed0800004c89efe8c4290000eb12'],
+ 'completion_dialogue_test': [387522,
+                              61,
+                              '__text',
+                              '488d0591f91e00488b38e8f33007004889c7e8033600003c010f8532040000488d0572f91e00488b38e8b430070089c7e8ef6defff3c010f8514040000'],
+ 'completion_dialogue_start': [387751,
+                               69,
+                               '__text',
+                               '498b9fb80000004d85f67512488d05a0f81e00488b38e8023007004989c64889df4c89f6ba01000000b9ffffffffe89268efff41c6476a0141c64769014c89ffe83648ffff'],
+ 'dialogue_mode': [-699428,
+                   52,
+                   '__text',
+                   '41c7476c000000004183feff7512488d05698f2f00488b38e8abc617004189c6458977204c89ff5b415c415e415f5de9f8030000'],
+ 'mission_next': [860483, 23, '__text', 'ffc041898678020000498b8e4802000049898e60010000'],
+ 'next_dispatch': [872046, 4, '__text', '72d5ffff'],
+ 'next_mission': [861144,
+                  49,
+                  '__text',
+                  'bf98000000e896fc09004889c34889dfbe0b00000031d2b94e000000e8a3f5f8ff4c89f74889dee80cfcffffe9242a0000'],
+ 'final_advance': [351990, 37, '__text', '4d89e54c89f7e8dbc00000488d0d52841f00488b3984c0740cbe01000000e8f9c10700eb38'],
+ 'final_reward': [352083,
+                  64,
+                  '__text',
+                  '488d0500841f004c8b204c89f7e825c0000089c34c89f7e843c000008d34184c89e7e874f107004d89ec498b842498000000c700000000004c89f7e849c00000'],
+ 'final_cleanup': [352666,
+                   122,
+                   '__text',
+                   '4584ff7565498bbc2490000000e89e6dfcff488d0557891f00488b30488d059d811f00488b38e8b3b80700498b7c246031f6e8472b0300498b7c2460e8b13603003c01750c498b7c246031f6e835350300498b7c2460e83f2b0300498bbc249000000031f6e820ddfbff4c89f7e8d0bd000084c00f85c40b0000'],
+ 'final_reset': [355800, 27, '__text', '49c744243800000000498bbc2488000000e8fc29f9ffe9afe5ffff'],
+ 'clock_initial': [337962,
+                   51,
+                   '__text',
+                   'c6436900c6436b0048c7435000000000c6830c01000000c6830901000000c6830801000000c6830a01000000c6830d01000000'],
+ 'clock_modal_gate': [364348, 11, '__text', '41f64569010f85480b0000'],
+ 'clock_increment': [364847, 19, '__text', '41f6456b010f85140400004963454849014550'],
+ 'controller_initial_hold': [121658, 5, '__text', '41c6471101'],
+ 'controller_initial_override': [121716, 5, '__text', '41c6471200'],
+ 'controller_release': [151090,
+                        87,
+                        '__text',
+                        '41817d30591b00000f8c0701000041c745300000000041c6452c0041c6452d01498b7d1831f6e87b960b00498b7d20e8744fffff488b38be01000000e8bfe7050041c6451100498b7d20e8594fffff4889c7be01000000'],
+ 'controller_return': [230755, 7, '__text', '418a4424112401'],
+ 'controller_clock_order': [378134, 24, '__text', '418a5d6b418b7548498bbd98000000e89658fcff4188456b'],
+ 'controller_override_clock': [378551, 14, '__text', 'f6401201740849c7455089130000'],
+ 'initial_briefing_dispatch': [376268,
+                               113,
+                               '__text',
+                               '49817d50891300007c4541f6456a01753e488d0576251f00488b38e8d85c07004889c7e87860000084c07523488d055b251f00488b38e8bd5c07004889c7e87160000084c075084c89efe8a1240000498b7d60e846cc02003c010f858f060000498b7d60e87937030084c00f857e060000'],
+ 'initial_player_mode': [551196, 7, '__text', 'c6838c01000000'],
+ 'player_mode_getter': [559722, 14, '__text', '554889e58a878c01000024015dc3']}
+MAC_VALUES = {'scope': 'first_mining_cargo_objective',
+ 'campaign_cursor': 2,
+ 'mission_kind': 154,
+ 'station_id': 78,
+ 'required_cargo': 10,
+ 'cargo_metric': 'total_used',
+ 'poll_minimum_ms': 5001,
+ 'max_frame_ms': 150,
+ 'initial_clock_held': False,
+ 'entry_controller_holds_clock': True,
+ 'idle_poll_discards_overshoot': True,
+ 'completion_opening_holds_camera': True,
+ 'mode': 1,
+ 'cursor_after_acknowledgement': 3,
+ 'next_kind': 11,
+ 'reward_credits': 0,
+ 'bonus_credits': 0,
+ 'station_return_required': True,
+ 'next_text_id': 179,
+ 'final_text_id': 180,
+ 'events': [{'speaker_id': 2, 'text_id': 1717, 'voice_event_id': 327},
+            {'speaker_id': 0, 'text_id': 1718, 'voice_event_id': 328},
+            {'speaker_id': 16, 'text_id': 1719, 'voice_event_id': -1}],
+ 'desktop_instruction': [1719, 1720],
+ 'key_tokens': ['#KEY_AUTOPILOT', '#KEY_DOCK']}

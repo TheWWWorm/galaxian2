@@ -1,9 +1,9 @@
 """Source-bound ordinary combat lifecycle parameters."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_free_lifecycle(mach, arrival):
-    proof=hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'augmenta_ordinary_lifecycle',
@@ -57,6 +57,31 @@ LAYOUTS = {'free_lifecycle_hostile': [807440,
                                    '__text',
                                    'c2c94f74f621ab82c7e3f52d5591f4be3f85c6de1c51a1837dcfe64034278a11'],
  'free_lifecycle_wreck_table': [638178,
+                                20,
+                                '__text',
+                                'de6e6debcec626d191654edde387c465fcd9775a9e266ee12caebb9ab3827d1c']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'free_lifecycle_hostile': [808072, 128, '__text', '209daf40d4ec5e88c1313c37445ee4a0ef33d73404653b3a058a617a037fae4d'],
+ 'free_lifecycle_friendly': [808200, 128, '__text', 'a32c7ef7f73abed32663bdf810d8affba26b4f3c3dccb168afc7abfaa939f8ed'],
+ 'free_lifecycle_secondary': [735306, 76, '__text', '433abfe7fa1b346202bfe1cb54dae5907afbb6497173385ce1b574fe8cfdde65'],
+ 'free_lifecycle_hostile_relaunch': [113209,
+                                     238,
+                                     '__text',
+                                     'b3a8e922f30a98bd6330df941a2e933975948f2222febc8c66c1e16b5d550f9c'],
+ 'free_lifecycle_nivelian_death': [80766,
+                                   17,
+                                   '__text',
+                                   '5eef5b6741b3d7c71f5ac05c0b0097e4a595c3c862a7cbbeb88a4dd0a23395be'],
+ 'free_lifecycle_wreck_kind': [634334,
+                               41,
+                               '__text',
+                               '8894666878ea18b59b5fa5e3ed9cdc8848525836630ce74a6568f68227cc7e35'],
+ 'free_lifecycle_wreck_material': [638272,
+                                   129,
+                                   '__text',
+                                   'c2c94f74f621ab82c7e3f52d5591f4be3f85c6de1c51a1837dcfe64034278a11'],
+ 'free_lifecycle_wreck_table': [638726,
                                 20,
                                 '__text',
                                 'de6e6debcec626d191654edde387c465fcd9775a9e266ee12caebb9ab3827d1c']}

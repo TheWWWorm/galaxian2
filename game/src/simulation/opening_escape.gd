@@ -62,7 +62,9 @@ func advance(delta_ms: Variant, radio: Dictionary, player_pose: Transform3D, pre
 				# All source Euler orders agree for this single-axis rotation.
 				var yaw:=float(_rules.entry_yaw)
 				var s:=single(sin(yaw));var c:=single(cos(yaw))
-				frame.player_pose_override=Transform3D(Basis(Vector3(c,0,s),Vector3.UP,Vector3(-s,0,c)),player_pose.origin)
+				# The source forward helper reads the Euler matrix's third column;
+				# positive yaw sends the logical ship toward positive X.
+				frame.player_pose_override=Transform3D(Basis(Vector3(c,0,-s),Vector3.UP,Vector3(s,0,c)),player_pose.origin)
 				next.eye=player_pose.origin+Poses.vec(_rules.entry_eye_offset)
 				refresh(next,frame)
 				frame.entry=true

@@ -285,7 +285,7 @@ def extract_font_selection(mach):
     if not mac and mach.architecture != 'armv7': return {}
     section = mach.text
     code = mach.data[section['offset']:section['offset'] + section['length']]
-    matches = [m for m in template(MAC if mac else ARM).finditer(code) if mac or m.start() % 2 == 0]
+    matches = [m for m in template((MAC, MAC_ALTERNATE) if mac else ARM).finditer(code) if mac or m.start() % 2 == 0]
     if len(matches) != 1: return {}
     match = matches[0]
     address = section['address'] + match.start()
@@ -296,7 +296,7 @@ def extract_font_selection(mach):
         def reference(key):
             end = next(end for group in MAC_REFS for name, end in group if name == key)
             return address + end + struct.unpack("<i", match[key])[0]
-        if reference("ref_10") != address + 554: return {}
+        if reference("ref_10") != address + len(match[0]) - 24: return {}
         profile_globals = {"medium": reference("ref_4e"), "large": reference("ref_5b"), "wide": reference("ref_17a")}
         targets = []
         for group in MAC_REFS + MAC_CALLS:
@@ -351,3 +351,9 @@ def extract_font_selection(mach):
             'overrides': [{'language_id': language, 'font_id': font} for language, font in zip([9, 10, 11, 14, 15], fonts[:5])],
             'spacing': {'default': normal, 'cjk': cjk, 'japanese': japanese},
             'source_offset': mach.slice_offset + section['offset'] + match.start(), 'source_bytes': len(match[0])}
+
+
+# Same dispatch and declarations; the newer Mac compiler uses a one-byte NOP
+# before the six-entry table. Each table displacement changes by exactly two.
+MAC_ALTERNATE = MAC.replace('0f1f00f6fdffff58feffffaafeffffd4feffffd4feffffbffeffff',
+                            '90f8fdffff5afeffffacfeffffd6feffffd6feffffc1feffff')

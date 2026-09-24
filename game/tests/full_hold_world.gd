@@ -41,7 +41,7 @@ func verify(args: PackedStringArray):
 		if world.dialogue_visible():break
 		if not step(100):return
 	var modal: Dictionary=world.snapshot()
-	check(modal.dialogue.get("text_id")==1716 and modal.encounter.elapsed_ms==modal.world_elapsed_ms,"Second trip lost its original entry line or weapon clock")
+	check(modal.dialogue.get("text_id")==int(bindings.full_hold_story.briefing_events[0].text_id) and modal.encounter.elapsed_ms==modal.world_elapsed_ms,"Second trip lost its original entry line or weapon clock")
 	check(modal.world_phase_elapsed_ms==modal.world_elapsed_ms-100 and modal.encounter.world_elapsed_ms==modal.world_phase_elapsed_ms,"Modal creation did not zero only the later world pass")
 	check(modal.encounter.controller.actors[0].guidance.selection_elapsed_ms<5001 and modal.random_state!=saved.random_state,"Dormant pirate selection did not share the retained world stream")
 	for i in 3:
@@ -58,10 +58,10 @@ func verify(args: PackedStringArray):
 		if world.dialogue_visible():break
 		if not step(100):return
 	var completion: Dictionary=world.snapshot()
-	check(completion.cargo.used==25 and completion.dialogue.get("text_id")==1717 and completion.campaign_cursor==4,"Full hold did not open its original warning before advancement")
+	check(completion.cargo.used==25 and completion.dialogue.get("text_id")==int(bindings.full_hold_story.completion_events[0].text_id) and completion.campaign_cursor==4,"Full hold did not open its original warning before advancement")
 	check(not completion.encounter.controller.appearance.applied and completion.mining_objective.reward_credits==0,"Completion opened the pirate early or paid a reward")
 	if not navigate():return
-	check(world.snapshot().dialogue.get("text_id")==1718,"Second full-hold warning was lost")
+	check(world.snapshot().dialogue.get("text_id")==int(bindings.full_hold_story.completion_events[1].text_id),"Second full-hold warning was lost")
 	if not navigate():return
 	var accepted: Dictionary=world.snapshot()
 	check(accepted.campaign_cursor==5 and accepted.mission.kind==11 and accepted.cargo.used==25 and not accepted.encounter.controller.appearance.applied,"Acknowledgement moved the pirate before the following logic pass")
@@ -126,7 +126,8 @@ func verify_atomicity():
 
 func verify_player_hit_order():
 	var retained: RefCounted=world
-	world=world.fork_for_frame()
+	var accepted: Dictionary=retained.snapshot()
+	world=Fixtures.fork_world_fixture(world)
 	# Explicit slot fixture at the NEXT player position. Contacts must use the
 	# moved player and the old projectile slot, before projectile advancement.
 	var muzzle: Vector3=world._pose.origin+world._pose.basis.z*200.0
@@ -167,13 +168,13 @@ func verify_player_hit_order():
 		else:
 			check(dead.player.vitals.hull==0 and dead.get("boundary")=="player_death_required","Lethal player contact continued an unsupported transition")
 			check(world.evaluate(100).snapshot()==dead and world.start_mining()==null and world.start_station_autopilot()==null and world.navigate("next")==null,"Unsupported death continued flight or campaign acknowledgement")
+	check(retained.snapshot()==accepted,"Positioned-shot fixture changed the accepted world")
 	world=retained
 
 func verify_world_order():
 	var accepted: Dictionary=world.snapshot()
-	var branch: RefCounted=world.fork_for_frame()
+	var branch: RefCounted=Fixtures.fork_world_fixture(world)
 	check(branch._encounter._combat.normal_hit(0,50).destroyed_now,"Ordered-death fixture failed to exhaust the pirate")
-	branch._scenery._bodies=branch._scenery._bodies.fork_for_frame()
 	check(branch._scenery._bodies.normal_hit(0,100000).destroyed_now,"Ordered-death fixture failed to exhaust its asteroid")
 	# Existing independently verified owners provide the source NPC-before-rock
 	# composition oracle. The reverse order must allocate different random data.

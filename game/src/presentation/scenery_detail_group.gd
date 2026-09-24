@@ -30,6 +30,7 @@ func configure(bindings: RefCounted, field: Dictionary, large_display: bool) -> 
 		if not selector.configure(distances,3,0,bindings.ship_lod.detail_boundaries,bindings.ship_lod.squared_distance_factors):return reject(selector.error)
 		selectors[index]=selector;positions[index]=row.position
 	if not _group.configure_selectors(bindings,selectors):return reject(_group.error)
+	positions.make_read_only()
 	_positions=positions
 	return true
 
@@ -49,7 +50,7 @@ func clear() -> void:
 
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted = get_script().new()
-	copy._group=_group.fork_for_frame();copy._positions=_positions.duplicate()
+	copy._group=_group.fork_for_frame();copy._positions=_positions
 	return copy
 
 func reject(message: String) -> bool:

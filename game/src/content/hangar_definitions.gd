@@ -57,12 +57,14 @@ static func select_row(data: Dictionary, station: Dictionary, system: Dictionary
 		return -1
 	return int(system.fields[field])
 
-static func validate_ship_placement(data: Variant, executable_bytes: int, architecture: String) -> String:
+static func validate_ship_placement(data: Variant, executable_bytes: int, architecture: String, catalogue_count: int = 0) -> String:
 	if not data is Dictionary:
 		return "Invalid ship placement definitions"
 	if data.is_empty():
 		return ""
-	var count := 64 if architecture == "armv7" else 61
+	var count := catalogue_count if catalogue_count > 0 else (64 if architecture == "armv7" else 61)
+	if count not in ([64] if architecture == "armv7" else [61, 64]):
+		return "Unsupported ship placement catalogue extent"
 	if not data.get("y_positions") is Array or data.y_positions.size() != count:
 		return "Ship placement table does not match this edition's catalogue"
 	for value in data.y_positions:
@@ -80,11 +82,13 @@ static func validate_ship_placement(data: Variant, executable_bytes: int, archit
 			return "Unsupported ship placement reader layout"
 	return ""
 
-static func validate_ship_lights(data: Variant, executable_bytes: int, architecture: String) -> String:
+static func validate_ship_lights(data: Variant, executable_bytes: int, architecture: String, catalogue_count: int = 0) -> String:
 	if not data is Dictionary:
 		return "Invalid ship light definitions"
 	if data.is_empty(): return ""
-	var count := 64 if architecture == "armv7" else 61
+	var count := catalogue_count if catalogue_count > 0 else (64 if architecture == "armv7" else 61)
+	if count not in ([64] if architecture == "armv7" else [61, 64]):
+		return "Unsupported ship light catalogue extent"
 	if not data.get("resource_ids") is Array or data.resource_ids.size() != count:
 		return "Ship light table does not match this edition's catalogue"
 	for row in data.resource_ids:

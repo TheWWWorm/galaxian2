@@ -74,7 +74,7 @@ func actors() -> Dictionary:
 
 func finish(radio: RefCounted,event: int,at: int,context: Dictionary) -> int:
 	check(radio.step_kappa_rescue(at+2000,context).is_empty() and not radio.snapshot().visible,"Radio appeared at the delay equality")
-	check(radio.step_kappa_rescue(at+2001,context)==[{"kind":"display","event":event,"text_id":1856+event}],"Radio displayed the wrong original line")
+	check(radio.step_kappa_rescue(at+2001,context)==[{"kind":"display","event":event,"text_id":int(bindings.mido_travel.kappa_rescue.radio_events[event].text_id)}],"Radio displayed the wrong original line")
 	var end:=at+3500+2000*int(counts[event])
 	check(radio.step_kappa_rescue(end,context).is_empty() and not radio.snapshot().finished[event],"Radio finished at duration equality")
 	check(radio.step_kappa_rescue(end+1,context)==[{"kind":"finished","event":event}],"Radio did not finish once")
@@ -84,6 +84,12 @@ func verify_sequence() -> void:
 	var radio:=fresh_radio();var context:=targets();var cast:=actors();var owner:=Rescue.new()
 	check(owner.configure(bindings),owner.error)
 	check(owner.advance(radio,cast) and not owner.snapshot().failure_ready and owner.snapshot().force_hostile_actor_ids.is_empty(),"Dormant actors failed or activated the rescue")
+	check(owner.poll_outcome(true).is_empty() and owner.poll_outcome(false).is_empty(),"An unready rescue fabricated an outcome")
+	var unconfigured:=Rescue.new()
+	check(unconfigured.poll_outcome(true).is_empty() and not unconfigured.error.is_empty(),"Unconfigured rescue accepted an outcome poll")
+	var failed_cast:=cast.duplicate(true);failed_cast.actors[0].actor_mode=4
+	var failure_branch: RefCounted=owner.fork()
+	check(failure_branch.advance(radio,failed_cast) and failure_branch.poll_outcome(true)=="failed" and failure_branch.poll_outcome(false)=="failed","Failure incorrectly waited for completion polling or fabricated success")
 	var before:=owner.snapshot();var branch: RefCounted=owner.fork()
 	cast.actors[2].hostile=true
 	check(branch.advance(radio,cast) and branch.snapshot().force_hostile_actor_ids==[1,2,3] and branch.snapshot().phase==0 and owner.snapshot()==before,"Escort provocation altered the wrong group or parent")
@@ -114,6 +120,12 @@ func verify_sequence() -> void:
 	check(owner.advance(radio,cast) and not owner.snapshot().failure_ready,"Breakup bypassed the source retirement condition")
 	cast.actors[0].actor_mode=4
 	check(owner.advance(radio,cast) and owner.snapshot().failure_ready,"Retired kidnapper failed to report mission failure")
+	var ready: Dictionary=owner.snapshot()
+	check(owner.poll_outcome(true)=="completed","Simultaneous completion and failure lost the original completion-first priority")
+	check(owner.poll_outcome(false)=="failed","A gated completion incorrectly suppressed an immediately eligible failure")
+	check(owner.snapshot()==ready and owner.snapshot().campaign_cursor==21,"Prospective outcome polling changed observations or earned progress")
+	var prospective: RefCounted=owner.fork()
+	check(prospective.poll_outcome(true)=="completed" and prospective.snapshot()==ready and owner.snapshot()==ready,"Forked outcome selection mutated the accepted encounter")
 	before=owner.snapshot();cast.actors[0].hull_catalogue_id=5
 	check(not owner.advance(radio,cast) and owner.snapshot()==before,"Changed cast partly committed rescue state")
 	cast=actors();before=owner.snapshot()

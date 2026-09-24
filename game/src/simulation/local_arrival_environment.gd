@@ -13,15 +13,19 @@ func configure(bindings: RefCounted,catalogues: RefCounted,station_id: int,locat
 	if not Definitions.location_supported(bindings,catalogues,station_id,cursor) or not locations is Cache:return reject("Local arrival requires matching ordinary scenery and retained locations")
 	var cache: Dictionary=locations.snapshot()
 	if cache.get("base_content_id")!=bindings.base_content_id or cache.get("binding_id")!=bindings.binding_id or cache.get("current_station_id")!=station_id:return reject("Local arrival locations do not select this destination")
+	var cache_index:=int(bindings.mido_travel.local_arrival_environment.arrival.cache_index)
+	var cached_station: int=int(cache.locations[cache_index].station_id) if cache.locations.size()>cache_index else -1
+	if not _configure_selected(bindings,catalogues,station_id,cursor,cached_station,cache.locations.size()>cache_index):return false
+	_state.location_order=cache.locations.map(func(entry):return int(entry.station_id))
+	return true
+
+func _configure_selected(bindings: RefCounted,catalogues: RefCounted,station_id: int,cursor: int,cached_station: int,has_cached_planet: bool) -> bool:
 	var gates:=Gates.new()
 	if not gates.configure(bindings,catalogues,station_id):return reject(gates.error)
 	var planets:=Planets.new();var layout:=planets.for_lounge(bindings,catalogues,station_id,cursor)
 	if layout.is_empty():return reject(planets.error)
 	var rules: Dictionary=bindings.mido_travel.local_arrival_environment.arrival
 	var gate_state: Dictionary=gates.snapshot()
-	var cache_index:=int(rules.cache_index)
-	var has_cached_planet: bool=cache.locations.size()>cache_index
-	var cached_station: int=int(cache.locations[cache_index].station_id) if has_cached_planet else -1
 	var position:=Vector3.ZERO;var facing:=false;var source:="gate";var planet_index:=-1
 	if station_id==int(gate_state.gate_station_id) or not has_cached_planet:
 		var incoming: Variant=gates.arrival_position()
@@ -42,7 +46,6 @@ func configure(bindings: RefCounted,catalogues: RefCounted,station_id: int,locat
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":cursor,
 		"station_id":station_id,"system_id":int(layout.system_id),"position":position,"face_origin":facing,
 		"source":source,"cache_station_id":cached_station,"planet_index":planet_index,
-		"location_order":cache.locations.map(func(entry):return int(entry.station_id)),
 		"planets":layout,"gates":gate_state}
 	return true
 

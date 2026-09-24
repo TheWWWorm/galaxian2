@@ -1,9 +1,12 @@
 extends RefCounted
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 ## A rescue world profile composed with the shared source initialization proof.
 const Declarations=preload("res://src/content/opening_escape_definitions.gd")
 const Fonts=preload("res://src/content/font_definitions.gd")
 const VALUES := {"scope":"rescue_world_initialization","campaign_cursor":1,"world_type":3,"actor_count":1,"quest_kind":11,"quest_scripted":true,"requires_empty_companions":true,"requires_ordinary_location":true,"requires_campaign_mode":true,"center_random_bound":100000,"center_offsets":[-50000,-50000,20000],"center_after_station_count":true,"reseed_before_field":true,"weapon_item_sequence":[0,25],"weapon_effect_sequence":[14600,14606],"weapon_kind":0,"projectile_visual_id":6802,"weapon_effect_capacity":4,"weapon_effect_random_bound":2,"zero_means_flipped":true}
 const SPANS := {"x86_64":{"quest_wrapper":[399256,10],"quest_arguments":[399283,12],"quest_fields":[399346,28],"quest_scripted":[399523,45],"quest_absent":[400436,14],"quest_scripted_getter":[400856,16],"world_scripted_gate":[-42348,96],"world_scripted_loader":[-42120,91],"center":[-35100,664],"npc_weapon_enabled":[607329,30],"weapon_kind_dispatch":[57456,56],"weapon_kind_table":[58994,44],"rescue_weapon":[55980,24],"cursor_getter":[858156,12],"effect_model_25":[1572942,4]},"armv7":{"quest_wrapper":[408846,16],"quest_arguments":[408362,8],"quest_fields":[408476,26],"quest_scripted":[408628,24],"quest_absent":[409546,16],"quest_scripted_getter":[409682,12],"world_scripted_gate":[-40978,88],"world_scripted_loader":[-40692,80],"center":[-33840,558],"npc_weapon_enabled":[547464,24],"weapon_kind_dispatch":[52314,30],"weapon_kind_table":[52344,11],"rescue_weapon":[52744,18],"cursor_getter":[798162,8],"effect_model_25":[2459150,4]}}
+
+const MAC_ALTERNATE := {"quest_wrapper":[399772,10],"quest_arguments":[399799,12],"quest_fields":[399862,28],"quest_scripted":[400039,45],"quest_absent":[400952,14],"quest_scripted_getter":[401372,16],"world_scripted_gate":[-42348,96],"world_scripted_loader":[-42120,91],"center":[-35100,664],"npc_weapon_enabled":[607877,30],"weapon_kind_dispatch":[57456,56],"weapon_kind_table":[58994,44],"rescue_weapon":[55980,24],"cursor_getter":[858788,12],"effect_model_25":[1548006,4]}
 
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.size()!=VALUES.size()+1 or not data.get("provenance") is Dictionary:return false
@@ -26,7 +29,6 @@ static func validate(data: Variant, bytes: int, arch: String, arrival: Dictionar
 	var origin: Variant=arrival.get("provenance",{}).get("actor")
 	if not Fonts.extent(origin,"offset","bytes",[315 if arch=="x86_64" else 310],bytes):return "Rescue world initialization lacks its actor anchor"
 	if data.provenance.size()!=SPANS[arch].size():return "Invalid rescue world initialization provenance"
-	for key in SPANS[arch]:
-		var span: Variant=data.provenance.get(key);var rule: Array=SPANS[arch][key]
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],bytes) or int(span.offset)!=int(origin.offset)+int(rule[0]):return "Invalid rescue world initialization extent: "+key
-	return ""
+	var layouts: Array=[SPANS[arch]]
+	if arch=="x86_64":layouts.append(MAC_ALTERNATE)
+	return "" if Layouts.matches(data.provenance,int(origin.offset),bytes,layouts) else "Disconnected rescue world initialization declaration"

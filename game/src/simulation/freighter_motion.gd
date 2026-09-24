@@ -34,7 +34,7 @@ func configure(bindings: RefCounted,construction: RefCounted,actor_id: Variant) 
 		"actor_id":int(actor_id),"actor_kind":actor.actor_kind,"hull_catalogue_id":actor.hull_catalogue_id,
 		"body_pose":actor.body_pose,"statistics_pose":actor.statistics_pose,
 		"source_position":Vector3i(actor.body_pose.origin),"elapsed_motion_ms":0}
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
 	return true
 
 func configure_convoy(bindings: RefCounted,actor_id: Variant) -> bool:
@@ -56,7 +56,7 @@ func configure_convoy(bindings: RefCounted,actor_id: Variant) -> bool:
 		"body_pose":pose,"statistics_pose":pose,"source_position":Vector3i(position),"elapsed_motion_ms":0,
 		"convoy_ship":true,"cruise_enabled":bool(data.motion.initial_cruise_enabled),
 		"capture_actor_id":int(data.motion.capture_actor_id),"capture_phase":Capture.Stage.INTERCEPTION}
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
 	return true
 
 func configure_alioth_attack(bindings: RefCounted,construction: RefCounted,actor_id: Variant) -> bool:
@@ -71,7 +71,16 @@ func configure_alioth_attack(bindings: RefCounted,construction: RefCounted,actor
 		"actor_id":actor_id,"actor_kind":row.actor_kind,"hull_catalogue_id":row.hull_catalogue_id,
 		"body_pose":row.body_pose,"statistics_pose":row.statistics_pose,"source_position":Vector3i(row.body_pose.origin),
 		"elapsed_motion_ms":0,"cruise_enabled":row.cruise_enabled}
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
+	return true
+
+func _configure_story(bindings: RefCounted,data: Dictionary,row: Dictionary) -> bool:
+	clear()
+	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(data.campaign_cursor),
+		"actor_id":row.actor_id,"actor_kind":row.actor_kind,"hull_catalogue_id":row.hull_catalogue_id,
+		"body_pose":row.body_pose,"statistics_pose":row.statistics_pose,"source_position":Vector3i(row.body_pose.origin),
+		"elapsed_motion_ms":0,"cruise_enabled":row.cruise_enabled}
+	_max_ms=Frames.simulation_limit(bindings)
 	return true
 
 func apply_capture(capture: RefCounted) -> bool:
@@ -100,6 +109,16 @@ func update(delta_ms: Variant,movement_enabled: Variant) -> bool:
 	_state.source_position.z+=int(delta_ms)
 	_state.elapsed_motion_ms+=int(delta_ms)
 	return true
+
+func source_position() -> Vector3i:return _state.source_position
+
+## The tractor uses the freighter's retained integer origin, not the model's
+## fractional cruise position. Commit it alongside the same recovery frame.
+func _retain_recovery_frame(frame: Dictionary) -> void:
+	var changes: Dictionary=frame.actor_changes
+	if changes.has("freighter_position"):
+		_state.source_position=changes.freighter_position
+		_state.body_pose=changes.body_pose;_state.statistics_pose=changes.statistics_pose
 
 func snapshot() -> Dictionary:return _state.duplicate(true)
 

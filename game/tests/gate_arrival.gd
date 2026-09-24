@@ -109,7 +109,7 @@ func after_local_journeys(original: Dictionary,_initial_stock: Dictionary) -> vo
 	check(not construction.prepare_gate_arrival(definitions,catalogue,transit,frame._player,frame._equipment,4096,1789100000,true,bodies,effects,objective,invalid) and construction.snapshot()==arrived,"Missing earned history was silently initialized during travel")
 	check(frame.snapshot()==before and career.snapshot()==retained and transit.snapshot()==completed,"Rejected arrival changed the live departure")
 	var prospective:=FlightFrame.new()
-	if not prospective.configure(definitions,catalogue,source,construction,"E",0.5,Vector2i(1280,720),false,false,"P"):check(false,prospective.error);return
+	if not prospective.configure(definitions,catalogue,source,construction,"F",0.5,Vector2i(1280,720),false,false,"Q"):check(false,prospective.error);return
 	check(prospective.snapshot().location.station_id==70 and prospective.snapshot().contracts.travel_statistics.jumpgates_used==1,"Destination frame lost its committed gate career")
 	check(prospective.snapshot().mission==original.mission and prospective.snapshot().arrival_from_station_id==95 and prospective.snapshot().player_pose.origin==arrived.departure.arrival_environment.position,"Destination frame activated pending story or lost incoming placement")
 	if not app.enter_gate_arrival(now_us,4096,1789100000):check(false,app.status.text);return
@@ -127,7 +127,7 @@ func gate_key_event(code: int,pressed: bool) -> InputEventKey:
 	var event:=InputEventKey.new();event.physical_keycode=code;event.pressed=pressed;return event
 
 func choose_gate_course(from_system:=19,to_system:=14,destination:=70,label:="gate-course") -> bool:
-	app._unhandled_input(gate_key_event(KEY_M,true))
+	check(choose_free_keyboard_flight_action(KEY_E,"map"),"E action menu did not open the map")
 	check(app.session.map_active() and app.map_panel.snapshot().system_id==from_system,"Keyboard map did not retain the current system")
 	if failures:return false
 	var frozen: Dictionary=app.session.snapshot()
@@ -178,16 +178,24 @@ func reach_gate_confirmation() -> bool:
 	var coasting:=false
 	for tick in 1800:
 		if app.session.status!="running":break
+		resume_application_focus()
 		now_us+=100000
 		if not app.session.step(now_us):check(false,app.session.error);return false
-		coasting=coasting or app.session.snapshot().gate_transit.coasting
+		var frame: Dictionary=app.session.snapshot()
+		if frame.player.vitals.hull<=0:
+			check(false,"Gate approach was destroyed: "+str({"station":frame.location.station_id,"clock":frame.world_elapsed_ms,"vitals":frame.player.vitals,"pose":frame.player_pose.origin}))
+			await capture_free_application("gate-approach-destroyed")
+			return false
+		coasting=coasting or frame.gate_transit.coasting
 		if tick%100==0:await process_frame
 	app.present_session()
-	check(app.session.status=="gate_confirmation_required" and coasting,"Actual gate guidance did not coast into its source confirmation")
+	var observed: Dictionary=app.session.snapshot()
+	var guide: Dictionary=observed.station_autopilot
+	check(app.session.status=="gate_confirmation_required" and coasting,"Actual gate guidance did not coast into its source confirmation: "+str({"status":app.session.status,"station":observed.location.station_id,"coasting":coasting,"phase":observed.gate_transit.phase,"player":observed.player_pose.origin,"guidance":guide.player_pose.origin,"target":guide.target_position,"vitals":observed.player.vitals,"world_ms":observed.world_elapsed_ms}))
 	return failures==0
 
 func capture_gate_interface_mobile(label: String) -> void:
-	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.set_touch_controls(true)
+	root.size=Vector2i(960,540);app.set_mobile_layout(true);TouchInput.set_preference(app,true)
 	for tick in 3:await process_frame
 	resume_application_focus();app.present_session()
 	if app.gate_panel.visible:

@@ -2,6 +2,7 @@ extends Control
 ## Original route marker art with native distance text. Arrival belongs to the
 ## flight owner; projecting or resizing the HUD never advances the route.
 const Story=preload("res://src/content/combat_training_story_definitions.gd")
+const Rescue=preload("res://src/content/kappa_rescue_definitions.gd")
 const Atlas=preload("res://src/content/atlas_region.gd")
 const TargetFrame=preload("res://src/presentation/flight_target_frame.gd")
 const TargetProjection=preload("res://src/presentation/target_projection.gd")
@@ -15,12 +16,14 @@ var _quarter_size:=Vector2.ZERO
 var _textures:={}
 var _sample:={}
 var _mobile:=false
+var _cursor:=7
 
 func _init() -> void:
 	mouse_filter=Control.MOUSE_FILTER_IGNORE;clip_contents=true;visible=false
 
-func prepare(library: RefCounted, bindings: RefCounted, visuals: RefCounted) -> bool:
+func prepare(library: RefCounted, bindings: RefCounted, visuals: RefCounted, cursor:=7) -> bool:
 	error=""
+	if cursor!=7 and (cursor!=21 or not Rescue.available(bindings)):return reject("This flight has no supported authored player route")
 	var rules:=Story.navigation(bindings)
 	if rules.is_empty() or visuals==null or visuals.base_content_id!=bindings.base_content_id:return reject("Waypoint art requires its supported source profile")
 	var frame:=TargetFrame.source_geometry(library,bindings)
@@ -35,7 +38,8 @@ func prepare(library: RefCounted, bindings: RefCounted, visuals: RefCounted) -> 
 		textures[name]=texture
 	_rules=rules;_textures=textures;_quarter_size=frame.quarter_size
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
-	_points=bindings.combat_training.waypoints.map(func(point):return Vector3(point[0],point[1],point[2]))
+	var points: Array=bindings.mido_travel.kappa_rescue.population.waypoints if cursor==21 else bindings.combat_training.waypoints
+	_points=points.map(func(point):return Vector3(point[0],point[1],point[2]));_cursor=cursor
 	_perspective=bindings.flight_projection.duplicate(true);_sample={};visible=false
 	return true
 
@@ -45,7 +49,7 @@ func present(route: Dictionary, camera: Transform3D, viewport: Vector2i, hud_ena
 	if route.is_empty():_sample={};visible=false;queue_redraw();return true
 	for key in _identity:
 		if route.get(key)!=_identity[key]:return reject("Waypoint route belongs to another flight")
-	if route.get("owner")!="player" or route.get("campaign_cursor")!=7 or route.get("loop")!=false or route.get("waypoints")!=_points or not Numbers.integer(route.get("index"),0,_points.size()) or route.get("completed")!=(route.index==_points.size()):return reject("Unsupported player waypoint route")
+	if route.get("owner")!="player" or route.get("campaign_cursor")!=_cursor or route.get("loop")!=false or route.get("waypoints")!=_points or not Numbers.integer(route.get("index"),0,_points.size()) or route.get("completed")!=(route.index==_points.size()):return reject("Unsupported player waypoint route")
 	var sample:={"visible":false,"index":route.index}
 	if route.index<_points.size():
 		var projection:=TargetProjection.new()

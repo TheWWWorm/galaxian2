@@ -1,4 +1,5 @@
 extends RefCounted
+const Readonly=preload("res://src/simulation/readonly_state.gd")
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
@@ -50,12 +51,12 @@ func _configure_motion(bindings: RefCounted, resources: RefCounted, actor_id: in
 	var clock:=Explosion.create(effect,fragments,int(parameters.fragment_model_id))
 	if clock.is_empty():return reject("Invalid retained NPC fragments or animation ranges")
 	_parameters=parameters.duplicate(true)
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"actor_id":actor_id,
 		"phase":"ready","mode":-1,"pose":pose,"forward":pose.basis.z,"speed":Vitals.single(speed),
 		"spin":Vector3.ZERO,"countdown_ms":0,"cleanup_elapsed_ms":0,
 		"drift_speed":0.0,"drift_direction":Vector3.ZERO,"fragments":fragments.duplicate(true),
-		"effect":clock}
+		"effect":clock,"retire_on_transfer":true}
 	_presentation_identity=RefCounted.new()
 	return true
 
@@ -144,6 +145,10 @@ func configure_kappa_rescue(bindings: RefCounted,resources: RefCounted,construct
 	if not construction is Construction or not resources is Resources:return reject("Kappa death requires its generated population and resources")
 	var packet: Dictionary=construction.snapshot()
 	return _configure_fighter(bindings,resources,packet,actor,Kappa.lifecycle(bindings,packet),"kappa_context")
+
+func _configure_story(bindings: RefCounted,resources: RefCounted,packet: Dictionary,actor: Dictionary,data: Dictionary) -> bool:
+	clear()
+	return _configure_fighter(bindings,resources,packet,actor,data,data.context_key)
 
 func _configure_fighter(bindings: RefCounted,resources: RefCounted,packet: Dictionary,actor: Dictionary,data: Dictionary,context_key: String) -> bool:
 	var id: Variant=actor.get("actor_id")
@@ -268,12 +273,16 @@ func advance(delta_ms: Variant, random_state: Variant) -> Dictionary:
 			sounds.append(int(_parameters.death_sound))
 			audio_events.append({"source_id":int(_parameters.death_sound),"position":next.pose.origin})
 		if next.phase=="tumble":
+			next.retire_on_transfer=false
 			var preceding_position: Vector3=next.pose.origin
 			if delta_ms>0:
 				# Native local X/Y/Z composition, once per source update. Spin is
 				# independent of elapsed time; the captured travel direction is not.
 				var spin: Vector3=next.spin
-				next.pose.basis=next.pose.basis*Vectors.local_xyz(spin)
+				# Source-style spin is applied once per update. Repeated small frames
+				# accumulate float error, so keep the native rigid hull transform
+				# orthonormal for combat and particle consumers.
+				next.pose.basis=(next.pose.basis*Vectors.local_xyz(spin)).orthonormalized()
 			next.pose.origin=Vectors.added(next.pose.origin,Vectors.scaled(Vectors.scaled(next.forward,Vitals.single(float(delta_ms))),next.speed))
 			next.countdown_ms-=delta_ms
 			if next.countdown_ms<0:
@@ -312,6 +321,11 @@ func advance(delta_ms: Variant, random_state: Variant) -> Dictionary:
 					if moving:
 						next.cargo.model_exists=false;next.cleanup_elapsed_ms=0
 					next.phase="retired";retired=true
+					next.retire_on_transfer=true
+				elif not moving and not next.effect.active:
+					# An inactive effect with no positive cargo-motion pass arms
+					# immediate transfer retirement even before the 60s cleanup.
+					next.retire_on_transfer=true
 	if not next.pose.is_finite() or not next.spin.is_finite() or not next.drift_direction.is_finite(): return fail("NPC death exceeded source coordinate precision")
 	if not _cargo_rules.is_empty() and (not next.statistics_pose.is_finite() or not next.cargo.pose.is_finite()):return fail("NPC cargo exceeded source coordinate precision")
 	_state=next
@@ -326,14 +340,27 @@ func random_direction(random: RefCounted) -> Vector3:
 func snapshot() -> Dictionary:
 	return _state.duplicate(true)
 
+## The enclosing encounter computed this frame from this live wreck and the
+## native tractor. Its prospective branch owns all mutations and rollback.
+func _retain_recovery_frame(frame: Dictionary) -> void:
+	var changes: Dictionary=frame.actor_changes
+	if changes.has("body_pose"):_state.pose=changes.body_pose
+	if changes.has("statistics_pose"):_state.statistics_pose=changes.statistics_pose
+	if changes.has("cargo_pose"):_state.cargo.pose=changes.cargo_pose
+	if changes.has("cargo_model_exists"):_state.cargo.model_exists=changes.cargo_model_exists
+	if changes.has("cargo_eligible"):_state.cargo.eligible=changes.cargo_eligible
+	if changes.has("cargo_entries"):_state.cargo.entries=changes.cargo_entries.duplicate(true)
+	if changes.has("active") and not changes.active:_state.phase="retired"
+
 func presentation_identity() -> RefCounted:
 	return _presentation_identity
 
 func fork_for_frame() -> RefCounted:
+	# Configuration is fixed after preparation; detach live state only.
 	var copy: RefCounted=get_script().new()
-	copy._parameters=_parameters.duplicate(true);copy._state=_state.duplicate(true);copy._max_ms=_max_ms
+	copy._parameters=Readonly.freeze(_parameters);copy._state=_state.duplicate(true);copy._max_ms=_max_ms
 	copy._presentation_identity=_presentation_identity
-	copy._cargo_rules=_cargo_rules.duplicate(true)
+	copy._cargo_rules=Readonly.freeze(_cargo_rules)
 	return copy
 
 func clear() -> void:

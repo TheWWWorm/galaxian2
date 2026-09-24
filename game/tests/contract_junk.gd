@@ -8,6 +8,8 @@ var _junk_populations:=0
 var _junk_drops:=0
 var _junk_empty:=0
 var _junk_deadlines:=false
+var _junk_recovered:=0
+var _junk_recovery_checks:=0
 
 func after_encounter_population(bindings: RefCounted,cat: RefCounted,owner: RefCounted,vector: Dictionary,equipment: RefCounted,contracts: RefCounted) -> void:
 	super.after_encounter_population(bindings,cat,owner,vector,equipment,contracts)
@@ -77,6 +79,7 @@ func after_encounter_population(bindings: RefCounted,cat: RefCounted,owner: RefC
 	check(totals.debris_destroyed==count and totals.hostile_remaining==-count,"Junk lost its distinct destruction counter")
 	for key in ["hostile_deaths","world_player_kills","world_other_kills","player_kills","pirate_kills","nonhostile_remaining"]:check(totals[key]==0,"Debris incorrectly changed "+key)
 	check(destroyed.random_state.state==int(expected.random_state),"Junk introduced an extra world RNG draw")
+	verify_junk_recovery(bindings,cat,controller,player,weapons,resources)
 	var repeated: Dictionary=controller.advance(16,target)
 	check(not repeated.is_empty() and repeated.death_events.is_empty() and controller.snapshot().accounting==destroyed.accounting and repeated.random_state==destroyed.random_state,"Repeated debris update replayed destruction")
 	if not advance_result_to(controller,target,5001):return
@@ -91,6 +94,31 @@ func after_encounter_population(bindings: RefCounted,cat: RefCounted,owner: RefC
 		_junk_deadlines=true
 	check(owner.snapshot().random_state==before.random_state,"Junk updates changed the retained constructor")
 	_junk_populations+=1
+
+func verify_junk_recovery(bindings: RefCounted,cat: RefCounted,controller: RefCounted,player: RefCounted,weapons: RefCounted,resources: RefCounted) -> void:
+	if not load("res://src/content/tractor_recovery_definitions.gd").available(bindings):return
+	var original: Dictionary=controller.snapshot()
+	var encounter:=preload("res://src/simulation/full_hold_encounter.gd").new()
+	var mounts:=preload("res://src/simulation/full_hold_encounter.gd").Mounts.new()
+	var primaries:=preload("res://src/simulation/full_hold_encounter.gd").Primaries.new()
+	if not mounts.open(_life_library,cat) or not primaries.configure(bindings,cat,mounts,player.loadout()):check(false,mounts.error+primaries.error);return
+	var identity:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":13}
+	var staged: RefCounted=controller.fork_for_frame()
+	if not encounter._accept_configuration(bindings,_life_library,identity,staged,staged.combat_owner(),weapons,resources,primaries):check(false,encounter.error);return
+	# Reuse the same recovery transaction assertions as generated ship wrecks.
+	# Only the loadout, hold and player placement are detached component inputs;
+	# these containers came from the accepted population and actual death RNG.
+	var fixture:=preload("res://tests/full_hold_destruction.gd").new()
+	for actor in original.combat.actors:
+		var life: Dictionary=controller.destruction_owner(actor.actor_id).snapshot()
+		if not life.cargo.eligible:continue
+		check(actor.actor_kind==-1 and life.cargo.model_id==16990 and life.retire_on_transfer,"Junk recovery lost its non-faction actor and existing container")
+		fixture.verify_recovery_encounter(bindings,cat,encounter,actor.actor_id,player,original.random_state)
+		_junk_recovered+=1
+	_junk_recovery_checks+=fixture.checks
+	check(fixture.failures==0,"Generated Junk recovery transaction checks failed")
+	fixture.free()
+	check(controller.snapshot()==original,"Debris recovery checks mutated the accepted contract population")
 
 func verify_junk_settlement(original: RefCounted,operation: Dictionary,success: bool,debris_count: int) -> void:
 	var session: RefCounted=operation.session;var controller: RefCounted=operation.controller
@@ -186,4 +214,6 @@ func finish_ship_checks(bindings: RefCounted) -> void:
 	if JunkRules.available(bindings):
 		check(_junk_populations==20 and _junk_deadlines,"Junk did not cover every accepted early population and deadline branch")
 		check(_junk_drops>0 and _junk_empty>0,"Junk did not exercise both cargo outcomes")
-	print("Junk contracts: %d populations; %d cargo drops; %d empty debris"%[_junk_populations,_junk_drops,_junk_empty])
+	if load("res://src/content/tractor_recovery_definitions.gd").available(bindings):
+		check(_junk_recovered==_junk_drops and _junk_recovered>0,"Junk recovery did not exercise every actual generated cargo drop")
+	print("Junk contracts: %d populations; %d cargo drops; %d empty debris; %d recovered-drop fixtures; %d recovery checks"%[_junk_populations,_junk_drops,_junk_empty,_junk_recovered,_junk_recovery_checks])

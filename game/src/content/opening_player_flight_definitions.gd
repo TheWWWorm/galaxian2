@@ -2,8 +2,11 @@ extends RefCounted
 ## Fresh ordinary flight and primary input after the first cinematic handoff.
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Fonts = preload("res://src/content/font_definitions.gd")
+const Layouts = preload("res://src/content/declaration_layouts.gd")
 const VALUES := {"ordinary_phase":4,"postcombat_after_event_finished":10,"initial_pitch_units":0,"initial_yaw_units":0,"initial_throttle":1.0,"primary_category":0,"primary_requires_living_hull":true,"primary_contacts_before_npc":true,"fire_after_camera":true,"response_after_camera":true}
 const SPANS := {"x86_64":{"initial_angular":[429398,20],"ordinary_path":[456905,90],"controller_result":[255595,24],"input_block":[256619,39],"primary_input":[256713,54],"primary_route":[438223,72],"primary_call":[256759,23],"primary_permission":[420670,45],"steering_input":[256994,51],"input_release":[17845,5],"postcombat_gate":[17889,21],"player_equipment_before_field":[-165110,5],"initial_normal_modes":[428741,14],"weapon_groups":[-4221,100],"primary_group":[-55066,7],"npc_group":[-64431,7],"rotation_anchor":[442786,24],"response_anchor":[473793,16]},"armv7":{"constructor_zero":[384198,2],"initial_angular":[384804,8],"ordinary_path":[406570,30],"ordinary_call":[411028,40],"controller_result":[264322,26],"input_block":[265248,40],"primary_input":[265364,44],"primary_call":[265494,16],"primary_route":[392156,74],"primary_permission":[377892,36],"steering_input":[265716,44],"input_release":[51176,4],"postcombat_gate":[39860,34],"player_equipment_before_field":[-160366,4],"initial_normal_modes":[384532,8],"weapon_groups":[-3304,84],"primary_group":[-57418,4],"npc_group":[-65644,4],"rotation_anchor":[396128,12],"response_anchor":[419772,12]}}
+
+const MAC_ALTERNATE := {"initial_angular":[429934,20],"ordinary_path":[457441,90],"controller_result":[256107,24],"input_block":[257131,39],"primary_input":[257225,54],"primary_route":[438759,72],"primary_call":[257271,23],"primary_permission":[421206,45],"steering_input":[257506,51],"input_release":[17845,5],"postcombat_gate":[17889,21],"player_equipment_before_field":[-165110,5],"initial_normal_modes":[429277,14],"weapon_groups":[-4221,100],"primary_group":[-55066,7],"npc_group":[-64431,7],"rotation_anchor":[443322,24],"response_anchor":[474341,16]}
 
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.size()!=VALUES.size()+1 or not data.get("provenance") is Dictionary: return false
@@ -28,8 +31,6 @@ static func validate(data: Variant, executable_bytes: int, architecture: String,
 	var initial: Variant=staging.get("provenance",{}).get("initial")
 	if not Fonts.extent(initial,"offset","bytes",[366 if architecture=="x86_64" else 320],executable_bytes): return "Ordinary player flight lacks its staging anchor"
 	if data.provenance.size()!=SPANS[architecture].size(): return "Invalid ordinary player flight provenance"
-	for key in SPANS[architecture]:
-		var rule: Array=SPANS[architecture][key]
-		var span: Variant=data.provenance.get(key)
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],executable_bytes) or int(span.offset)!=int(initial.offset)+int(rule[0]): return "Disconnected ordinary player flight declaration"
-	return ""
+	var layouts: Array = [SPANS[architecture]]
+	if architecture=="x86_64":layouts.append(MAC_ALTERNATE)
+	return "" if Layouts.matches(data.provenance,int(initial.offset),executable_bytes,layouts) else "Disconnected ordinary player flight declaration"

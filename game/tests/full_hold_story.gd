@@ -75,7 +75,7 @@ func verify_clocks():
 	for i in 49:briefing.advance(100)
 	check(briefing.snapshot().hud_elapsed_ms==5000 and not briefing.snapshot().dialogue.visible,"Briefing opened at the inclusive poll boundary")
 	briefing.advance(1);var opened: Dictionary=briefing.snapshot()
-	check(opened.world_elapsed_ms==11902 and opened.hud_elapsed_ms==0 and opened.dialogue.visible and opened.dialogue.text_id==1716 and opened.dialogue.voice_event_id==188,"Wrong second briefing or opening frame")
+	check(opened.world_elapsed_ms==11902 and opened.hud_elapsed_ms==0 and opened.dialogue.visible and opened.dialogue.text_id==int(bindings.full_hold_story.briefing_events[0].text_id) and opened.dialogue.voice_event_id==188,"Wrong second briefing or opening frame")
 	for duration in [0,1,149,150]:
 		check(briefing.advance(duration) and briefing.snapshot()==opened and briefing.simulation_delta_ms()==0,"Modal speech advanced or auto-dismissed")
 	check(not briefing.navigate("previous") and not briefing.navigate("skip"),"Single-line briefing accepted unsupported navigation")
@@ -84,9 +84,9 @@ func verify_clocks():
 	check(briefing.snapshot()==opened and done.acknowledged and not done.dialogue.visible and not done.briefing_pending,"Acknowledgement changed the parent or left the briefing pending")
 	for key in ["campaign_cursor","mission","progress","cargo_used","reward_credits","mining_completed"]:check(done[key]==initial[key],"Briefing granted unearned state: "+key)
 	check(fork.advance(100) and fork.snapshot().world_elapsed_ms==12002 and not fork.snapshot().dialogue.visible,"Acknowledged briefing did not resume")
-	var saved: Dictionary=bindings.full_hold_story;bindings.full_hold_story={};bindings.full_hold_appearance={}
+	var saved: Dictionary=bindings.full_hold_story;var appearance: Dictionary=bindings.full_hold_appearance;bindings.full_hold_story={};bindings.full_hold_appearance={}
 	check(not briefing.configure(bindings,lib,construction,"E") and briefing.snapshot()==opened,"Missing capability partially replaced a live briefing")
-	bindings.full_hold_story=saved
+	bindings.full_hold_story=saved;bindings.full_hold_appearance=appearance
 
 func verify_cargo():
 	var objective:=fresh_objective();var cargo:=hold();var field: RefCounted=construction.scenery_owner()
@@ -112,9 +112,9 @@ func verify_cargo():
 	check(branch.poll(cargo,field) and branch.snapshot().dialogue.visible and objective.snapshot()==before,"Full cargo poll was not detached")
 	var opened: Dictionary=branch.snapshot()
 	check(opened.campaign_cursor==4 and opened.progress==initial.progress and opened.mission==initial.mission and opened.reward_credits==0 and not opened.mining_completed,"Cargo check granted premature progress")
-	check(opened.dialogue.text_id==1717 and opened.dialogue.speaker_id==0 and opened.dialogue.voice_event_id==431,"Wrong first pirate warning")
+	check(opened.dialogue.text_id==int(bindings.full_hold_story.completion_events[0].text_id) and opened.dialogue.speaker_id==0 and opened.dialogue.voice_event_id==431,"Wrong first pirate warning")
 	check(not branch.navigate("previous") and not branch.navigate("skip") and branch.snapshot()==opened,"Warning skipped its first line")
-	check(branch.navigate("next") and branch.snapshot().dialogue.text_id==1718 and branch.snapshot().dialogue.speaker_id==2 and branch.snapshot().dialogue.voice_event_id==432,"Wrong second pirate warning")
+	check(branch.navigate("next") and branch.snapshot().dialogue.text_id==int(bindings.full_hold_story.completion_events[1].text_id) and branch.snapshot().dialogue.speaker_id==2 and branch.snapshot().dialogue.voice_event_id==432,"Wrong second pirate warning")
 	check(branch.navigate("previous") and branch.snapshot()==opened,"Previous navigation altered cargo warning state")
 	branch.navigate("next");branch.navigate("next")
 	var done: Dictionary=branch.snapshot()
@@ -152,7 +152,8 @@ func verify_reader(pack: String):
 			"flight":changed.full_hold_flight={}
 			"briefing":changed.mining_briefing={}
 			"objective":changed.mining_objective={}
-			"empty":changed.full_hold_story={};changed.full_hold_appearance={};changed.full_hold_return={}
+			"empty":
+				for key in ["full_hold_story","full_hold_appearance","full_hold_return","station_equipment","combat_training","combat_training_control","combat_training_weapons","combat_training_destruction","combat_training_story","combat_training_visuals","mido_travel","ambient_population","ambient_combat","ambient_lifecycle","freighter_destruction","early_contracts"]:changed[key]={}
 		var serialized:=JSON.stringify(changed,"",true,true)
 		metadata.records_sha256=serialized.sha256_text();metadata.records_bytes=serialized.to_utf8_buffer().size()
 		metadata.binding_id=("gof2-bindings-v1\n%s\n%s\n%s\n%s\n"%[metadata.base_content_id,metadata.source_executable_sha256,metadata.architecture,metadata.records_sha256]).sha256_text()
@@ -160,7 +161,7 @@ func verify_reader(pack: String):
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		var reader:=Bindings.new();check(reader.open(pack,lib.manifest),reader.error)
 		var accepted:=reader.open(directory,lib.manifest)
-		if scenario=="empty":check(accepted and reader.full_hold_story.is_empty() and not reader.full_hold_flight.is_empty(),"Optional story absence was rejected")
+		if scenario=="empty":check(accepted and reader.full_hold_story.is_empty() and not reader.full_hold_flight.is_empty(),"Optional story absence was rejected: "+reader.error)
 		else:check(not accepted and reader.binding_id.is_empty() and reader.full_hold_story.is_empty() and reader.mining_briefing.is_empty(),"Failed reopen retained partial state: "+scenario)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)
 
@@ -184,7 +185,8 @@ func verify_presentation(args: PackedStringArray):
 			if language in ["gb","de"]:check(speech.configure_mining_objective(lib,bindings,4) if completion else speech.configure_mining_briefing(lib,bindings,4),speech.error)
 			for i in (2 if completion else 1):
 				var state: Dictionary=owner.snapshot()
-				check(state.dialogue.text_id==(1717+i if completion else 1716) and state.dialogue.desktop_text_id==state.dialogue.text_id,"Wrong second-trip text binding")
+				var expected_text:=int(bindings.full_hold_story.completion_events[i].text_id if completion else bindings.full_hold_story.briefing_events[0].text_id)
+				check(state.dialogue.text_id==expected_text and state.dialogue.desktop_text_id==state.dialogue.text_id,"Wrong second-trip text binding")
 				check(panel.present(state) and not state.dialogue.text.is_empty() and "#KEY_" not in state.dialogue.desktop_text,panel.error)
 				if language in ["gb","de"]:
 					check(speech.present(i),speech.error)

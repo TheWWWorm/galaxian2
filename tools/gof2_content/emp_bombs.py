@@ -1,9 +1,9 @@
 """Original player EMP bomb flight, blast and systems recovery. Constant declarations only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_emp_bombs(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'player_emp_bomb_physics',
@@ -142,3 +142,34 @@ LAYOUTS = {'emp_factory_case': [67190,
                          112,
                          '__text',
                          '00261b7a29a1058e8731912ab29c9b30caf13b350e10d0d8c1450e056dbce766']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'emp_factory_case': [67190, 4, '__text', '569204e474c168d394295e0594dee262bb5338b60f8cb6737fa502addc165665'],
+ 'emp_factory': [65815, 232, '__text', 'dc65ae5dd42192102abf0a661ffb93c976f861c52be7ae0889f5e4af41d60a6c'],
+ 'emp_muzzle_offset': [1549982, 4, '__const', 'ac8fb139930df65fdb788559d7299840c359549afc851b82ba08d1485e67f3b7'],
+ 'emp_models': [1551686, 12, '__const', 'bc7aa76525208023acf315946bda7b23b341cdd5b8d3a9936dbad2f7646800b3'],
+ 'emp_radius_assignment': [-35845, 29, '__text', 'cba21a2f0157cf7b11ce4270e1b970b661d6bfb21fc381890be721a63736b135'],
+ 'emp_radius_setter': [-188804, 12, '__text', '69006076d6ef6636ebc66eb123f541817a0f665b84368c2bb6b041f8cb0a3a88'],
+ 'emp_initial_clock': [-190079, 54, '__text', '591198c3c156866b820865686b3935ec84e35c79a0ba64ada92c19f61b5f09b4'],
+ 'emp_owner_trigger': [544066, 362, '__text', '89bd708dd07a2f78a4375f5bacdb83337c8aa415e1d482cb3dc185f0d7946a71'],
+ 'emp_launch_quantity': [-188263, 81, '__text', '1611aa518a303a65d66d445286721d772f398447e072ef138dad0eef4b3d5dc3'],
+ 'emp_launch_position': [-188161, 706, '__text', '7690f8946f648b71b67d92f180ea5ab47edcd1d092699b217ec32bebc4e2a192'],
+ 'emp_launch_direction': [-187034, 206, '__text', '8f1ed71d03334d456940b28ebaeab49de5e7b435496afeb867dd47c931e7276d'],
+ 'emp_launch_motion': [-186616, 147, '__text', '2bb33833f3115f4fcaf52e2e350bceb794e6f2cc92c23de8b61a7661e68870d7'],
+ 'emp_launch_consume': [-186469, 281, '__text', '8e38117f9ed11b538679a3f0ebdbe76913fb1b353d8adac7fbcddd52b06521fc'],
+ 'emp_frame_clock': [-180841, 57, '__text', 'a8cdb1829598f7a9be8c09e91601afca3acc5f159c03b698be8487290f13f97c'],
+ 'emp_frame_motion': [-180687, 539, '__text', '1b769307e836b63d6c45459bfc8ebb470c4bd6685a9c36c11e7fce14b25e17d4'],
+ 'emp_collision_kind': [-183529, 134, '__text', 'ec00e357ccf022f4db20a172ca6e2be3ec9a33f93d30cbe2d0fab3e0bddb92f4'],
+ 'emp_collision_detonation': [-182880,
+                              18,
+                              '__text',
+                              '00d55759ae61537f9d47639052d09263e6f0103e09ac2918051704159e0da5cf'],
+ 'emp_collision_tail': [-180874, 13, '__text', 'a72f6552296e4d6efb59f9916fbc1d95f027849143cbf5e635a3e4775d89dcc9'],
+ 'emp_pulse': [-185022, 1454, '__text', '06f1ef725da11eb11ff4ecba3c3a2840b22ee8f4aa3aa88aa426a42b4a5e2209'],
+ 'emp_active_getter': [541460, 14, '__text', 'd6f7f4e0de3d0ca2c0ca3c5d1704d24054473e84e610c53be51a098b7ea977c5'],
+ 'emp_immune_getter': [536076, 28, '__text', '1e99217163a1fb41810dfe99888ba1cf32daeba61f77eafbe59a2f737cfc12ea'],
+ 'emp_system_configuration': [536244, 56, '__text', '7c85d69e72f18b7e78f0404ce332caeaca256f015bf3a86f9d14b7960ddcd565'],
+ 'emp_system_damage_gates': [538630, 81, '__text', 'b53f63ad525c1518d8b859553a07551c768db51a784fe62a06a8e1fd02b5e597'],
+ 'emp_system_subtract': [539001, 23, '__text', '9476aa09a7791d871923580d9434632db14691d52d41d24bf77deb785bed1e52'],
+ 'emp_system_disabled': [539406, 40, '__text', '5d77e5762f4a874258b3db2f5e0581794adcd734114c69ff9e2cb8633e1c1e47'],
+ 'emp_system_recovery': [545299, 112, '__text', '5e8bf3a228c000140171eb060ebd4426f021f074676edd287a26a9b2c390d2a8']}

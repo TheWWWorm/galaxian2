@@ -1,5 +1,5 @@
 extends Control
-## Original gate question and interface artwork, with native desktop/touch input.
+## Original travel questions and interface artwork, with desktop/touch input.
 signal choice_requested(result: int)
 const OriginalUI=preload("res://src/presentation/original_ui.gd")
 const GateArrival=preload("res://src/content/gate_arrival_definitions.gd")
@@ -42,16 +42,33 @@ func present(library: RefCounted,bindings: RefCounted,visuals: RefCounted,catalo
 	var ids: Array=rules.text_ids
 	for id in ids+[133,134]:
 		if int(id)<0 or int(id)>=library.strings.size() or library.strings[int(id)].is_empty():return reject("Gate confirmation text is missing")
-	var identity:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"language":library.active_language}
-	if _art==null or _art.identity!=identity:
-		var art:=OriginalUI.new()
-		if not art.configure(library,bindings,visuals):return reject(art.error)
-		_art=art;var original_theme:=Theme.new();original_theme.default_font=art.font;theme=original_theme
+	if not _prepare_art(library,bindings,visuals):return false
 	_accept_result=int(rules.accept_result);_map_result=int(rules.map_result)
 	_text.text=library.strings[int(ids[0])]+str(rules.separators[0])+str(catalogues.tables.stations[destination].name)+str(rules.separators[1])+library.strings[int(ids[1])]
 	_yes.text=library.strings[133];_no.text=library.strings[134]
 	_state={"destination_station_id":destination,"text":_text.text,"text_ids":ids.duplicate()}
 	visible=true;_relayout()
+	return true
+
+func present_departure(library: RefCounted,bindings: RefCounted,visuals: RefCounted,packet: Dictionary) -> bool:
+	error=""
+	if library.manifest.get("content_id")!=bindings.base_content_id or packet.get("base_content_id")!=bindings.base_content_id or packet.get("binding_id")!=bindings.binding_id:return reject("Departure question requires matching imported content")
+	var text_id: int=int(packet.get("confirmation_text_id",-1))
+	for id in [text_id,133,134]:
+		if id<0 or id>=library.strings.size() or library.strings[id].is_empty():return reject("Departure confirmation text is missing")
+	if not _prepare_art(library,bindings,visuals):return false
+	_accept_result=1;_map_result=0
+	_text.text=library.strings[text_id];_yes.text=library.strings[133];_no.text=library.strings[134]
+	_state={"text":_text.text,"text_ids":[text_id]}
+	visible=true;_relayout()
+	return true
+
+func _prepare_art(library: RefCounted,bindings: RefCounted,visuals: RefCounted) -> bool:
+	var identity:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"language":library.active_language}
+	if _art==null or _art.identity!=identity:
+		var art:=OriginalUI.new()
+		if not art.configure(library,bindings,visuals):return reject(art.error)
+		_art=art;var original_theme:=Theme.new();original_theme.default_font=art.font;theme=original_theme
 	return true
 
 func choose(result: int) -> void:

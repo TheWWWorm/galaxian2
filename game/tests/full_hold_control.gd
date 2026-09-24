@@ -17,6 +17,21 @@ const ORIGIN=Vector3(0,0,-200000)
 var failures:=0
 var checks:=0
 func _initialize():call_deferred("run")
+
+static func fork_world_fixture(world: RefCounted) -> RefCounted:
+	# Direct damage and positioned-shot fixtures bypass normal phase ownership.
+	# Detach the owners those fixtures mutate; live phases detach them lazily.
+	var branch: RefCounted=world.fork_for_frame()
+	branch._encounter=fork_encounter_fixture(world._encounter)
+	branch._scenery._bodies=branch._scenery._bodies.fork_for_frame()
+	return branch
+
+static func fork_encounter_fixture(encounter: RefCounted) -> RefCounted:
+	var branch: RefCounted=encounter.fork_for_frame()
+	branch._combat=branch._combat.fork_for_frame()
+	branch._weapons=branch._weapons.fork_for_frame()
+	return branch
+
 func run():
 	var args:=OS.get_cmdline_user_args()
 	check(args.size()==3,"Expected explicit Mac content, bindings and visuals")

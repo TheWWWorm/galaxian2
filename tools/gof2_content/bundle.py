@@ -82,7 +82,7 @@ class Bundle:
                 raise ContentError('The DMG must contain Galaxy on Fire 2 Full HD for Mac')
             return
         if self.source.is_dir():
-            if self.source.suffix != '.app':
+            if self.source.suffix.lower() != '.app':
                 raise ContentError('Choose the extracted .app directory itself')
             seen = set()
             for base, dirs, files in os.walk(self.source, followlinks=False):

@@ -19,7 +19,7 @@ func verify_free_application() -> void:
 	if not app.session.snapshot().get("hangar_open",false):check(false,app.status.text);return
 	var quote: Dictionary=app.session.station_owner().snapshot()
 	check(app.equipment_panel.visible and not app._launch_button.visible and not app._hangar_button.visible,"An open shop retained station launch controls")
-	check(app.equipment_panel._credits==quote.contracts.credits and app.equipment_panel._cargo.text.contains(str(quote.contracts.credits)),"The shop omitted its retained wallet")
+	check(app.equipment_panel._credits==quote.contracts.credits and app.equipment_panel._wallet.text.contains(str(quote.contracts.credits)),"The shop omitted its retained wallet")
 	var affordable:=ShoppingChecks.cheapest(quote)
 	if affordable.is_empty():check(false,"The current station has no affordable generated offer");return
 	var id: int=affordable.item_id;var price: int=affordable.unit_price
@@ -50,7 +50,7 @@ func verify_free_application() -> void:
 	app.equipment_panel.select_tab("cargo")
 	check(app.equipment_panel._rows[id].actions.sell.visible and app.equipment_panel._rows[id].actions.mount.visible==bought.equipment.has("fitting_support"),"Paid cargo controls disagree with the supported fitting capability")
 	await capture_free_application("shopping-cargo-desktop")
-	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.set_touch_controls(true)
+	root.size=Vector2i(960,540);app.set_mobile_layout(true);TouchInput.set_preference(app,true)
 	await process_frame;resume_application_focus();app.present_session()
 	await verify_shop_layout(true)
 	await capture_free_application("shopping-cargo-mobile-landscape")
@@ -99,7 +99,7 @@ func verify_overfilled_shop() -> bool:
 		if offer.is_empty() or not app.equipment_action("buy",offer.item_id):check(false,"Actual shop could not exercise its overfilled-hold boundary: "+app.session.error);return false
 	var full: Dictionary=app.session.station_owner().snapshot()
 	check(full.cargo.used==full.cargo.capacity+1 and app.equipment_panel._cargo.text.contains(source.strings[193]),"The actual shop lost its overfilled warning or accepted quantity")
-	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.set_touch_controls(true)
+	root.size=Vector2i(960,540);app.set_mobile_layout(true);TouchInput.set_preference(app,true)
 	await process_frame;resume_application_focus();app.present_session()
 	await verify_shop_layout(true)
 	await capture_free_application("shopping-overfilled-mobile-landscape")

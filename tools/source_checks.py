@@ -4,7 +4,7 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 
-ALLOWED = {'.md', '.py', '.gd', '.uid', '.tscn', '.godot', '.json', '.gitignore', '.gdshader', '.gdshaderinc', '.txt'}
+ALLOWED = {'.md', '.py', '.gd', '.uid', '.tscn', '.godot', '.json', '.gitignore', '.gdshader', '.gdshaderinc', '.txt', '.java'}
 
 
 PROMOTIONAL_IMAGES = {'screenshots/02-portal-and-freighters.png': '283378cb4fbe230d0b7b60d578247aff085f6b6e6cffcaf3aff46479926c714b', 'screenshots/01-alioth-orbit.png': '88e7d2f609bd40364e746b7a985fffbe5d0a50878f24d985c1aeb4cce601c960', 'screenshots/03-native-flight.png': '1f98b7bc6a21967e4ad6cf9d857af126df8c4587e4f8af461a79a7f5e4c13e79'}
@@ -51,10 +51,15 @@ def source_closure(root):
         '.gdshader': [('shader_includes', r'''#include\s+["']res://([^"']+)["']''')],
         '.gdshaderinc': [('shader_includes', r'''#include\s+["']res://([^"']+)["']''')],
         '.tscn': [('scene_resource_references', r'''path="res://([^"]+)"''')],
-        '.godot': [('scene_resource_references', r'''="res://([^"]+)"''')],
+        '.godot': [('scene_resource_references', r'''="\*?res://([^"]+)"''')],
     }
     for name in names:
         path = root / name
+        # Packaging selects manifest entries; local resources outside it do not own public UIDs.
+        if name.startswith('game/') and path.suffix in ('.gd', '.gdshader', '.gdshaderinc'):
+            uid_name = name + '.uid'
+            if uid_name not in allowed:
+                raise ValueError(f'Resource UID missing from source allowlist: {uid_name}')
         if path.suffix in patterns:
             text = path.read_text()
             for count, pattern in patterns[path.suffix]:
@@ -67,8 +72,5 @@ def source_closure(root):
             if name[:-4] not in allowed or not re.fullmatch(r'uid://[a-z0-9]+', value) or value in uids:
                 raise ValueError(f'Invalid, orphaned or duplicate UID: {name}')
             uids.add(value)
-    for path in (root / 'game').rglob('*.uid'):
-        if '.godot' not in path.parts and path.relative_to(root).as_posix() not in allowed:
-            raise ValueError(f'Resource UID missing from allowlist: {path.relative_to(root)}')
     counts['unique_uids'] = len(uids)
     return counts

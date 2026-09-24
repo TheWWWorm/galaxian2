@@ -41,9 +41,11 @@ func check_world(bindings: RefCounted, catalogues: RefCounted, bodies: RefCounte
 	var observed: Dictionary=world.read_snapshot()
 	check(observed.is_read_only() and observed.objects.is_read_only() and observed.objects[0].is_read_only() and observed.bodies.objects[0].vitals.is_read_only(),"Shared scenery observations must be immutable at every depth")
 	var branch: RefCounted=world.fork_for_frame()
-	check(branch.update(100,Vector3.ZERO) and world.read_snapshot()==observed and branch.read_snapshot()!=observed,"A branch changed or reused an old scenery observation")
-	var editable:=world.snapshot();editable.objects[0].position=Vector3.ZERO
-	check(world.read_snapshot()==observed,"An editable snapshot changed the shared frame")
+	check(branch.update(100,Vector3.ZERO) and world.read_snapshot()==observed and world.snapshot()==initial and branch.read_snapshot()!=observed,"A branch changed or reused its parent's scenery observation")
+	var editable:=world.snapshot()
+	editable.objects[0].position+=Vector3(7,9,11)
+	editable.bodies.objects[0].vitals.hull=0
+	check(world.read_snapshot()==observed and world.snapshot()==initial,"An editable snapshot changed the shared frame or a later detached snapshot")
 	check(world.update(0,Vector3.ZERO),world.error)
 	var frozen := world.snapshot()
 	check(frozen.objects==initial.objects and frozen.destruction==initial.destruction and frozen.random_state==initial.random_state,"Zero-time field advanced motion, lifecycle or RNG")
@@ -137,6 +139,8 @@ func check_session(library: RefCounted, bindings: RefCounted, visuals: RefCounte
 	for material in cargo.materials:check(material.shader==Response.ShaderSource,"Cargo retained an inconsistent material response")
 	var mesh: Mesh=renderer._effects[a].models[0].instances[0].mesh
 	check(mesh==renderer._effects[b].models[0].instances[0].mesh,"Same effect geometry was decoded separately for each actor")
+	check_recovery_rendering(session,a,b)
+	cargo=renderer._cargo[a]
 	check(session.step(200000),session.error)
 	var paused := session.snapshot()
 	check(session.set_pause("user",true,200000) and session.step(400000) and session.snapshot()==paused,"Pause advanced destruction clocks or world state")
@@ -161,6 +165,28 @@ func check_session(library: RefCounted, bindings: RefCounted, visuals: RefCounte
 	var resources: RefCounted=renderer._models
 	session.clear();check(resources._prototypes.is_empty(),"Scene teardown leaked cached model prototypes")
 	viewport.free()
+
+## Presentation-only boundary vectors, never gameplay progress. Existing cargo
+## nodes may move or disappear only after every later actor has sampled safely.
+func check_recovery_rendering(session: Node3D,index: int,later: int) -> void:
+	var renderer: Node3D=session.scenery.destruction
+	var node: Node3D=renderer._cargo[index];var before: Transform3D=node.transform
+	var moved:=Transform3D(before.basis,before.origin+Vector3(600,0,0))
+	var world: RefCounted=session._scenery.fork_for_frame()
+	check(world._retain_recovery_frame(index,{"actor_changes":{"cargo_pose":moved}}),world.error)
+	var invalid: RefCounted=world.fork_for_frame()
+	invalid._destruction[later]=invalid._destruction[later].fork_for_frame()
+	invalid._destruction[later]._effect._state.models[1].time_ms=-1
+	check(not session.scenery.apply_destruction(invalid,session.camera.transform,PackedByteArray([255,255,255,255]),Vector4.ONE,1.0) and node.transform==before and renderer._cargo[index]==node,"A later scenery failure partially moved an existing cargo node")
+	check(session.scenery.apply_destruction(world,session.camera.transform,PackedByteArray([255,255,255,255]),Vector4.ONE,1.0) and renderer._cargo[index]==node and node.transform==moved and node.get_meta("source_quantity")==3,"The existing cargo node did not follow its retained tractor pose")
+	var collected: RefCounted=world.fork_for_frame()
+	check(collected._retain_recovery_frame(index,{"actor_changes":{"cargo_model_exists":false,"cargo_eligible":false,"cargo_entries":[{"quantity":2}],"active":false}}),collected.error)
+	var invalid_pickup: RefCounted=collected.fork_for_frame()
+	invalid_pickup._destruction[later]=invalid_pickup._destruction[later].fork_for_frame()
+	invalid_pickup._destruction[later]._effect._state.models[1].time_ms=-1
+	check(not session.scenery.apply_destruction(invalid_pickup,session.camera.transform,PackedByteArray([255,255,255,255]),Vector4.ONE,1.0) and is_instance_valid(node) and renderer._cargo[index]==node and node.transform==moved,"A later scenery failure prematurely removed collected geometry")
+	check(session.scenery.apply_destruction(collected,session.camera.transform,PackedByteArray([255,255,255,255]),Vector4.ONE,1.0) and not renderer._cargo.has(index) and not is_instance_valid(node),"Pickup retained visible junk merely because its source item has a remainder")
+	check(session.scenery.apply_destruction(session._scenery,session.camera.transform,PackedByteArray([255,255,255,255]),Vector4.ONE,1.0) and renderer._cargo[index].transform==before,"Returning to the untouched world did not restore its owned cargo")
 
 func capture_session(session: Node3D, viewport: SubViewport, object_index: int, edition: String, stage: String) -> void:
 	if DisplayServer.get_name()=="headless":return

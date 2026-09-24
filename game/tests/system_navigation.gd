@@ -60,17 +60,29 @@ func verify(args: PackedStringArray) -> void:
 	check(owner.route(19,25)==[19,9,11,25],"Explicit expansion availability lost its shortest route")
 	verify_distances(owner,cat,expanded)
 	var story:={"kind":156,"station_id":56,"reward":0,"bonus":0,"source_parameter":0}
-	for station in 135:check(Definitions.ordinary_departure_at(bindings,18,story,station)==(station!=56),"Pending story selection differs at station%d"%station)
+	var suttnar_visit: bool=bindings.mido_travel.has("suttnar_visit")
+	for station in 135:check(Definitions.ordinary_departure_at(bindings,18,story,station)==(station!=56 or suttnar_visit),"Pending story selection differs at station%d"%station)
 	check(not Definitions.ordinary_departure_at(bindings,17,story,98),"Travel skipped the final Alioth acknowledgement")
 	check(not Definitions.ordinary_departure_at(bindings,18,story,-1),"Unknown station was accepted for ordinary departure")
 	story.reward=1
 	check(not Definitions.ordinary_departure_at(bindings,18,story,98),"Changed story mission was accepted")
+	if Definitions.Campaign.supported(bindings.mido_travel,27):
+		var pending: Dictionary=Definitions.Campaign.mission(bindings.mido_travel,27)
+		check(Definitions.ordinary_departure_at(bindings,27,pending,48),"Acknowledged Sahi return cannot depart at its retained cursor")
+		check(Definitions.destination_supported(bindings,27,pending,45),"Pending Thynome visit blocked ordinary Weymire navigation")
+		check(not Definitions.destination_supported(bindings,27,pending,int(pending.station_id)),"The unfinished Thynome station result became an ordinary destination")
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
 	for key in Definitions.SPANS:
 		var broken: Dictionary=bindings.mido_travel.duplicate(true);broken.provenance.erase(key)
 		check(not Travel.validate(broken,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Missing navigation proof was accepted: "+key)
 	var broken: Dictionary=bindings.mido_travel.duplicate(true);broken.free_navigation.gate_station_field=5
 	check(not Travel.parameters(broken),"Changed gate binding was accepted")
+	broken=bindings.mido_travel.duplicate(true)
+	var key:="free_navigation_gate_helpers"
+	var alternate_source: bool=int(broken.conversations[0].events[0].text_id)==int(Travel.MAC_VALUES.conversations[0].events[0].text_id)
+	var other: Dictionary=Definitions.SPANS if alternate_source else Definitions.MAC_SPANS
+	broken.provenance[key].offset=int(bindings.arrival_staging.provenance.actor.offset)+int(other[key][0])
+	check(not Travel.validate(broken,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Mixed-source route proof was accepted")
 
 func verify_distances(owner: RefCounted,cat: RefCounted,flags: Array) -> void:
 	# Independent all-pairs distance calculation checks optimality without

@@ -36,6 +36,11 @@ func verify(args: PackedStringArray):
 		check(not Definitions.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.mido_travel).is_empty(),"Missing ordinary source extent accepted: "+span)
 	var bad: Dictionary=bindings.early_contracts.duplicate(true);bad.ordinary_generation.offers.difficulty_draw_bound=2
 	check(not Definitions.parameters(bad),"Ordinary difficulty was silently replaced by the opening rule")
+	bad=bindings.early_contracts.duplicate(true)
+	var key:="ordinary_offer_selection"
+	var other: Dictionary=Ordinary.SPANS if bad.briefing_text_base==Definitions.MAC_VALUES.briefing_text_base else Ordinary.MAC_SPANS
+	bad.provenance[key].offset=int(bindings.arrival_staging.provenance.actor.offset)+int(other[key][0])
+	check(not Definitions.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.mido_travel).is_empty(),"Mixed-source ordinary offer proof was accepted")
 
 func verify_persistent(bindings: RefCounted,lib: RefCounted):
 	var rules: Dictionary=bindings.early_contracts.ordinary_generation.persistent

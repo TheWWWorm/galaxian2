@@ -197,7 +197,8 @@ func verify_definitions(pack: String, lib: RefCounted, bindings: RefCounted):
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		var reader:=Bindings.new();check(reader.open(pack,lib.manifest),reader.error)
 		var accepted:=reader.open(directory,lib.manifest)
-		if scenario=="empty":check(accepted and reader.arrival_environment.is_empty() and not reader.arrival_staging.is_empty(),"Explicit unsupported environment rejected: "+reader.error)
+		# Newer packs retain a destruction owner requiring the removed flight.
+		if scenario=="empty" and changed.get("player_destruction",{}).is_empty():check(accepted and reader.arrival_environment.is_empty() and not reader.arrival_staging.is_empty(),"Explicit unsupported environment rejected: "+reader.error)
 		else:check(not accepted and reader.arrival_environment.is_empty() and reader.arrival_staging.is_empty(),"Failed pack retained environment: "+scenario)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)
 

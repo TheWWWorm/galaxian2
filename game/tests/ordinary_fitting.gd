@@ -13,6 +13,22 @@ func _initialize() -> void:
 func verify_fitting(args: PackedStringArray) -> void:
 	var library:=Library.new();var bindings:=Bindings.new();var cat:=Catalogues.new()
 	if not library.open(args[0]) or not bindings.open(args[1],library.manifest) or not library.select_language("gb") or not cat.open(library):check(false,library.error+bindings.error+cat.error);return
+	var source_path:=OS.get_environment("GOF2_SOURCE_SAVE")
+	if not source_path.is_empty():
+		# Catalogue diagnostics need an actual inventory, not the complete
+		# historical tutorial producer. Restore without changing its identity;
+		# isolated catalogue offers never enter this retained career.
+		var file:=preload("res://src/simulation/station_save_file.gd").new()
+		var archive:=preload("res://src/simulation/station_archive.gd").new()
+		var document:=file.load_document(source_path,bindings,cat,library)
+		if document.is_empty():check(false,file.error);return
+		var restored:=archive.restore(bindings,cat,library,document)
+		if restored==null:check(false,archive.error);return
+		var held: Dictionary=restored.snapshot()
+		verify_catalogue_fitting(restored,bindings,cat,library)
+		check(restored.snapshot()==held,"Catalogue diagnostics changed the actual saved station or career")
+		print("Catalogue owner coverage from a native save; the earned career is unchanged")
+		return
 	var checkpoint:=Checkpoint.new()
 	var station: RefCounted=checkpoint.open(OS.get_environment("GOF2_FREE_PLAY_STATION_SCENARIO"),bindings)
 	if station==null:check(false,checkpoint.error);return
@@ -66,6 +82,12 @@ func verify_catalogue_fitting(station: RefCounted,bindings: RefCounted,cat: RefC
 		for i in mounted.loadout.slots.size():
 			if mounted.loadout.slots[i]!=null:selected=i;break
 		check(selected>=0 and mounted.credit_delta==0,"Fitting lost its one installed instance or charged credits")
+		if cat.tables.items[id].arrays[2][3]==1:
+			check(mounted.loadout.slots[selected].quantity==2,"Secondary fitting did not transfer the entire purchased stack")
+			# All bought ammunition is installed, unlike unit equipment. A
+			# further actual purchase supplies the replacement/refill below.
+			check(branch.transact("buy",id,0),branch.error)
+			mounted=branch.snapshot()
 		var subtype: int=cat.tables.items[id].arrays[2][5]
 		var multiple: bool=(int(bindings.station_equipment.multiple_subtype_mask)&(1<<subtype))!=0
 		if multiple and int(branch._counts[cat.tables.items[id].arrays[2][3]])>1:

@@ -164,6 +164,7 @@ func check_session(library: RefCounted, bindings: RefCounted, visuals: RefCounte
 		if not checked_atomic and session.npc_deaths.effects.all(func(effect):return effect.visible):
 			var before := [];for effect in session.npc_deaths.effects: before.append(rendered(effect))
 			var bad: RefCounted=session._world_frame.fork_for_frame()
+			bad._controller=bad._controller._fork_mutable_owners()
 			for id in 3:
 				var owner: RefCounted=bad._controller._destruction[id]
 				check(not owner.advance(100,bad.snapshot().random_state).is_empty(),owner.error)

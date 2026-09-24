@@ -1,4 +1,5 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Source-bound first mining station: model assembly bounds and authored volumes.
 ## This owner has no clock, random draws, damage, autopilot or arrival transition.
 const Definitions=preload("res://src/content/station_exterior_definitions.gd")
@@ -26,7 +27,7 @@ func configure(library: RefCounted, bindings: RefCounted, catalogues: RefCounted
 	var context: Variant=entry.get("location")
 	if not context is Dictionary:return reject("Station exterior requires its constructed location")
 	var cursor:=int(entry.get("campaign_cursor",-1));var station_id:=int(context.get("station_id",-1));var system_id:=int(context.get("system_id",-1))
-	if cursor in [10,11,12,13,14,16,18,19]:
+	if cursor in FlightStages.LOCAL+FlightStages.POST_SAHI:
 		if OrdinaryFlight.for_departure(bindings,entry).is_empty():return reject("This local exterior has no supported flight world")
 	elif OrdinaryFlight.select(bindings,cursor).is_empty():return reject("Station exterior requires a supported flight")
 	return _prepare_location(library,bindings,catalogues,station_id,system_id)
@@ -41,9 +42,20 @@ func configure_ordinary_location(library: RefCounted,bindings: RefCounted,catalo
 	if world.is_empty():return reject("Station exterior requires a supported ordinary location")
 	return _prepare_location(library,bindings,catalogues,station_id,int(world.system_id))
 
+func configure_opening_location(library: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int) -> bool:
+	# Prepare the location's authored geometry only. The world owner decides
+	# whether a station actor exists; the opening excludes station 78.
+	error=""
+	if library==null or bindings==null or catalogues==null or not Definitions.parameters(bindings.station_exterior):return reject("Opening station exterior requires its original declarations")
+	if library.manifest.get("content_id")!=bindings.base_content_id or catalogues.content_id!=bindings.base_content_id:return reject("Opening station exterior belongs to another content identity")
+	if station_id!=int(bindings.station_exterior.station_id) or int(bindings.opening_actors.npc_initialization.world_initialization.campaign_cursor)!=0:return reject("Opening station exterior differs from its source location")
+	return _prepare_location(library,bindings,catalogues,station_id,int(bindings.station_exterior.system_id))
+
 func _prepare_location(library: RefCounted,bindings: RefCounted,catalogues: RefCounted,station_id: int,system_id: int) -> bool:
 	if station_id<0 or station_id>=catalogues.tables.stations.size():return reject("Station exterior is absent from the source catalogue")
-	var data:=Definitions.for_location(bindings,station_id,system_id,int(catalogues.tables.stations[station_id].planet_type))
+	if system_id<0 or system_id>=catalogues.tables.systems.size():return reject("Station exterior system is absent from the source catalogue")
+	var faction:=int(catalogues.tables.systems[system_id].fields[int(bindings.station_exterior.system_faction_field)])
+	var data:=Definitions.for_location(bindings,station_id,system_id,int(catalogues.tables.stations[station_id].planet_type),faction)
 	if data.is_empty():return reject("Station exterior requires a supported ordinary location")
 	var stations: Array=catalogues.tables.get("stations",[]);var systems: Array=catalogues.tables.get("systems",[])
 	if stations.size()<=int(data.station_id) or systems.size()<=int(data.system_id):return reject("Station exterior is absent from the source catalogues")

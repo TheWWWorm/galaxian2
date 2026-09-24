@@ -60,6 +60,8 @@ func verify(args: Array):
 	construction=Construction.new()
 	if not construction.prepare(bindings,cat,departure,4096,1789100000,true,bodies,effects):check(false,construction.error);return
 	world=construction.scenery_owner();world._bodies=world._bodies.fork_for_frame();world._motion=world._motion.fork_for_frame()
+	world._bodies._rows=world._bodies._rows.duplicate(true)
+	world._motion._field=world._motion._field.duplicate(true)
 	for i in world._bodies._rows.size():
 		var point:=target if i==0 else Vector3(10000+i,0,100000)
 		world._bodies._rows[i].position=point;world._motion._field.objects[i].position=point
@@ -129,11 +131,14 @@ func verify(args: Array):
 	var early:=fresh();early.start(world,selection,facing(float(stand_off+1000)));early.advance(world,100)
 	check(early.snapshot().alignment_open and early.cancel() and early.snapshot().alignment_open and early.snapshot().reference_up==Vector3.ZERO,"Early cancel reset a source-retained capture flag")
 	var good: Dictionary=owner.snapshot()
-	for dt in [-1,151,0.5,"1"]:check(not owner.advance(world,dt) and owner.snapshot()==good,"Invalid frame changed an approach")
+	for dt in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5,"1"]:check(not owner.advance(world,dt) and owner.snapshot()==good,"Invalid frame changed an approach")
 	check(not owner.configure(bindings,cat,Construction.new()) and owner.snapshot()==good,"Failed configuration replaced the current approach")
 	var replaced:=Construction.new();check(replaced.prepare(bindings,cat,departure,4096,1789100000,true,bodies,effects),replaced.error)
 	check(not owner.advance(replaced.scenery_owner(),100) and owner.snapshot()==good,"Approach crossed into a replacement field")
-	var broken: RefCounted=world.fork_for_frame();broken._bodies=broken._bodies.fork_for_frame();broken._bodies._rows[0].position=Vector3(INF,0,0)
+	var broken: RefCounted=world.fork_for_frame();broken._bodies=broken._bodies.fork_for_frame()
+	# Corrupt only this fixture's row; frame forks share immutable body rows.
+	broken._bodies._rows[0]=broken._bodies._rows[0].duplicate(true)
+	broken._bodies._rows[0].position=Vector3(INF,0,0)
 	check(not owner.advance(broken,100) and owner.snapshot()==good,"Invalid target pose changed approach state")
 	var destroyed: RefCounted=world.fork_for_frame();destroyed._destruction[0]=destroyed._destruction[0].fork_for_frame();destroyed._destruction[0]._state.actor_state=3
 	check(owner.advance(destroyed,100) and owner.snapshot().phase=="idle" and owner.snapshot().events[0].reason=="target_unavailable","Destroyed target did not cancel approach")
@@ -147,6 +152,7 @@ func verify_spin():
 	# spin vectors make suppression/resumption observable without pretending
 	# that the supplied first field rotates.
 	var rotating: RefCounted=world.fork_for_frame();rotating._motion=rotating._motion.fork_for_frame()
+	rotating._motion._field=rotating._motion._field.duplicate(true)
 	rotating._motion._field.objects[0].spin=Vector3(0.1,0.2,0.3)
 	rotating._motion._field.objects[1].spin=Vector3(0.3,0.1,0.2)
 	var original: Dictionary=rotating.snapshot()
@@ -198,6 +204,7 @@ func verify_flight(lib: RefCounted,args: Array):
 	if running==null:check(false,flight.error);return
 	check(running.snapshot().player_pose==original.player_pose and flight.snapshot()==original,"Approach start teleported or mutated the previous frame")
 	check(running.start_mining()==null,"Active approach started a second target")
+	verify_fast_approach(running)
 	var captures:={"approach-start":running};var camera_froze:=false;var spin_stopped:=false
 	for i in 200:
 		var before: Dictionary=running.snapshot()
@@ -237,6 +244,28 @@ func verify_flight(lib: RefCounted,args: Array):
 	check(resumed!=null and resumed.snapshot().camera_view!=ready.camera_view and not resumed.snapshot().scenery.has("spin_disabled_indices"),"Cancelled approach did not resume camera and asteroid motion")
 	check(running.snapshot()==ready and flight.snapshot()==original,"A prospective cancellation changed the accepted approach")
 	if args.size()==4:await render(lib,args[2],args[3],captures)
+
+func verify_fast_approach(running: RefCounted) -> void:
+	if not running.fast_forward_available():return
+	var original: Dictionary=running.snapshot()
+	var fast: RefCounted=running.press_fast_forward()
+	check(fast!=null,running.error)
+	if fast==null:return
+	check(fast.snapshot().fast_forward.active,"Mining approach did not enable Time before its first guidance sample")
+	var expected: RefCounted=running._approach.fork_for_frame()
+	check(expected.advance(running._scenery,750),expected.error)
+	var next: RefCounted=fast.evaluate(150)
+	check(next!=null,fast.error)
+	if next==null:return
+	var accelerated: Dictionary=next.snapshot()
+	check(accelerated.player_pose==expected.snapshot().player_pose and accelerated.world_phase_elapsed_ms-original.world_phase_elapsed_ms==750,"Mining Time lost its single scaled guidance/world pass")
+	check(accelerated.fast_forward.active and accelerated.fast_forward.near_target and accelerated.fast_forward.camera_passes==5,"Mining approach used the new near flag before the next frame")
+	var cancelled: RefCounted=next.evaluate(150)
+	check(cancelled!=null,next.error)
+	if cancelled==null:return
+	var result: Dictionary=cancelled.snapshot()
+	check(not result.fast_forward.active and result.fast_forward.held and result.world_phase_elapsed_ms-accelerated.world_phase_elapsed_ms==150,"Mining near-target cancellation kept the scaled interval or cleared Time hold")
+	check(running.snapshot()==original and result.cargo==original.cargo and result.progress==original.progress,"Detached accelerated approach changed accepted or unearned progress")
 
 func render(lib: RefCounted,pixels: String,directory: String,captures: Dictionary):
 	var visuals:=Visuals.new()

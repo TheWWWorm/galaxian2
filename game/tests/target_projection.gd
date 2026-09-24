@@ -12,6 +12,7 @@ func _initialize() -> void: call_deferred("run")
 
 func run() -> void:
 	verify_edges()
+	verify_camera_plane()
 	verify_invalid()
 	var args := OS.get_cmdline_user_args()
 	check(args.size() % 3 == 0,"Expected content/binding/visual triples")
@@ -98,6 +99,33 @@ func verify_opening(library: RefCounted, bindings: RefCounted) -> void:
 	check(observed>=9,"Opening projection checks missed authored target/camera pairs")
 	viewport.free()
 
+func verify_camera_plane() -> void:
+	var data: Dictionary=Fixture.definition(true)
+	data.near=20.0
+	var geometry:=TargetProjection.new()
+	check(geometry.configure(data,Vector2i(800,600),Vector2(100,75)),geometry.error)
+	# These finite targets cross beside the camera. Tiny nonzero depth can
+	# produce billions of pixels (or overflow a float32), but remains offscreen.
+	for z in [-0.01,-0.0001,-1e-12,-1e-30,-1e-40,1e-40,1e-30,1e-12,0.0001,0.01]:
+		for xy in [Vector2(1000,0),Vector2(-1000,0),Vector2(0,1000),Vector2(0,-1000),Vector2(1000,1000)]:
+			var point:=Vector3(xy.x,xy.y,z)
+			var raw:=geometry.project_point(Transform3D.IDENTITY,point)
+			check(not raw.has("error"),"Finite camera-plane target failed raw projection: %s"%[raw])
+			if raw.has("error"):continue
+			check(not raw.in_view and raw.projected and TargetProjection.safe_pixel(raw.screen_position.x) and TargetProjection.safe_pixel(raw.screen_position.y),"Camera-plane projection reached unsafe pixels or became visible")
+			var result:=geometry.project(Transform3D.IDENTITY,point)
+			check(not result.has("error"),"Finite camera-plane target stopped marker projection: %s"%[result])
+			if result.has("error"):continue
+			# Independent analytic ellipse intersection. Magnitude and perspective
+			# depth cancel; a positive depth reverses the projected direction.
+			var direction:=Vector2(xy.x,-xy.y)*(-1.0 if z>0 else 1.0)
+			var unit:=Vector2(direction.x/100.0,direction.y/75.0).normalized()
+			var expected:=Vector2(400+unit.x*100.0,300+unit.y*75.0)
+			check(result.ellipse_clamped and not result.in_view and Vector2(result.pixels).distance_to(expected)<1.5,"Camera-plane marker lost its ellipse direction: %s"%[result])
+	for point in [Vector3(-2147483520.0,200,21),Vector3(2147483648.0,0,21),Vector3(0,-2147483648.0,21),Vector3(1000,0,0)]:
+		var result:=geometry.project(Transform3D.IDENTITY,point)
+		check(not result.has("error") and not result.in_view and not result.projected and result.ellipse_clamped,"Finite early-rejected target did not retain an offscreen marker")
+
 func verify_perspective(data: Dictionary) -> void:
 	# Compare independently against the analytic vertical frustum in several
 	# aspect ratios and translated/rolled cameras. Pixel truncation allows <1 px;
@@ -129,7 +157,7 @@ func verify_invalid() -> void:
 	check(geometry.configure(data,Vector2i(800,600),Vector2(100,75)),geometry.error)
 	for pose in [Transform3D(Basis.IDENTITY.scaled(Vector3(2,1,1)),Vector3.ZERO),Transform3D(Basis.IDENTITY.scaled(Vector3(-1,1,1)),Vector3.ZERO),Transform3D(Basis.IDENTITY,Vector3(NAN,0,0))]:
 		check(geometry.project(pose,Vector3.FORWARD).has("error"),"Invalid camera pose projected a target")
-	for position in [Vector3(INF,0,0),Vector3(NAN,0,0),Vector3(1,0,-1e-30),Vector3(-2147483520.0,200,21)]:
+	for position in [Vector3(INF,0,0),Vector3(NAN,0,0)]:
 		check(geometry.project(Transform3D.IDENTITY,position).has("error"),"Unsupported target coordinates reached pixel conversion")
 	check(not geometry.project(Transform3D.IDENTITY,Vector3.FORWARD).has("error"),"Rejected target damaged projector configuration")
 	geometry.clear()

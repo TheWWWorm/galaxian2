@@ -66,7 +66,7 @@ func verify_profile(content: String, pack: String, textures: String) -> void:
 
 func check_slot_lifecycle(original: RefCounted, world: Dictionary, geometry: Node3D) -> void:
 	var clock: RefCounted=original.fork_for_frame();var before: Dictionary=clock.snapshot()
-	for delta in [-1,151,0.5,NAN,true]:check(not clock.advance(delta) and clock.snapshot()==before,"Invalid impact time changed a clock")
+	for delta in [-1,751 if not bindings.fast_forward.is_empty() else 151,0.5,NAN,true]:check(not clock.advance(delta) and clock.snapshot()==before,"Invalid impact time changed a clock")
 	var fixture:=world.duplicate(true)
 	fixture.primaries.guns[0].projectiles.slots[0]={"id":7,"position":Vector3(1,2,3)}
 	var events:=empty_events(fixture);events.primary[0].contacts=[hit(0,7),hit(0,7)]

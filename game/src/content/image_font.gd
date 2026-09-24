@@ -3,6 +3,7 @@ extends RefCounted
 ## The metrics reader skips pixels; native fonts use the verified visual cache.
 ## Compressed/cube font envelopes are unsupported.
 const Library = preload("res://src/content/library.gd")
+const Text = preload("res://src/content/text_definitions.gd")
 const MAX_BYTES := 192 * 1024 * 1024
 var error := ""
 var content_id := ""
@@ -13,6 +14,7 @@ var resource := ""
 var language := ""
 var glyphs := {}
 var spacing := 0
+var _aliases := {}
 
 func clear() -> void:
 	error = ""
@@ -24,6 +26,7 @@ func clear() -> void:
 	language = ""
 	glyphs = {}
 	spacing = 0
+	_aliases = {}
 
 func open(library: RefCounted, source_resource: String, font_index: int, signed_spacing: int) -> bool:
 	clear()
@@ -44,12 +47,14 @@ func open(library: RefCounted, source_resource: String, font_index: int, signed_
 func open_selected(library: RefCounted, bindings: RefCounted, mode := 0, role := "main") -> bool:
 	clear()
 	if bindings.base_content_id != library.manifest.get("content_id", "") or not Library.valid_hash(bindings.binding_id) or library.active_language.is_empty(): return fail("Select a font from the active content and language")
+	if not bindings.text_aliases.is_empty() and not Text.valid_parameters(bindings.text_aliases): return fail("Invalid bitmap font character aliases")
 	var choice: Dictionary = bindings.resolve_font(library.active_language, mode, role)
 	if choice.is_empty(): return fail(bindings.error)
 	if not open(library, choice.resource, choice.font_group, choice.spacing): return false
 	binding_id = bindings.binding_id
 	font_id = choice.font_id
 	source_mode = mode
+	for row in bindings.text_aliases.get("aliases", []): _aliases[int(row[0])] = int(row[1])
 	return true
 
 func create_font(visuals: RefCounted) -> FontFile:
@@ -69,9 +74,16 @@ func create_font(visuals: RefCounted) -> FontFile:
 	font.set_meta("source_resource",resource)
 	var cache:=Vector2i(height,0)
 	font.set_texture_image(0,cache,0,pixels)
-	for code in glyphs:
-		var region: Rect2i=glyphs[code]
-		font.set_glyph_advance(0,height,code,Vector2(advance(code),0))
+	# Language loading aliases several Cyrillic letters to existing Latin-shaped
+	# glyphs. Keep Unicode text and raw timing metrics intact; map only rendering
+	# entries, once, to their original rectangle and advance.
+	var rendered:=glyphs.duplicate()
+	for code in _aliases:
+		if glyphs.has(_aliases[code]):rendered[code]=glyphs[_aliases[code]]
+		else:rendered.erase(code)
+	for code in rendered:
+		var region: Rect2i=rendered[code]
+		font.set_glyph_advance(0,height,code,Vector2(advance(_aliases.get(code,code)),0))
 		font.set_glyph_offset(0,cache,code,Vector2(0,-height))
 		font.set_glyph_size(0,cache,code,region.size)
 		font.set_glyph_uv_rect(0,cache,code,region)

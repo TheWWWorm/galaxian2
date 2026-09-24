@@ -53,7 +53,7 @@ func verify(args: Array):
 	for vital in [{"hull":0},{"hull":-1},false]:
 		var exhausted:=field.duplicate(true);exhausted.objects[by_size[7]].vitals=vital
 		check(not drill.configure(bindings,cat,[90,81],exhausted,by_size[7],Vector2.ZERO) and drill.snapshot()==fresh,"Invalid or exhausted asteroid replaced drilling")
-	for value in [-1,151,1.5,"10"]:check(not drill.advance(value,random) and drill.snapshot()==fresh,"Invalid time mutated drill state")
+	for value in [-1,751 if not bindings.fast_forward.is_empty() else 151,1.5,"10"]:check(not drill.advance(value,random) and drill.snapshot()==fresh,"Invalid time mutated drill state")
 	check(not drill.advance(100,{"state":-1}) and drill.snapshot()==fresh,"Invalid random stream advanced drilling")
 	check(not drill.set_command(Vector2(NAN,0)) and not drill.set_command(Vector2(0,1.1)) and drill.snapshot()==fresh,"Invalid input mutated drilling")
 	check(drill.advance(150,random,true) and drill.snapshot()==fresh,"Pause advanced drilling or the shared random stream")

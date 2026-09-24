@@ -46,6 +46,7 @@ def extract_npc_holding(mach, actors, projection):
         found=[m for m in template(LAYOUTS[mach.architecture]['world_order'][3]).finditer(code) if mac or m.start()%2==0]
         require(len(found)==1);bases['world']=mach.text['address']+found[0].start()
         for key,(base,delta,size,pattern) in LAYOUTS[mach.architecture].items():
+            if mac and key=='activation':pattern=(pattern,MAC_ACTIVATION_ALTERNATE)
             at=bases[base]+delta;row=template(pattern).fullmatch(read(key,at,size));require(row is not None)
             if key=='range':require(target(row,'getter',at)==address(projection['provenance']['predicate']))
         deactivation=address(initial['provenance']['opening_deactivation'])
@@ -100,3 +101,6 @@ LAYOUTS = {'x86_64': {'timers': ['constructor', 1609, 24, '49c784242802000000000
                            0,
                            58,
                            'd4f8f80000281cbf0168002915d00026406850f8260001684a6b29469047d4f8f800406850f826000168496a8847d4f8f800013601688e42ead3']}}
+
+# The same model-visibility tail remains linked in this complete compiler layout.
+MAC_ACTIVATION_ALTERNATE = LAYOUTS['x86_64']['activation'][3].replace('e9805aebff', 'e95441ebff')

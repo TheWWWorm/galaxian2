@@ -59,7 +59,12 @@ func verify(content: String, pack: String) -> void:
 	check(kills.counter_deltas.player_kills==3 and kills.events.size()==3,"Encounter did not earn exactly three player kills")
 	var entered:=false;var relocated:=false;var two_passes:=false;var arrival:=false;var drift:=false;var cut:=false;var reached:=false
 	var phases:={};var camera:=EscapeCamera.new();check(camera.configure(bindings),camera.error)
+	var cadence: Array[int]=[16,33,150,17,149]
+	var last_phase:=4
+	var closest_entry_eye:=INF
+	var radio_camera_distances:={}
 	for tick in 5000:
+		var delta_ms: int=cadence[tick%cadence.size()]
 		var before: Dictionary=state.timeline.snapshot()
 		if int(before.camera.shot.phase)==16:
 			check(before.radio.finished[22],"Fade preceded final radio")
@@ -69,10 +74,19 @@ func verify(content: String, pack: String) -> void:
 			if state.is_empty():return
 			check(state.timeline.snapshot().escape.boundary=="arrival_transition_required","Completed external fade failed to expose arrival boundary")
 			reached=true;break
-		var next:=step(state,100)
+		var next:=step(state,delta_ms)
 		if next.is_empty():return
 		var after: Dictionary=next.timeline.snapshot()
 		var phase:=int(after.camera.shot.phase);phases[phase]=true
+		var camera_distance: float=after.camera.view.eye.distance_to(after.scene.player_pose.origin)
+		if phase==5:closest_entry_eye=minf(closest_entry_eye,camera_distance)
+		for event in [12,13]:
+			if after.radio.started[event] and not before.radio.started[event]:
+				radio_camera_distances[event]=camera_distance
+				print("Escape radio %d in phase %d: eye-to-player %.1f units" % [event,phase,camera_distance])
+		if phase!=last_phase:
+			print("Escape phase %d at %d ms; player visible=%s, detail=%s, camera distance=%.1f" % [phase,after.elapsed_ms,str(after.escape.ship_visible),str(after.scene.ship_detail.selections.player),camera_distance])
+			last_phase=phase
 		if phase==5 and not entered:
 			check(before.radio.finished[10] and int(before.camera.shot.phase)==4,"Escape consumed radio before its preceding frame")
 			check(after.escape.frame.entry and after.scene.player_pose.origin==next.world_frame.snapshot().player_motion.pose.origin,"Entry discarded the last ordinary player travel")
@@ -81,10 +95,15 @@ func verify(content: String, pack: String) -> void:
 		if phase>4:
 			var e: Dictionary=after.escape
 			if int(before.camera.shot.phase)>4:
-				var expected_position: Vector3=before.scene.player_pose.origin+before.scene.player_pose.basis.z.normalized()*(float(before.escape.cruise_speed)*100.0)
+				var expected_position: Vector3=before.scene.player_pose.origin+before.scene.player_pose.basis.z.normalized()*(float(before.escape.cruise_speed)*float(delta_ms))
 				check(next.world_frame.snapshot().player_motion.pose.origin.is_equal_approx(expected_position),"Escape movement used a later speed or visual rotation")
-			var expected: Dictionary=camera.evaluate(100,e,after.scene.player_pose,before.camera.view,state.scenery.snapshot().random_state)
+				if int(before.camera.shot.phase)==5 and phase==5:check(after.scene.player_pose.origin.x>before.scene.player_pose.origin.x,"Source positive-yaw escape failed to approach its positive-X fixed eye")
+			var expected: Dictionary=camera.evaluate(delta_ms,e,after.scene.player_pose,before.camera.view,state.scenery.snapshot().random_state)
 			check(not expected.is_empty() and expected.random_state==e.random_state and expected.camera==after.camera,"World camera consumed a different random stream")
+			if phase in [5,6]:
+				check(e.ship_visible and after.scene.ship_detail.selections.player.visible,"Source opening escape unexpectedly hid or culled the player")
+			if phase in [8,9,10,11]:check(not e.ship_visible,"Source hyperdrive phase restored the player early")
+			if phase in [12,13,14,15,16]:check(e.ship_visible,"Source arrival shot failed to restore the player")
 			var first_actor: Dictionary=next.world_frame.snapshot().actor_events[0]
 			if first_actor.destruction.state.phase=="retired":
 				check(first_actor.destruction.random_state==e.random_state,"NPC pass did not inherit the camera's consumed stream")
@@ -104,6 +123,7 @@ func verify(content: String, pack: String) -> void:
 				rollback(state);phases[-phase]=true
 		state=next
 	check(entered and relocated and two_passes and arrival and drift and cut and reached,"Complete escape coverage was not reached")
+	check(closest_entry_eye<2000.0 and float(radio_camera_distances.get(12,INF))<12000.0 and float(radio_camera_distances.get(13,INF))<3000.0,"Source yaw never brought the ship into the original radio-12/13 camera path")
 	check(state.world_frame.snapshot().controller.death_accounting==kills,"Escape invented later kills or rewards")
 	var saved:=snapshots(state)
 	check(state.world_frame.evaluate(state.timeline,state.scenery,100,true).is_empty(),"Unimplemented arrival scene advanced")

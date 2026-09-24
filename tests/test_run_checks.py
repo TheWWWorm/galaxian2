@@ -14,6 +14,22 @@ import run_checks
 
 
 class CheckRunnerTests(unittest.TestCase):
+    def test_focused_discovery_imports_the_reader_package_independently(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'tools').mkdir()
+            (root / 'tests').mkdir()
+            (root / 'tools/reader_probe.py').write_text('VALUE = 17\n')
+            (root / 'tests/test_probe.py').write_text('import unittest\nimport reader_probe\nclass Probe(unittest.TestCase):\n    def test_value(self):\n        self.assertEqual(reader_probe.VALUE, 17)\n')
+            with patch.object(run_checks, 'ROOT', root), patch.object(sys, 'argv', ['run_checks.py', 'python', '--pattern', 'test_probe.py']), contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(run_checks.main(), 0)
+            self.assertIn('Ran 1 test', output.getvalue())
+
+    def test_empty_python_selection_is_not_a_passing_check(self):
+        with patch.object(sys, 'argv', ['run_checks.py', 'python', '--pattern', 'no_matching_test_91f5.py']), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(run_checks.main(), 1)
+        self.assertIn('No Python tests ran', output.getvalue())
+
     def test_both_godot_leak_messages_fail_the_check(self):
         for message in ('WARNING: ObjectDB instances leaked at exit',
                         'WARNING: 2 ObjectDB instances were leaked at exit'):

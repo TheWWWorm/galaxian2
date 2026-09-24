@@ -1,10 +1,10 @@
 """Early stock and hidden contact declarations; no original executable payloads."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_station_generation(mach, arrival):
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
-    return (copy.deepcopy(VALUES),proof) if proof else ({},{})
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
+    return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'mido_station_generation',
  'first_cursor': 1,
@@ -161,6 +161,68 @@ LAYOUTS = {'station_generation_item_factory': [-244298,
                                       '__const',
                                       'c0e336a5f371ef22cd534e094269f2c1a9635cd080b71ffa671086832d3b60b7'],
  'station_generation_percent_constant': [1556914,
+                                         4,
+                                         '__const',
+                                         '0d66bd808e9247acb560fe33efaa62ad6f11ee6f85cc4f61bd17673263de04ee']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'station_generation_item_factory': [-245786,
+                                     2760,
+                                     '__text',
+                                     '1117745511e25b2718d8dba3ceedc104f3b97a293558f77af2dc9974c134aaa3'],
+ 'station_generation_ship_gate': [-242998,
+                                  60,
+                                  '__text',
+                                  '6fe9e4edc6d1c61c463e93207f45b133b449bc302f6335cd3c2e20bfe1ec3e06'],
+ 'station_generation_time_seed': [1120354,
+                                  61,
+                                  '__text',
+                                  'e7bea1c3841b61a4886b2bcdbf4f8d20c6b868007b4079aff9ef16116f7e0897'],
+ 'station_generation_item_clone': [-81912,
+                                   123,
+                                   '__text',
+                                   '5db38ebd4c49576d60e2ce8f842ea3ae5932ced0561db71eceb1016ec5efda2e'],
+ 'station_generation_item_fields': [-84866,
+                                    140,
+                                    '__text',
+                                    'acb8bcc0b55a821b447d54e398af755f253bc3886c416eedd7954fd587613361'],
+ 'station_generation_station_system': [851948,
+                                       9,
+                                       '__text',
+                                       '6606fc8a6f1ba751b9ac1938be410a3773ec78b58a56438aba7a6792360aeefc'],
+ 'station_generation_station_tech': [852186,
+                                     9,
+                                     '__text',
+                                     '1ccfabce6093cef5cb4b9e50f6402ff1ac7385b8b11a91a2c35a5d06d54a6a5f'],
+ 'station_generation_map_affinity': [-664484,
+                                     52,
+                                     '__text',
+                                     '242778a1a85d3d0589044427e9e35884e095e387b921dffa859e8f6c6455b18c'],
+ 'station_generation_hard_predicate': [873738,
+                                       33,
+                                       '__text',
+                                       '1b492e03274a43b86d0e6f0a99519ec21d163b3ebd9916f674cae277f9b03733'],
+ 'station_generation_gas_predicate': [873594,
+                                      61,
+                                      '__text',
+                                      'b209af5168ccdacbd69250395d390373c851bc011e918788f326ac25945b96b6'],
+ 'station_generation_contact_early_gate': [-237758,
+                                           72,
+                                           '__text',
+                                           '419a7ac9875df2fef8da331983142c839367c5212b900c3820dcb7fed7ae60e5'],
+ 'station_generation_expansion_exclusions': [1532178,
+                                             36,
+                                             '__const',
+                                             '138f105421d0a00481f83301ee61b161bb815f54b8a934b20074e3f58e68cdc9'],
+ 'station_generation_stock_constants': [1532066,
+                                        24,
+                                        '__const',
+                                        '46593ae8c1c0c951e4e8b13c0fa358e53ceec71f9ad3f066491151e795f51db8'],
+ 'station_generation_hard_constant': [1520682,
+                                      4,
+                                      '__const',
+                                      'c0e336a5f371ef22cd534e094269f2c1a9635cd080b71ffa671086832d3b60b7'],
+ 'station_generation_percent_constant': [1531914,
                                          4,
                                          '__const',
                                          '0d66bd808e9247acb560fe33efaa62ad6f11ee6f85cc4f61bd17673263de04ee']}

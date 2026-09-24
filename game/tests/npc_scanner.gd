@@ -54,6 +54,16 @@ func verify(content: String, pack: String, pixels: String) -> void:
 	check(locked.selected_actor_id==0 and locked.elapsed_ms==0 and locked.events.size()==2 and locked.events[0].source_id==26 and locked.events[1].source_id==22,"New acquisition lost source events or timer reset")
 	check(not locked.markers[0].selected and locked.animation_frame==-1,"Markers used post-acquisition selection")
 	check(scanner.snapshot()==saved,"Detached scanner changed original state")
+	# A normal offscreen ship must not reject the whole scanner update when its
+	# projected pixels overflow. Retain the lock without acquiring it offscreen.
+	var crossing: RefCounted=fork.fork_for_frame()
+	var beside:=combat.duplicate(true)
+	for actor in beside.actors:actor.pose.origin=Vector3(1000,0,-0.0001)
+	check(crossing.advance(beside,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,100,true),crossing.error)
+	var crossed: Dictionary=crossing.snapshot()
+	check(crossed.selected_actor_id==0 and crossed.elapsed_ms==0 and crossed.events.is_empty() and crossed.markers.size()==3,"Offscreen camera-plane targets changed acquisition or stopped the scanner")
+	for marker in crossed.markers:
+		check(not marker.in_view and not marker.in_scan_window and marker.pixels.x>400 and marker.pixels.x<500 and marker.pixels.y==300,"Camera-plane NPC lost its bounded marker or became selectable")
 	scanner=fork
 	check(scanner.advance(combat,Transform3D.IDENTITY,Transform3D.IDENTITY,aim,3001,true),scanner.error)
 	check(scanner.snapshot().markers[0].selected and scanner.snapshot().events.is_empty(),"Same selected NPC repeated acquisition effects")

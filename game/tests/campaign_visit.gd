@@ -6,6 +6,7 @@ const Bindings=preload("res://src/content/resource_bindings.gd")
 const Visit=preload("res://src/simulation/campaign_visit.gd")
 const Definitions=preload("res://src/content/suttnar_visit_definitions.gd")
 const Navigation=preload("res://src/content/free_navigation_definitions.gd")
+const Travel=preload("res://src/content/mido_travel_definitions.gd")
 var checks:=0
 var failures:=0
 
@@ -25,6 +26,22 @@ func verify(args: PackedStringArray) -> void:
 	if not Definitions.available(bindings):
 		check(not visit.configure(bindings,library,18,mission),"Earlier bindings inferred the new conversation")
 		return
+	var alternate: bool=Travel._alternate(bindings.mido_travel)
+	var first_text:=1852 if alternate else 1838
+	var events: Array=bindings.mido_travel.suttnar_visit.events
+	for index in events.size():
+		check(events[index].text_id==first_text+index and events[index].voice_event_id==254+index,"The visit uses another source's text or voice IDs")
+	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args[1].path_join("bindings.json")))
+	for key in Definitions.SPANS:
+		var bad:=bindings.mido_travel.duplicate(true);bad.provenance.erase(key)
+		check(not Travel.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Missing visit proof was accepted: "+key)
+	var mixed:=bindings.mido_travel.duplicate(true)
+	mixed.suttnar_visit=(Definitions.VALUES if alternate else Definitions.MAC_VALUES).duplicate(true)
+	check(not Travel.parameters(mixed),"Another source's visit text was accepted with this source's parent")
+	mixed=bindings.mido_travel.duplicate(true)
+	var other: Dictionary=Definitions.SPANS if alternate else Definitions.MAC_SPANS
+	mixed.provenance.suttnar_dialogue_pairs.offset=int(bindings.arrival_staging.provenance.actor.offset)+int(other.suttnar_dialogue_pairs[0])
+	check(not Travel.validate(mixed,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Another source supplied the visit table proof")
 	check(not visit.poll(56,10001,5001),"Unconfigured visit accepted a poll")
 	if not visit.configure(bindings,library,18,mission):check(false,visit.error);return
 	check(visit.transition().is_empty() and not visit.snapshot().dialogue.visible,"Fresh visit advanced the campaign")
@@ -39,7 +56,7 @@ func verify(args: PackedStringArray) -> void:
 	for invalid in [[-1,10001,5001],[56,-1,5001],[56,10001,-1],[56,10000.5,5001],[56,NAN,5001],[56,INF,5001],[56,9999,5001]]:
 		check(not visit.poll(invalid[0],invalid[1],invalid[2]) and visit.snapshot()==before,"Invalid clock/location changed the retained visit")
 	check(visit.poll(56,10001,5001),visit.error)
-	check(visit.snapshot().dialogue.visible and visit.snapshot().dialogue.text_id==1838,"The flight threshold omitted its first original line")
+	check(visit.snapshot().dialogue.visible and visit.snapshot().dialogue.text_id==first_text,"The flight threshold omitted its first original line")
 	check(visit.snapshot().campaign_cursor==18 and visit.transition().is_empty(),"Opening the dialogue advanced the campaign")
 	before=visit.snapshot()
 	check(not visit.navigate("previous") and visit.snapshot()==before,"Previous escaped before the first line")

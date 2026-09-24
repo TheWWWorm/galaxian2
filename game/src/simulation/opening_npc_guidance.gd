@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+const Readonly=preload("res://src/simulation/readonly_state.gd")
 const Kappa=preload("res://src/content/kappa_population_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 const AliothSequence=preload("res://src/simulation/alioth_attack.gd")
@@ -152,7 +154,7 @@ func configure_ambient(bindings: RefCounted,catalogues: RefCounted,construction:
 	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
 	if not Definitions.parameters(data) or not _configure_state(bindings,data,body,int(body.factory_hull)):return reject("Ambient guidance lacks ordinary tuning")
 	_training=rules;_training_death=bindings.mido_travel.traffic_combat.death.duplicate(true)
-	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
+	_frame_limit=Frames.simulation_limit(bindings)
 	_training_death.selection_skipped_modes=_training_death.selection_skipped_modes.map(func(mode):return int(mode))
 	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=rank
 	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
@@ -180,7 +182,7 @@ func configure_contract(bindings: RefCounted,catalogues: RefCounted,construction
 	if ContractLife.available(bindings):_training_death=ContractLife.population(bindings,construction.snapshot())
 	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=int(rules.rank)
 	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
-	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
+	_frame_limit=Frames.simulation_limit(bindings)
 	_boost_enabled=bool(rules.rival.boost_enabled if body.population_group=="rival" else rules.pirate.boost_enabled)
 	if not _boost_enabled:_state.speed=float(rules.rival.motion_speed)
 	if not set_initial_route(construction.route(actor_id)):
@@ -237,6 +239,13 @@ func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construc
 	if not actor.configure_kappa_rescue(bindings,catalogues,construction,actor_id):return reject(actor.error)
 	return _configure_fighter_guidance(bindings,rules,actor.snapshot(),construction.route(actor_id))
 
+func _clear_story_targets() -> void:
+	_state.story_targets_cleared=true
+
+func _configure_story(bindings: RefCounted,rules: Dictionary,body: Dictionary,route: RefCounted) -> bool:
+	clear()
+	return _configure_fighter_guidance(bindings,rules,body,route)
+
 func _configure_fighter_guidance(bindings: RefCounted,rules: Dictionary,body: Dictionary,route: RefCounted) -> bool:
 	if body.population_group!="fighter":return reject("Large ships require their own motion owner")
 	var data: Dictionary=bindings.opening_actors.npc_initialization.get("guidance",{})
@@ -244,7 +253,7 @@ func _configure_fighter_guidance(bindings: RefCounted,rules: Dictionary,body: Di
 	_training=rules;_training_death=rules
 	_identity.campaign_cursor=int(rules.campaign_cursor);_identity.rank=int(rules.rank)
 	_state.target_index=int(rules.initial_target_index);_state.desired_position=Vector3.ZERO
-	_frame_limit=int(bindings.frame_clock.max_frame_milliseconds)
+	_frame_limit=Frames.simulation_limit(bindings)
 	if not set_initial_route(route):
 		var message:=error;clear();return reject(message)
 	return true
@@ -292,7 +301,7 @@ func update(delta_ms: Variant, actor: Dictionary, root_pose: Variant, player: Di
 		var alternate: Variant=player.alternate_position
 		if alternate!=null and (not alternate is Vector3 or not alternate.is_finite()):return fail("Invalid alternate player position")
 	var targets:=[]
-	var without_targets: bool=_state.get("alioth_targets_cleared",false)
+	var without_targets: bool=_state.get("alioth_targets_cleared",false) or _state.get("story_targets_cleared",false)
 	if not _training.is_empty():
 		targets=training_targets(player,target_actors)
 		if not error.is_empty() or (targets.is_empty() and not without_targets):return {}
@@ -511,7 +520,7 @@ func training_targets(player: Dictionary, actors: Array) -> Array:
 		if not row.get("active") is bool or not row.get("statistics_targeting_blocked") is bool or not Vitals.integer(row.get("vitals",{}).get("hull")) or not row.get("pose") is Transform3D or not row.pose.is_finite():fail("Invalid combat-training target statistics");return []
 		if not Vectors.added(row.pose.origin,-player.pose.origin).is_finite():fail("Combat-training target exceeds source precision");return []
 	var result:=[]
-	if _state.get("alioth_targets_cleared",false):return result
+	if _state.get("alioth_targets_cleared",false) or _state.get("story_targets_cleared",false):return result
 	for id in _training.target_memberships[int(_identity.actor_id)]:
 		if int(id)==int(_training.player_target_id):
 			# The source's nonplayer scan classifies player statistics as kind0.
@@ -541,15 +550,16 @@ func snapshot() -> Dictionary:
 	return result
 
 func fork_for_frame() -> RefCounted:
+	# Configuration is fixed after preparation; detach live state only.
 	var copy: RefCounted=get_script().new()
-	copy._definition=_definition.duplicate(true);copy._identity=_identity.duplicate();copy._state=_state.duplicate(true)
-	copy._holding=_holding.duplicate(true)
+	copy._definition=Readonly.freeze(_definition);copy._identity=_identity.duplicate();copy._state=_state.duplicate(true)
+	copy._holding=Readonly.freeze(_holding)
 	copy._route=null if _route==null else _route.fork_for_frame()
 	copy._started=_started
 	copy._has_destruction=_has_destruction
-	copy._full_hold=_full_hold.duplicate(true);copy._pirate=_pirate.duplicate(true);copy._training=_training.duplicate(true)
-	copy._training_death=_training_death.duplicate(true)
-	copy._ambient=_ambient.duplicate(true)
+	copy._full_hold=Readonly.freeze(_full_hold);copy._pirate=Readonly.freeze(_pirate);copy._training=Readonly.freeze(_training)
+	copy._training_death=Readonly.freeze(_training_death)
+	copy._ambient=Readonly.freeze(_ambient)
 	copy._frame_limit=_frame_limit
 	copy._recycling=_recycling
 	copy._boost_enabled=_boost_enabled

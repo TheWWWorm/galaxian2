@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+const Readonly=preload("res://src/simulation/readonly_state.gd")
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 ## A periodic source traffic check selects at most one inactive travel actor.
 ## The world supplies its retained clock and commits the returned request with
@@ -30,7 +32,7 @@ func configure(bindings: RefCounted,construction: RefCounted,elapsed_ms: Variant
 	_rules=bindings.ambient_lifecycle.duplicate(true);_elapsed=elapsed_ms
 	_rules.campaign_cursor=int(packet.campaign_cursor);_rules.station_id=int(packet.population.station_id)
 	_patrol_elapsed=patrol_elapsed_ms
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
 	return true
 
 func advance(delta_ms: Variant,combat: Dictionary) -> Dictionary:
@@ -77,8 +79,9 @@ func snapshot() -> Dictionary:
 	return result
 
 func fork_for_frame() -> RefCounted:
+	# Configuration is fixed after preparation; detach live state only.
 	var copy: RefCounted=get_script().new()
-	copy._identity=_identity.duplicate();copy._rules=_rules;copy._actors=_actors.duplicate(true)
+	copy._identity=_identity.duplicate();copy._rules=_rules;copy._actors=Readonly.freeze(_actors)
 	copy._elapsed=_elapsed;copy._max_ms=_max_ms
 	copy._patrol_elapsed=_patrol_elapsed
 	return copy

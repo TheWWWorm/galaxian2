@@ -7,6 +7,7 @@ import copy
 import math
 import struct
 from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {'selection_input': 'handling_before_equipment',
           'event_ids': [42, 43, 44, 45],
@@ -25,17 +26,22 @@ def extract_engine_audio(mach, vehicle, rotation):
     try:
         origin = vehicle['provenance']['handling_setup']['offset']
         address = mach.text['address'] + origin - mach.slice_offset - mach.text['offset']
-        proof = {}
-        for key, (delta, size, pattern) in LAYOUTS[arch].items():
-            found = section_bytes(mach, address+delta, size, b'__text')
-            if found is None or found[0] != bytes.fromhex(pattern):
-                return {}
-            proof[key] = {'offset': found[1], 'bytes': size}
+        layouts = [LAYOUTS[arch]] + ([MAC_ALTERNATE] if arch == 'x86_64' else [])
+        proof = recognize(mach, origin, layouts)
+        if not proof:
+            return {}
         if (proof['handling_setup'] != vehicle['provenance']['handling_setup'] or
                 proof['rotation_anchor'] != rotation['provenance'][0]):
             return {}
         values = {}
         for key, (delta, section) in DATA[arch].items():
+            if arch == 'x86_64':
+                # Both complete Mac contexts place RIP operands at the same offsets.
+                # Import the value selected by its consumer in this source.
+                owner, displacement, end = MAC_DATA_REFERENCES[key]
+                start = proof[owner]['offset']
+                relative = struct.unpack_from('<i', mach.data, start-mach.slice_offset+displacement)[0]
+                delta = start+end+relative-origin
             found = section_bytes(mach, address+delta, 4, section.encode())
             if found is None:
                 return {}
@@ -103,3 +109,28 @@ DATA = {'x86_64': {'threshold_high': [1035820, '__const'],
            'threshold_middle': [546, '__text'],
            'threshold_low': [550, '__text'],
            'horizontal_scale': [11554, '__text']}}
+
+
+# Complete alternate Mac compiler layout, linked to handling and rotation owners.
+MAC_ALTERNATE = {'handling_setup': [0, 13, 'e811b50200f30f1183a4010000'],
+ 'selection': [13,
+               229,
+               '498b3ee847ac04004889c7e889b4020083f82a7511c7433850040000be50040000e9b0000000488d05f6741c00488b38e81aac04004889c7e85cb4020083f82b7511c7433852040000be52040000e983000000488d05c9741c00488b38e8edab04004889c7e82fb4020083f828750ec7433853040000be53040000eb59f30f1083a40100000f2e05136a0f00720ec743382d000000be2d000000eb3a0f2e05006a0f00720ec743382c000000be2c000000eb230f2e0575550f00720ec743382b000000be2b000000eb0cc743382a000000be2a000000488d057e741c00488b38e8ae40f4ff'],
+ 'ship_getter': [177318, 8, '554889e58b075dc3'],
+ 'equipment_after_selection': [242,
+                               79,
+                               '4c8d2d37741c00498b7d00e85aab04004889c7e84eb502000f57c0f30f2ac0f30f1183f0020000f30f5e05cbf00e00f30f108ba4010000f30f59c1f30f58c1f30f590553f10e00f30f1183a4010000'],
+ 'control_owner': [12602, 25, '4189f64989fc488d05214a1c004c8b38498b3c24e847b2ffff'],
+ 'controls': [12627,
+              175,
+              'f3410f1084240c0300000f57db0f2ec30f28d0770bf30f1015483a0f000f57d0f3410f108c24040300000f2ecb0f28d9770bf30f101d2b3a0f000f57d90f2ed376110f57c90f2ec1771b0f5705143a0f00eb120f57c00f2ec877070f570d033a0f000f28c14c89ff4889c631d2e8b135edff488d059c491c00488b18498b3c24e8c2b1fffff3410f10842404030000f30f5905a2930e00f30f5805b68f0e004889df4889c6ba01000000e87435edff'],
+ 'rotation_anchor': [12859, 24, 'f30f10159d380f00f30f101db5060f00f30f100d81060f00'],
+ 'instance_getter': [-7270, 12, '554889e5488b87000100005d'],
+ 'parameter_wrapper': [-1218698,
+                       72,
+                       '554889e54883ec10f30f1145f44883bfd847000000742b4885f67426488d45f84889f789d64889c2e89d43210089c6e826eaffff488b7df8f30f1045f4e8644321004883c4105dc3']}
+MAC_DATA_REFERENCES = {'threshold_high': ['selection', 136, 140],
+ 'threshold_middle': ['selection', 159, 163],
+ 'threshold_low': ['selection', 182, 186],
+ 'horizontal_scale': ['controls', 147, 151],
+ 'horizontal_offset': ['controls', 155, 159]}

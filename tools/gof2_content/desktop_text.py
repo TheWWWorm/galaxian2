@@ -1,19 +1,16 @@
 """Read the Mac's finite desktop text substitutions without running original code."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 def extract_desktop_text(mach, arrival):
     if mach.architecture!='x86_64':return {}
     try:
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,pattern) in LAYOUTS.items():
-            found=section_bytes(mach,anchor+delta,size,b'__text')
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof
+        proof=recognize(mach,origin['offset'],[LAYOUTS,MAC_ALTERNATE])
+        if not proof:return {}
+        alternate=proof['declaration']['bytes']==MAC_ALTERNATE['declaration'][1]
+        result=copy.deepcopy(MAC_VALUES if alternate else VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
@@ -48,3 +45,38 @@ LAYOUTS = {'declaration': [-228336,
  'lookup': [1120202,
             253,
             '554889e54883ec2048897df08975ec488b7df0c745e80000000048897de08b45e8488b4de03b010f83440000008b75e8488b7de0e8816906008b303b75ec0f851d0000008b45e80501000000488b7de089c6e8636906008b308975ece9100000008b45e805020000008945e8e9adffffff8b45ec488b4de03b41300f8d52000000817dec000000000f8c45000000488b45e048817818000000000f8433000000486345ec488b4de0488b511848813cc2000000000f8419000000486345ec488b4de0488b5118488b04c2488945f8e920000000488d3db0c60a008b75ecb000e83c510500488b7de04881c72000000048897df8488b45f84883c4205dc3']}
+
+# Verified alternate source: twenty-one desktop substitutions.
+MAC_ALTERNATE = {'declaration': [-229342,
+                 356,
+                 'bfa8000000e846a01a004889c3c70310000000c7430411000000c74308bc000000c7430cbd000000c743103d020000c743143e020000c7431843020000c7431c44020000c7432046020000c7432447020000c7432869020000c7432c6a020000c743306c020000c743346d020000c7433872020000c7433c73020000c7434075020000c7434476020000c7434879020000c7434c7a020000c7435082060000c7435483060000c7435885060000c7435c86060000c74360ab060000c74364ac060000c74368b2060000c7436cb3060000c74370b7060000c74374b8060000c74378cb060000c7437ccc060000c78380000000ce060000c78384000000cf060000c783880000004b070000c7838c0000004c070000c7839000000050020000c7839400000051020000c7839800000053020000c7839c00000054020000c783a000000056020000c783a400000057020000488b3df96128004889deba2a000000e88c931400'],
+ 'setter': [1119506,
+            145,
+            '554889e54883ec2048897df8488975f08955ec488b75f8817dec00000000488975e00f842d0000008b45ec83e0013d010000000f8513000000488d3db06d0a00b000e8390b0500e93f000000488b7de0e88d040600c745e8000000008b45e83b45ec0f83230000008b45e8488b4df08b3c81488b75e0e8af0706008b45e805010000008945e8e9d1ffffff4883c4205dc3'],
+ 'lookup': [1119666,
+            253,
+            '554889e54883ec2048897df08975ec488b7df0c745e80000000048897de08b45e8488b4de03b010f83440000008b75e8488b7de0e8e50906008b303b75ec0f851d0000008b45e80501000000488b7de089c6e8c70906008b308975ece9100000008b45e805020000008945e8e9adffffff8b45ec488b4de03b41300f8d52000000817dec000000000f8c45000000488b45e048817818000000000f8433000000486345ec488b4de0488b511848813cc2000000000f8419000000486345ec488b4de0488b5118488b04c2488945f8e920000000488d3dac6c0a008b75ecb000e8fc090500488b7de04881c72000000048897df8488b45f84883c4205dc3']}
+
+MAC_VALUES = {'scope': 'mac_desktop_text',
+ 'pairs': [[16, 17],
+           [188, 189],
+           [573, 574],
+           [579, 580],
+           [582, 583],
+           [617, 618],
+           [620, 621],
+           [626, 627],
+           [629, 630],
+           [633, 634],
+           [1666, 1667],
+           [1669, 1670],
+           [1707, 1708],
+           [1714, 1715],
+           [1719, 1720],
+           [1739, 1740],
+           [1742, 1743],
+           [1867, 1868],
+           [592, 593],
+           [595, 596],
+           [598, 599]],
+ 'lookup': 'first_match_once'}

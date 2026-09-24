@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Contact, acknowledgement and departure cinematic. A completed animation only
 ## requests arrival; the flight transaction still validates and constructs it.
 const Definitions=preload("res://src/content/gate_transit_definitions.gd")
@@ -29,6 +31,7 @@ func configure(bindings: RefCounted,animation: RefCounted,navigation: RefCounted
 		if row.index==int(bindings.mido_travel.gate_transit.contact.environment_object_index):gate=row
 	if gate.is_empty() or not gate.interactive or layout.station_id!=layout.gate_station_id or animation.object_state(1).active:return reject("This location has no unused outgoing gate")
 	_rules=bindings.mido_travel.gate_transit.duplicate(true);_gate=gate.duplicate(true)
+	_max_ms=Frames.simulation_limit(bindings,150)
 	_departure=bindings.mido_travel.gate_arrival.departure.duplicate(true) if Arrival.available(bindings) else {}
 	_animation=animation.fork_for_frame();_navigation=navigation.fork()
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
@@ -104,7 +107,7 @@ func _begin_departure() -> bool:
 
 func advance(milliseconds: int,paused:=false) -> bool:
 	error=""
-	if _state.is_empty() or not Numbers.integer(milliseconds,0,150):return reject("Gate transit requires a bounded ordinary frame")
+	if _state.is_empty() or not Numbers.integer(milliseconds,0,_max_ms):return reject("Gate transit requires a bounded ordinary frame")
 	if paused or _state.phase in ["confirmation","map","ready"]:return true
 	var animation: RefCounted=_animation.fork_for_frame()
 	if not animation.advance(milliseconds):return reject(animation.error)
@@ -142,6 +145,6 @@ func fork_for_frame() -> RefCounted:
 	copy._state=_state.duplicate(true);copy._rules=_rules.duplicate(true);copy._gate=_gate.duplicate(true)
 	copy._departure=_departure.duplicate(true)
 	copy._animation=_animation.fork_for_frame() if _animation!=null else null;copy._navigation=_navigation.fork() if _navigation!=null else null
-	return copy
+	copy._max_ms=_max_ms;return copy
 static func vec(value: Array) -> Vector3:return Vector3(value[0],value[1],value[2])
 func reject(message: String) -> bool:error=message;return false

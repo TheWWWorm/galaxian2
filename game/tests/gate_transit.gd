@@ -28,7 +28,7 @@ func verify_transit(args: PackedStringArray) -> void:
 	check(models.map(func(row):return row.end_ms)==[2500,2500,2550,5000],"Terran gate duration differs from original animation")
 	check(not clock.completed() and not clock.accelerating(),"Unused gate completed or accelerated")
 	check(not clock.activate(2) and clock.snapshot()==initial,"Incoming gate became interactive")
-	check(not clock.advance(-1) and not clock.advance(151) and clock.snapshot()==initial,"Invalid clock frame changed gates")
+	check(not clock.advance(-1) and not clock.advance(751 if not bindings.fast_forward.is_empty() else 151) and clock.snapshot()==initial,"Invalid clock frame changed gates")
 	check(clock.advance(100,true) and clock.snapshot()==initial,"Pause advanced original gate layers")
 	var origin: Vector3=outgoing.pose.origin
 	var center:=Vector3(int(origin.x),int(origin.y),int(origin.z));var bound: float=outgoing.collision_radius
@@ -109,6 +109,11 @@ func verify_transit(args: PackedStringArray) -> void:
 	for key in TransitDefinitions.SPANS:
 		var changed: Dictionary=bindings.mido_travel.duplicate(true);changed.provenance.erase(key)
 		check(not Travel.validate(changed,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Missing transit proof was accepted: "+key)
+	var changed: Dictionary=bindings.mido_travel.duplicate(true)
+	var alternate_source: bool=int(changed.conversations[0].events[0].text_id)==int(Travel.MAC_VALUES.conversations[0].events[0].text_id)
+	var other: Dictionary=TransitDefinitions.SPANS if alternate_source else TransitDefinitions.MAC_SPANS
+	changed.provenance.gate_transit_contact.offset=int(bindings.arrival_staging.provenance.actor.offset)+int(other.gate_transit_contact[0])
+	check(not Travel.validate(changed,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Mixed-source gate contact proof was accepted")
 
 func advance_time(transit: RefCounted,milliseconds: int) -> void:
 	while milliseconds>0:

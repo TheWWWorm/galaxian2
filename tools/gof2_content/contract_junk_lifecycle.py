@@ -1,10 +1,10 @@
 """Verified Junk declarations; no original executable code is emitted."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 
 def extract_contract_junk_lifecycle(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 
@@ -99,6 +99,44 @@ LAYOUTS = {'junk_lifecycle_update': [640402,
                                       '__text',
                                       'f1f8fe6a1184bbb8779679a1278f498f7920af77e4d530f580606429b90ff2ce'],
  'junk_lifecycle_burst_size': [1556978,
+                               4,
+                               '__const',
+                               'c68830a25204a09f8e77aada6bc5807f607cccaaa0ebb2a7122d317584478a8b']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'junk_lifecycle_update': [640950,
+                           508,
+                           '__text',
+                           '94d9d7218154ee7a027f8b08f249f61603ed61e74747462f756636a6204e71bb'],
+ 'junk_lifecycle_render': [641458,
+                           62,
+                           '__text',
+                           'dc836b136b88150f5910975ac1c1972ce9d69928ddc93f4e0089defef1185214'],
+ 'junk_lifecycle_world_count': [107554,
+                                28,
+                                '__text',
+                                '3a5f7994f3df990378ed6063291fb807857d0ec70b7c8a161184fa4d1019bd16'],
+ 'junk_lifecycle_deadline_exclusion': [482714,
+                                       12,
+                                       '__text',
+                                       'c65e7871bf910d88cd8e831c948aaa17a4e8b0c5eb7e195660b790ceee0df5f7'],
+ 'junk_lifecycle_deadline_poll': [389260,
+                                  340,
+                                  '__text',
+                                  '8c2f8a277792a1c343d6db309dad69e9cc227774f8b6049f59a29bd5c55052b1'],
+ 'junk_lifecycle_particle_registration': [63495,
+                                          30,
+                                          '__text',
+                                          'dfc6c8afea4e17f0fbae90b73e18ee3963273da5bab0106da2e67b1d1ec0abb4'],
+ 'junk_lifecycle_particle_copy': [498571,
+                                  1407,
+                                  '__text',
+                                  'e232dfda5c87972626b3bd1cf34920618dd297421a03b6d75060e2f77ed5b7c7'],
+ 'junk_lifecycle_initial_statistic': [881865,
+                                      11,
+                                      '__text',
+                                      'f1f8fe6a1184bbb8779679a1278f498f7920af77e4d530f580606429b90ff2ce'],
+ 'junk_lifecycle_burst_size': [1531978,
                                4,
                                '__const',
                                'c68830a25204a09f8e77aada6bc5807f607cccaaa0ebb2a7122d317584478a8b']}

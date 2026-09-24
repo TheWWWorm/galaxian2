@@ -21,6 +21,7 @@ var captures:={}
 func _initialize():call_deferred("run")
 func run():
 	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
 	check(args.size() in [3,4],"Expected explicit Mac content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:await verify(args)
 	print("Player death flight: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
@@ -63,7 +64,7 @@ func step(world: RefCounted, milliseconds: int, command:=Vector2.ZERO, throttle:
 	return next
 
 func lethal(world: RefCounted, milliseconds:=0, command:=Vector2.ZERO, throttle:=1.0, drill:=Vector2.ZERO) -> RefCounted:
-	var branch: RefCounted=world.fork_for_frame()
+	var branch: RefCounted=Fixture.fork_world_fixture(world)
 	var gun: RefCounted=branch._encounter._weapons._guns[0]
 	var weapon: Dictionary=gun.snapshot().weapon
 	while branch._player.snapshot().vitals.hull>1:

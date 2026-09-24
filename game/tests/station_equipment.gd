@@ -7,6 +7,7 @@ const EquipmentRules=preload("res://src/content/station_equipment_definitions.gd
 
 func run():
 	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
 	check(args.size() in [3,4],"Expected Mac content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:await verify(args)
 	if is_instance_valid(host):host.free()
@@ -77,7 +78,7 @@ func after_second_return(args: PackedStringArray):
 	bindings.audio=old_audio
 	check(host.equipment_action("close"),host.session.error)
 	state=host.session.snapshot()
-	check(not host.equipment_panel.visible and state.dialogue.visible and state.dialogue.text_id==1725 and state.campaign_cursor==6 and state.mission.kind==158,"Equipment completion skipped its acknowledged source line")
+	check(not host.equipment_panel.visible and state.dialogue.visible and state.dialogue.text_id==int(bindings.station_equipment.events[0].text_id) and state.campaign_cursor==6 and state.mission.kind==158,"Equipment completion skipped its acknowledged source line")
 	check(host.session.audio.snapshot().history.back().source_id==438,"Equipment completion used the wrong voice")
 	check(state.progress==before.progress and state.reward_credits==0 and state.equipment.credit_delta==0,"Equipment granted credits or premature campaign progress")
 	if args.size()==4:await capture(args[3],"equipment-confirmed-dialogue")

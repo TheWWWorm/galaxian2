@@ -53,7 +53,23 @@ func run():
 	check(sequence.snapshot().parameter==1.0,"Parameter wrapped at equality instead of strictly above its maximum")
 	sequence.commit_step(sequence.prepare_step(1))
 	check(sequence.snapshot().parameter>0 and sequence.snapshot().parameter<0.002,"Parameter failed to wrap above its maximum")
+	verify_external_envelope()
 	print("Audio sequence: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
+
+func verify_external_envelope() -> void:
+	var sound: Dictionary=fixture().layers[0][0]
+	sound.volume=0.5;sound.definition.volume=0.8;sound.definition.pitch=0.25
+	sound.envelope={"flags":20,"points":[[0.0,0.25,2],[1.0,0.75,2]]}
+	var sequence:=Sequence.new()
+	sequence.configure({"parameter":{"control":"external","min":0.0,"max":3.0},"layers":[[sound]]},19)
+	var start:=sequence.prepare_step(0,0.0)
+	check(start.operations.size()==1 and is_equal_approx(start.operations[0].gain,0.4) and is_equal_approx(start.operations[0].pitch,0.5),"External envelope did not combine its initial level with one playlist level")
+	sequence.commit_step(start)
+	var high:=sequence.prepare_step(100,3.0)
+	check(high.operations.size()==1 and high.operations[0].action=="update" and is_equal_approx(high.operations[0].gain,0.4) and is_equal_approx(high.operations[0].pitch,8.0),"Envelope update compounded the prior pitch or volume")
+	sequence.commit_step(high)
+	var low:=sequence.prepare_step(100,0.0)
+	check(low.operations.size()==1 and is_equal_approx(low.operations[0].gain,0.4) and is_equal_approx(low.operations[0].pitch,0.5),"Returning to the original external value changed the voice base level")
 
 func fixture() -> Dictionary:
 	var background:={"id":0,"samples":[{}],"weights":[100],"playlist_flags":8,"volume":1.0,"attenuation":1.0,"pitch":0.0,"pitch_random":0.0}

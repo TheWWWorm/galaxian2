@@ -64,7 +64,7 @@ func verify(args: PackedStringArray):
 	check(started.player_pose==start_pose and started.active and started.throttle==1 and started.events==[{"kind":"notification","source_id":10}],"Selecting a station moved the ship or omitted the source start event")
 	check(started.guidance_gain==f32(3.9795455932617188) and started.response_factor==f32(25.590911865234375) and started.bank_limit==f32(365.58447265625),"Handling, pilot response and bank scale were conflated")
 	check(owner.advance(100,0.0,0,true) and owner.snapshot()==started,"Paused guidance changed pose or history")
-	check(not owner.advance(151,0.0) and not owner.advance(-1,0.0) and not owner.advance(0.5,0.0) and not owner.advance(100,0.0,INF) and not owner.advance(100,0.0,-1) and owner.snapshot()==started,"Invalid guidance frame mutated its owner")
+	check(not owner.advance(751 if not bindings.fast_forward.is_empty() else 151,0.0) and not owner.advance(-1,0.0) and not owner.advance(0.5,0.0) and not owner.advance(100,0.0,INF) and not owner.advance(100,0.0,-1) and owner.snapshot()==started,"Invalid guidance frame mutated its owner")
 	var clone: RefCounted=owner.fork_for_frame();clone.clear();check(owner.snapshot()==started,"Clearing guidance clone changed the original")
 	var detached: Dictionary=owner.snapshot();detached.history[0]=99;detached.events.clear();check(owner.snapshot()==started,"Guidance snapshot exposed mutable state")
 	var capture_owners:={"autopilot-start":owner.fork_for_frame()}

@@ -1,6 +1,6 @@
 """Recognize opening escape camera declarations; emit no executable content."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {'scope': 'fresh_opening_escape_fixed_camera',
  'look_shake_axes': [0, 1, 2],
@@ -21,12 +21,9 @@ def extract_opening_escape_camera(mach, staging):
         if not staging['escape']: return {}
         origin = staging['provenance']['initial']
         if origin['bytes'] != (366 if arch == 'x86_64' else 320): return {}
-        at = mach.text['address'] + origin['offset'] - mach.slice_offset - mach.text['offset']
-        proof = {}
-        for key, (delta, size, raw) in LAYOUTS[arch].items():
-            found = section_bytes(mach, at + delta, size, b'__const' if key.endswith('_constant') else b'__text')
-            if found is None or found[0] != bytes.fromhex(raw): return {}
-            proof[key] = {'offset': found[1], 'bytes': size}
+        layouts=[LAYOUTS[arch]]+([MAC_ALTERNATE] if arch=='x86_64' else [])
+        proof=recognize(mach,origin['offset'],layouts,constants=[k for k in LAYOUTS[arch] if k.endswith('_constant')])
+        if not proof:return {}
         result = copy.deepcopy(VALUES); result['provenance'] = proof
         return result
     except (KeyError, TypeError, IndexError, ValueError, OverflowError): return {}
@@ -93,3 +90,33 @@ LAYOUTS = {'x86_64': {'defaults': [782030,
            'random_bits': [1768154,
                            128,
                            '90b501af85b06c4624f00704a546049003910498002101914ef6e641c0f2de510091052101914ef26d61cdf6ec61009102684368a2fb019c02eb8202624403fb012119f10b0241f1000189b2026041600398c0f13003c0f1100021fa00f9c3f1200c01fa0cf122fa03f241ea02010028a8bf49460846a7f10404a54690bd00bf']}}
+
+
+# Independently verified alternate Mac compiler layout.
+MAC_ALTERNATE = {'defaults': [782662,
+              68,
+              'c6434c00c6434f00c6434d00c7435000000000c6434e01c6435400c683f800000000c6830801000000c6831401000001c7831801000000000000c7831c01000005000000'],
+ 'roll_defaults': [782804, 27, 'c7833801000000000000c7833c0100000000c842c6834001000000'],
+ 'ordinary_gate': [784492, 23, 'f6434e010f840e0d000083bd34fbffff000f8e010d0000'],
+ 'fixed_target': [784515,
+                  468,
+                  '488b7b08e8d506e7ff488b4820488b5028488b70308b783889bd20ffffff4889b518ffffff48899510ffffff48898d08ffffff488b481848898d00ffffff488b481048898df8feffff488b08488b4008488985f0feffff48898de8fefffff6434d010f846c0100004c8d7b28f68314010000017470488b8508ffffff488b8d10ffffff488b9518ffffff8bb520ffffff89b5d0feffff488995c8feffff48898dc0feffff488985b8feffff488b8500ffffff488985b0feffff488b85f8feffff488985a8feffff488b85e8feffff488b8df0feffff48898da0feffff48898598feffffeb72c78598feffff0000803f48c785a4feffff0000000048c7859cfeffff00000000c785acfeffff0000803f48c785b8feffff0000000048c785b0feffff00000000c785c0feffff0000803fc785c4feffff00000000c785c8feffff0000803fc785ccfeffff0000803fc785d0feffff0000803f488dbd98feffffe8c1fd0400f30f118de0fefffff30f1185d8feffff660f70c001f30f1185dcfeffff488db5d8feffff4c89ffe8c5520200488dbde8feffffe849fe0400488d7b1c488db588fefffff30f118d90fefffff30f118588feffff660f70c001f30f11858cfeffffe88c520200c6830801000000e989070000'],
+ 'cockpit_gate': [786912, 13, 'f683f8000000010f84d5000000'],
+ 'transient_gate': [787138, 10, 'f6434f010f84c4000000'],
+ 'look_shake': [787344,
+                282,
+                'f30f108b18010000f30f118d28fbffff660fefc00f2ec80f86e2000000f683f800000001410f94c54c8d2520031700498b3c24448bbb1c010000478d343f4489f6e8a1380300410fb6cd488d1566090a00f30f100c8af30f118d34fbffff4429f8f30f2ac0f30f109528fbfffff30f59d0f30f59d1f30f58531cf30f11531cf30f108318010000f30f118528fbffff498b3c244489f6e84c3803004429f80f57c0f30f2ac0f30f598528fbfffff30f598534fbfffff30f584320f30f114320f30f108318010000f30f118528fbffff498b3c244489f6e80c3803004429f80f57c0f30f2ac0f30f598528fbfffff30f598534fbfffff30f584324f30f114324488d7310488d531c488d4b284c8dbdb8fbffff4c89ffe8fd080500'],
+ 'scale_constant': [1445191, 8, 'a69bc43a0000803f'],
+ 'pan': [783855,
+         87,
+         '554889e5f30f105f10f30f58d8f30f115f10f30f105f14f30f58d9f30f115f14f30f105f18f30f58daf30f115f18f30f58471cf30f11471cf30f584f20f30f114f20f30f585724f30f115724bee80300005de901000000'],
+ 'cockpit_select': [787941,
+                    84,
+                    '554889e5534883ec184889fb4088b3f8000000c745e800000000c745ec00001643c745f0000048c4488dbbfc000000488d75e8e8ba460200c7830c01000000000000c78310010000000000004883c4185b5dc390'],
+ 'fixed_select': [788525, 10, '554889e54088774d5dc3'],
+ 'random_bound': [998519,
+                  170,
+                  '554889e54883ec4048897df08975ec488b7df08b75ecb8000000002b45ec21c63b75ec48897dd80f852f000000be1f000000486345ec488b7dd8488945d0e83dffffff4863f8488b4dd0480fafcf48c1f91f89c88945fce945000000be1f000000488b7dd8e816ffffff8945e88b75ec8945cc99f7fe8b45cc8955e48945c88b45e82b45e48b4dec81e90100000001c83d000000000f8cc1ffffff8b45e48945fc8b45fc4883c4405dc3'],
+ 'random_bits': [998391,
+                 93,
+                 '554889e548897df88975f4488b7df848c745e8e6ecde05488b45e848c1e008480d6d000000488945e8488b07480faf45e848050b00000048b9ffffffffffff00004821c8488907488b07be300000002b75f489f148d3f889c689f05dc3']}

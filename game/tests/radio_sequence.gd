@@ -63,7 +63,17 @@ func _initialize() -> void:
 		var rows: Array = binding.opening_dialogue.get("events", [])
 		check(rows.size() == 23, "Source opening event count")
 		if rows.size() != 23: continue
-		check(rows[0].text_id == (1668 if library.manifest.profile.edition == "ios-hd" else 1649), "Edition text ID was replaced")
+		# Both supplied Mac layouts use the same profile name but have different
+		# source text tables. The guarded declaration offset identifies the one
+		# imported with this binding; the voice table independently names its row.
+		var first_text_id:=1668 if library.manifest.profile.edition=="ios-hd" else -1
+		if first_text_id<0:
+			match int(binding.opening_dialogue.get("provenance",{}).get("declaration",{}).get("offset",-1)):
+				839618:first_text_id=1649
+				845802:first_text_id=1657
+		check(first_text_id>=0 and rows[0].text_id==first_text_id,"Imported opening text differs from its guarded source layout")
+		var voice: Dictionary=binding.opening_dialogue.get("voice",{})
+		if not voice.is_empty():check(voice.get("text_ids",[]).size()==rows.size() and int(voice.text_ids[0])==first_text_id,"Opening voice table names another source text row")
 		check(rows[9].values.map(func(value): return int(value)) == [0, 1, 2] and rows[16].values.map(func(value): return int(value)) == [12], "Source combat/phase gates changed")
 		check(radio.step(1500, {}, 0) == [{"kind": "started", "event": 0}], "Real declarations did not activate")
 		check(radio.snapshot().text == library.strings[int(rows[0].text_id)], "Localized radio binding failed")

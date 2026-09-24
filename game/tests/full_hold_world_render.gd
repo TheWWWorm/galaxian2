@@ -13,6 +13,7 @@ var scene: Node3D
 func _initialize():call_deferred("run")
 func run():
 	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
 	check(args.size() in [3,4],"Expected explicit Mac content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:await verify(args)
 	if is_instance_valid(scene):scene.free()
@@ -31,7 +32,7 @@ func verify(args: PackedStringArray):
 	check(scene.encounter.hull.visible and scene.encounter.engine.visible and not scene.encounter.cargo.visible,"Living pirate model/engine/cargo flags disagree")
 	check(scene.encounter.hull.transform==world.snapshot().actors[0].pose,"Pirate hull did not use source statistics pose")
 	if args.size()==4:await capture(args[3],"second-trip-cue")
-	var close: RefCounted=world.fork_for_frame()
+	var close: RefCounted=Fixture.Fixtures.fork_world_fixture(world)
 	var actor: Dictionary=close.snapshot().actors[0]
 	var eye: Vector3=actor.pose.origin+Vector3(650,400,-950)
 	var target: Vector3=actor.pose.origin
@@ -40,7 +41,7 @@ func verify(args: PackedStringArray):
 	check(scene.present(close),scene.error)
 	if args.size()==4:await capture(args[3],"second-trip-pirate-close")
 	var original_pose: Transform3D=scene.encounter.hull.transform
-	var broken: RefCounted=close.fork_for_frame();broken._encounter._combat._actors[0]._state.hull_resource="missing"
+	var broken: RefCounted=Fixture.Fixtures.fork_world_fixture(close);broken._encounter._combat._actors[0]._state.hull_resource="missing"
 	check(not scene.present(broken) and scene.encounter.hull.transform==original_pose and scene.geometry.player.transform==close.snapshot().player_pose*Transform3D(close.snapshot().player_model_basis,Vector3.ZERO),"Rejected pirate rendering changed the accepted scene")
 	check(scene.present(close),scene.error)
 	# The starter has no gun. A lethal fixture verifies the source body, engine,

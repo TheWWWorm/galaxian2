@@ -6,6 +6,7 @@ and provenance; original instructions never enter a content pack.
 import copy
 import struct
 from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {
     'player_sound_limit': 2, 'npc_sound_limit': 1, 'initial_enabled': True,
@@ -33,20 +34,29 @@ def extract_weapon_audio(mach, weapons, actors, staging):
             return {}
         origin = staging['provenance']['initial']['offset']
         address = mach.text['address'] + origin - mach.slice_offset - mach.text['offset']
-        proof = {}
-        for key, (delta, size, pattern) in LAYOUTS[arch].items():
-            found = section_bytes(mach, address + delta, size, b'__text')
-            if found is None or found[0] != bytes.fromhex(pattern):
-                return {}
-            proof[key] = {'offset': found[1], 'bytes': size}
+        layouts = [LAYOUTS[arch]] + ([MAC_ALTERNATE] if arch == 'x86_64' else [])
+        proof = recognize(mach, origin, layouts)
+        if not proof:
+            return {}
         for key, expected in [('price_layout', construction['provenance']['item_layout']),
                               ('price_getter', construction['provenance']['price']),
                               ('interval_getter', weapons['provenance']['interval_getter'])]:
             if proof[key] != expected:
                 return {}
-        # Both layouts index this complete 233-row catalogue table. A missing
+        # Each supported layout indexes its complete 233-row table. A missing
         # entry stays -1. Edition tables are read independently, never replaced.
-        table_delta = 1464783 if arch == 'x86_64' else 2351530
+        table_delta = 2351530
+        if arch == 'x86_64':
+            # Both verified Mac layouts address the same table from selection
+            # and dispatch. Read their relative operands, not an edition overlay.
+            targets = []
+            for key, displacement, end in [('primary_select', 396, 400), ('dispatch', 37, 41)]:
+                start = proof[key]['offset']
+                relative = struct.unpack_from('<i', mach.data, start - mach.slice_offset + displacement)[0]
+                targets.append(start + end + relative)
+            if targets[0] != targets[1]:
+                return {}
+            table_delta = targets[0] - origin
         found = section_bytes(mach, address + table_delta, 233 * 4, b'__const')
         if found is None:
             return {}
@@ -145,3 +155,45 @@ LAYOUTS = {'x86_64': {'owner_defaults': [412873, 25, '48c783d800000000000000c643
                             '016b002908bf70474968c0ef50004a680260ca6842604a698260ca69c2604a6bc261ca6b02624b6c4362d1f82490c0f81090c96a4161991a01ebd17102eb6101816100f1340141f98f0a002180f84410704700bf'],
            'price_getter': [-196798, 4, '80697047'],
            'interval_getter': [537622, 4, '406d7047']}}
+
+
+# Independently verified alternate Mac compiler layout.
+MAC_ALTERNATE = {'owner_defaults': [413409, 25, '48c783d800000000000000c6437401c7832001000001000000'],
+ 'owner_setter': [414273, 26, '554889e5408877748997200100005dc3554889e58977445dc390'],
+ 'player_limit': [430027, 21, '4889334889f7be01000000ba02000000e861c2ffff'],
+ 'npc_backlink_call': [-202971, 12, '488b7b084889dee82a6b0900'],
+ 'npc_backlink_setter': [414299, 14, '554889e54889b7d80000005dc390'],
+ 'npc_world_gate': [-66553, 26, '4183bf14010000027510488b7f0831f6ba02000000e820560700'],
+ 'weapon_defaults': [-311688, 25, 'c683cd0000000048c7430800000000c783f800000000000000'],
+ 'primary_select': [419649,
+                    457,
+                    '554889e54157415641554154534883ec284189f4448965c448897dc84c8b374d85f60f84cb010000498b46084c8b384d85ff0f849101000049631f48895db8b9040000004889d848f7e148c7c7ffffffff480f41f8e82cdc0e004889df4889c389f94885ff7f0648894db0eb2a8d41ff48894db031c9eb0a48ffc1498b56084c8b3a498b5708488b14ca8b929c00000089148b39c875e141be0100000041b701eb66418d46ff4c63e84a6304ab488d0de29f1c00488b09488b4908488b3cc1e8b070f6ff8945d44d63e64a6304a3488d0dc19f1c00488b09488b4908488b3cc1e88f70f6ff3945d47d13428b04ab428b0ca342890cab428904a34530ff41ffc6448b65c4488b7db84139fe7c9541be0100000041f6c70141b70174ec4531ed85ff4c8b75b07e3231c04889c14531ed4889c239d1740f8b348b3b34937507c70493ffffffff48ffc239d775e648ffc14439f175dbeb0349ffc54539f57d5e42833cab007852488b55c8488b02488b4008488b00488b40084a8b04e8c680cd00000001488d051d9e1c00488d0d968f0f00488b12488b5208488b12488b52084a8b14ea4863929c0000008b3491488b38e82a6af4ff41ffcc4585e4759a4885db74084889dfe8b1da0e00'],
+ 'single_install_gate': [419589, 17, '41f644247401751c5b415c415e415f5dc3'],
+ 'single_install_select': [419625, 24, '418bb424200100004c89e75b415c415e415f5de900000000'],
+ 'bulk_install_gate': [420451, 22, '41f646740175224883c4085b415c415d415e415f5dc3'],
+ 'bulk_install_select': [420492, 29, '418bb6200100004c89f74883c4085b415c415d415e415f5de998fcffff'],
+ 'player_install': [440765, 17, '554889e553504889fb488b3be8c1afffff'],
+ 'player_install_call': [-157396, 5, 'e88c200900'],
+ 'npc_install': [-199451, 14, '554889e5488b7f085de984710900'],
+ 'npc_install_call': [-64368, 29, '498b8778010000488b40084c8b75a04a8b3c304c89e631d2e838f0fdff'],
+ 'dispatch': [420853,
+              280,
+              '554889e54156534883ec10f30f1145ec4989ce488b87d80000004885c0750f4863c6488d0d498c0f008b1c81eb468b40444883f80a7738bb3e000000488d0dd7000000486304814801c8ffe0bb36000000eb21bb34000000eb1abb35000000eb13bb37000000eb0cbbe4080000eb05bb3d000000488d0577a01c00488b388d42fe83f802720583fa08755889dee8e682edff84c0751f488d05819a1c008a480f31c0f6c1014c0f44f0488d0542a01c00488b38eb41488d05629a1c00f6400f01744d488d0529a01c00488b3889de4c89f231c94531c04883c4105b415e5de99f87edff488d05349a1c008a480f31c0f6c1014c0f44f089de4c89f231c9f30f1045ec4883c4105b415e5de9a183edff4883c4105b415e5dc3'],
+ 'fire_success': [421453,
+                  176,
+                  'e881d5f4ff3c010f85a3000000f3410f104764f30f58058b790f00f3410f114764498b07488b40084a8b04e8488b40084a8b04f0c780b00000000000000041f6477401746b498b07488b40084a8b04e8488b40084a8b04f0f680cd00000001744f4889dfe8b1890a00f30f114d90f30f114588660f70c001f30f11458c498b07488b40084a8b04e8488b40084a8b04f0f30f1080f80000008bb09c0000008b90a00000004c89ff488d4d88e8f8fcffff'],
+ 'pitch_update': [214710,
+                  55,
+                  '488d05f2bf1f00488b38e816f707004889c7e8140106000f28c80f57d2f30f1005640c1200f30f5cc10f2ec27209498b7e60e868190400'],
+ 'pitch_wrapper': [483413, 13, '554889e5488b3f5de9b917ffff'],
+ 'pitch_setter': [423963,
+                  66,
+                  '554889e5488b074885c07434488b4008488b004885c07428833800742331c9488b4008488b04c8f30f1180f800000048ffc1488b07488b4008488b003b0872df5dc3'],
+ 'price_layout': [-206893,
+                  140,
+                  '554889e5488b47384885c0747d488b48088b4904890f488b48088b490c894f04488b48088b4914894f08488b48088b491c894f0c488b48088b4934894f1c488b48088b493c894f20488b50088b5244895724488b70088b7624897710488b40088b402c89471429ca89d0c1e81f01d0d1f801c8894718c647500048c747480000000048c74740000000005dc3'],
+ 'price_getter': [-206667, 10, '554889e58b47185dc390'],
+ 'interval_getter': [608225, 11, '554889e5f30f1047545dc3'],
+ 'npc_dispatch_table': [421135,
+                        44,
+                        '39ffffff47ffffff32ffffff40ffffff55ffffff55ffffff55ffffff55ffffff55ffffff5affffff4effffff']}

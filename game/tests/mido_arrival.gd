@@ -193,7 +193,7 @@ func verify_frame(bindings: RefCounted, cat: RefCounted, library: RefCounted, co
 	check(station.configure_return(bindings,cat,library,guided),station.error)
 	if station.snapshot().is_empty():return
 	var entered: Dictionary=station.snapshot()
-	check(entered.campaign_cursor==10 and entered.dialogue.count==12 and entered.dialogue.text_id==1758 and entered.equipment==packet.equipment,"Kernstal station started another conversation")
+	check(entered.campaign_cursor==10 and entered.dialogue.count==12 and entered.dialogue.text_id==int(bindings.mido_travel.conversations[1].events[0].text_id) and entered.equipment==packet.equipment,"Kernstal station started another conversation")
 	for i in 12:
 		check(station.snapshot().campaign_cursor==10 and station.snapshot().cargo==initial.cargo,"An unfinished station line granted completion or discarded cargo")
 		check(station.acknowledge(),station.error)

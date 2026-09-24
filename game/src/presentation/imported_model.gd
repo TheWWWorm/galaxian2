@@ -76,11 +76,11 @@ func copy_from(template: Node3D) -> void:
 		var material: ShaderMaterial = template.materials[i].duplicate(false)
 		var instance := MeshInstance3D.new()
 		instance.mesh = template.instances[i].mesh
+		instance.transform = template.instances[i].transform
 		instance.material_override = material
 		add_child(instance)
 		instances.append(instance)
 		materials.append(material)
-	set_source_time(0.0)
 
 func set_source_time(time: float) -> void:
 	for i in surfaces.size():

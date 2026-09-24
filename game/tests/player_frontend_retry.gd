@@ -3,6 +3,7 @@ extends "res://tests/player_frontend.gd"
 ## source projectile isolates lethal contact; the native death/input/menu path
 ## must return to the same viable saved station without changing progress.
 const DeathFixture=preload("res://tests/player_death_flight.gd")
+const TouchInput=preload("res://tests/fixtures/touch_input.gd")
 
 func run() -> void:
 	root.content_scale_size=Vector2i.ZERO;root.size=Vector2i(1280,720);root.grab_focus()
@@ -36,7 +37,7 @@ func verify_retry() -> void:
 	check(app.phase=="game" and app.game.session.snapshot().campaign_cursor==4,"Menu Resume did not load the opening checkpoint")
 	check(app.game._preview_controls.all(func(control):return not control.visible) and app.game._menu_button.visible,"The player entry exposed developer controls or omitted its menu")
 	await capture("menu-retry-loaded-mining")
-	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.game.set_touch_controls(true)
+	root.size=Vector2i(960,540);app.set_mobile_layout(true);TouchInput.set_preference(app.game,true)
 	await capture("menu-retry-loaded-landscape")
 	check(app.game._save_button.size.y>=44 and app.game._load_button.size.y>=44,"Opening save actions lost their landscape touch targets")
 	root.size=Vector2i(1280,720);app.set_mobile_layout(false);app.game.set_touch_controls(false)

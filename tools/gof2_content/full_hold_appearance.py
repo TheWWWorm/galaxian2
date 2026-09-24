@@ -1,5 +1,6 @@
 """Optional Mac mission placement declarations, without executable runtime code."""
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_full_hold_appearance(mach,arrival,story,death):
@@ -8,15 +9,12 @@ def extract_full_hold_appearance(mach,arrival,story,death):
         if story['scope']!='full_hold_mining_story' or death['scope']!='full_hold_pirate_destruction':return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None:return {}
-            if pattern.startswith('sha256:'):
-                if hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            elif found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'full_hold_pirate_appearance',
@@ -87,3 +85,44 @@ LAYOUTS = {'mission_controller': [138688,
  'offset_x': [1545990, 4, '__const', '00409c45'],
  'offset_z': [1545586, 4, '__const', '0060ea46'],
  'yaw': [1546070, 4, '__const', 'db0f4940']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'mission_controller': [138688,
+                        93490,
+                        '__text',
+                        'sha256:e8859bf243afd08613994a0243deed7b8e74fe123e678ab3b1a50044070847f8'],
+ 'activation': [631086,
+                82,
+                '__text',
+                '554889e553504889fbc783bc00000001000000488b7b08be01000000e8b7a1feff4889dfbe01000000e8eaaeffffc6834101000001488b7b184885ff7504488b7b10be010000004883c4085b5de95441ebff'],
+ 'placement': [609776,
+               176,
+               '__text',
+               '554889e54156534883ec20f30f1155d4f30f114dd8f30f1145dc4889fbf30f118380000000f30f118b84000000f30f119388000000488b7b10e8688eebff4c8db3c0010000488d75e0f30f1045dcf30f1145e0f30f1045d8f30f1145e4f30f1045d4f30f1145e84c89f7e823db0600488bbbb80100004885ff7410f3410f104e08f3410f7e06e87dc804004c8b7308488b7b10e8848debff4983c6084c89f74889c6e8db7709004883c4205b415e5dc3'],
+ 'visibility': [610374,
+                78,
+                '__text',
+                '554889e5535089f3488b47104885c07436488b4f184885c974288b711c83feff7425488d05fb921b00488b38e88b6f08000fb6f34889c74883c4085b5de9caa907008b701cebd64883c4085b5dc3'],
+ 'model_install': [-79336,
+                   272,
+                   '__text',
+                   '554889e54156534889fb8993b00000004885f6746980f10184c97562488973184c8b73104d85f67527bfe8000000e82d5618004989c6488d0515192600488b304c89f7e8820ef6ff4c897310488b73188b76144c89f7e87110f6ff488b4b10488b43188b491489482ceb384889c34c89f7e8de5518004889dfe812561800488973104c8b73184d85f674104c89f7e8a50ff6ff4c89f7e8b955180048c7431800000000f30f109388000000f30f108b84000000f30f108380000000488b7b10e8ba11f6ff4c8b7308488b7b10e82311f6ff4983c6084c89f74889c6e87afb1300488b7b184885ff750a5b415e5dc3e978ffffff488b5b084883c308e8f410f6ff4889df4889c65b415e5de93bfc130090'],
+ 'actor_factory': [77944, 3478, '__text', 'sha256:1edb599619eeabcc4601e757d01307eba28fc1a7bfb5ea74ea86ef4b365fcbf3'],
+ 'matrix_setter': [-730082, 24, '__text', '554889e54889f08b7714488b7f384889c25de9cddb1c0090'],
+ 'position_setter': [-729962,
+                     68,
+                     '__text',
+                     '554889e54883ec50f30f1155bcf30f114db8f30f1145b48b7714488b7f38e869dd1c00488d7dc04889c6f30f1045b4f30f104db8f30f1055bce82e0b1e004883c4505dc3'],
+ 'euler_addition': [-728986,
+                    140,
+                    '__text',
+                    '554889e5534881ec880000004889fbf30f584340f30f114340f30f584b44f30f114b44f30f585348f30f1153488b7314488b7b38e883d91c00488d7db88b535cf30f105348f30f104340f30f104b444889c6e805fb1d008b7314488b7b38e859d91c00488dbd78fffffff30f105354f30f10434cf30f104b504889c6e8bb051e004881c4880000005b5dc390'],
+ 'effect_trigger': [-687254,
+                    484,
+                    '__text',
+                    '554889e54157415641554154534883ec784989d74989f64989fc498b7c2408e8b658ffff488d05d55f2f00488b38498b4424088b7014e85d3c1c00c6800d01000001498b4424088b701c83feff7416488d05aa5f2f00488b38e83a3c1c00c6800d01000001498b7c24104885ff74264c89f6e86358ffff488d05825f2f00488b38498b4424108b7014e80a3c1c00c6800d01000001418b042483f80b746e83c0f883f8020f87b7000000488d1d6f5f2f00488b3bbe450c0000e8fa941b00f30f2ad0f30f5e15e6db2100498d74243c488d7d980f57c00f57c9e89a551d00488b3bbe28000000e8cd941b000f57c0f30f2ac0f30f5905a6db2100f30f5805b2db21004c89e7e88ef7ffffeb55498b7c2408c7458800000000c7458c0000803fc7459000000000488d55884c89fee83e58ffff488d9578ffffff498b7c2410c78578ffffff00000000c7857cffffff0000803fc74580000000004c89fee80f58ffff498b4424184885c07441833800743c31db4c8d2d875e2f00488b40084c8b3cd84c89ff4c89f6e84e57ffff418b7714498b7d00e8ff3a1c0048ffc3c6800d01000001498b4424183b1872cd41c644243001418b4608898570ffffff498b0648898568ffffff488db568ffffff4c89e7e863fcffff4883c4785b415c415d415e415f5dc3'],
+ 'activation_virtual': [2377146, 8, '__const', '6c39150001000000'],
+ 'model_install_virtual': [2377138, 8, '__const', 'e4e5140001000000'],
+ 'offset_x': [1520974, 4, '__const', '00409c45'],
+ 'offset_z': [1520570, 4, '__const', '0060ea46'],
+ 'yaw': [1521054, 4, '__const', 'db0f4940']}

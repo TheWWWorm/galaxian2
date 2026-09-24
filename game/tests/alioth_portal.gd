@@ -28,7 +28,7 @@ func run() -> void:
 	portal.advance(150,camera)
 	check(portal.snapshot().elapsed_ms==closed.elapsed_ms and portal.snapshot().animation_elapsed_ms==closed.animation_elapsed_ms+150,"Hidden portal advanced its appearance clock or stopped asset animation")
 	var before: Dictionary=portal.snapshot()
-	check(not portal.advance(151,camera) and portal.snapshot()==before,"Invalid frame changed the portal")
+	check(not portal.advance(751 if not bindings.fast_forward.is_empty() else 151,camera) and portal.snapshot()==before,"Invalid frame changed the portal")
 	var model:=AEM.new();var path: String=bindings.resolve(16994,"mesh")
 	var parsed: Dictionary=model.decode(lib.read_resource(path,AEM.MAX_BYTES))
 	check(not parsed.is_empty(),model.error)

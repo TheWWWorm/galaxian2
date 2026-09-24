@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Connects a verified docked approach to drilling and atomic extraction.
 ## Candidates leave every accepted owner unchanged. The flight must accept the
 ## session, cargo, field and continued random stream together, then release the
@@ -27,6 +29,7 @@ var _phase:="idle"
 var _last_drill:={}
 var _receipt:={}
 var _events:=[]
+var _failure_instruction_shown:=false
 
 func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCounted, hard_difficulty: bool, reference_center:=Vector2.ZERO) -> bool:
 	error=""
@@ -34,10 +37,13 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	var entry: Dictionary=construction.snapshot()
 	if entry.is_empty() or entry.get("base_content_id")!=bindings.base_content_id or entry.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id or OrdinaryFlight.for_departure(bindings,entry).is_empty():return reject("Mining session belongs to another departure")
 	if not reference_center.is_finite() or reference_center!=reference_center.floor() or absf(reference_center.x)>16384 or absf(reference_center.y)>16384:return reject("Mining session requires fixed integer drill coordinates")
+	if not Definitions.retain_hint_history(entry.departure.progress,{},bindings.mining_session):return reject("Mining session has invalid retained instruction history")
 	_rules=bindings.mining_session.duplicate(true);_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
+	_max_ms=Frames.simulation_limit(bindings,int(_rules.max_frame_ms))
 	_bindings=bindings;_catalogues=catalogues;_field_identity=construction.scenery_owner().presentation_identity()
 	_equipment=entry.departure.loadout.equipment_ids.duplicate();_center=reference_center;_hard=hard_difficulty
 	_drill=null;_phase="idle";_last_drill={};_receipt={};_events=[]
+	_failure_instruction_shown=entry.departure.progress.get("mining_failure_hint_seen",false)
 	return true
 
 func begin(approach: RefCounted, scenery: RefCounted, cargo: RefCounted, command:=Vector2.ZERO) -> bool:
@@ -59,11 +65,28 @@ func begin(approach: RefCounted, scenery: RefCounted, cargo: RefCounted, command
 	# Construction does not call advance or consume random draws. Input may be
 	# latched later on this frame, but can first move the point on the next one.
 	_drill=drill;_phase="drilling";_last_drill={};_receipt={};_events=[]
+	if _rules.get("failure_instruction",{}).get("repeat_each_drill",false):_failure_instruction_shown=false
 	return true
+
+func failure_instruction_pending() -> bool:
+	return has_failure_instruction() and not _failure_instruction_shown and _last_drill.get("phase")=="failed"
+
+func failure_instruction_due(campaign_cursor: int) -> bool:
+	if not failure_instruction_pending():return false
+	var instruction: Dictionary=_rules.failure_instruction
+	return int(instruction.campaign_cursor)<0 or campaign_cursor==int(instruction.campaign_cursor)
+
+func mark_failure_instruction_shown(campaign_cursor: int) -> bool:
+	if not failure_instruction_due(campaign_cursor):return reject("No mining failure instruction is due")
+	_failure_instruction_shown=true
+	return true
+
+func failure_instruction_shown() -> bool:return _failure_instruction_shown
+func has_failure_instruction() -> bool:return _rules.has("failure_instruction")
 
 func evaluate(scenery: RefCounted, cargo: RefCounted, delta_ms: Variant, shared_random_state: Variant, command:=Vector2.ZERO, paused:=false, latch_command:=true) -> Dictionary:
 	error=""
-	if _drill==null or not _context(scenery,cargo) or not Numbers.integer(delta_ms,0,int(_rules.max_frame_ms)) or not command.is_finite() or absf(command.x)>1 or absf(command.y)>1:return fail("Invalid active mining frame or input")
+	if _drill==null or not _context(scenery,cargo) or not Numbers.integer(delta_ms,0,_max_ms) or not command.is_finite() or absf(command.x)>1 or absf(command.y)>1:return fail("Invalid active mining frame or input")
 	var random:=Random.new()
 	if not random.restore(shared_random_state):return fail(random.error)
 	var body:=_target(scenery,_drill.snapshot().object_index)
@@ -146,6 +169,7 @@ func snapshot() -> Dictionary:
 	var result:=_identity.duplicate()
 	result.merge({"phase":_phase,"hard_difficulty":_hard,"drill":{} if _drill==null else _drill.snapshot(),
 		"last_drill":_last_drill.duplicate(true),"extraction":_receipt.duplicate(true),"events":_events.duplicate(true)})
+	if has_failure_instruction():result.failure_instruction_shown=_failure_instruction_shown
 	return result
 func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
@@ -153,9 +177,12 @@ func fork_for_frame() -> RefCounted:
 	copy._equipment=_equipment;copy._center=_center;copy._hard=_hard;copy._phase=_phase
 	copy._drill=null if _drill==null else _drill.fork()
 	copy._last_drill=_last_drill.duplicate(true);copy._receipt=_receipt.duplicate(true);copy._events=_events.duplicate(true)
-	return copy
+	copy._failure_instruction_shown=_failure_instruction_shown
+	copy._max_ms=_max_ms;return copy
 func clear() -> void:
+	_max_ms=0
 	error="";_rules={};_identity={};_bindings=null;_catalogues=null;_field_identity=null;_equipment=[];_center=Vector2.ZERO;_hard=false
 	_drill=null;_phase="idle";_last_drill={};_receipt={};_events=[]
+	_failure_instruction_shown=false
 func reject(message: String) -> bool:error=message;return false
 func fail(message: String) -> Dictionary:error=message;return {}

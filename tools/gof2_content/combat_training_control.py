@@ -1,5 +1,6 @@
 """Optional Mac combat-training control constants; static import only."""
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_combat_training_control(mach,arrival,training,actors):
@@ -9,12 +10,12 @@ def extract_combat_training_control(mach,arrival,training,actors):
         if not npc['guidance'] or not npc['flight'] or not npc['routes'] or not npc['hull']:return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'combat_training_live_control',
@@ -161,3 +162,50 @@ LAYOUTS = {'npc_update': [610766,
                      7,
                      '__text',
                      'sha256:cf2ef6a0a490934ecea5d1cdf828198405848adecf34adefa416b3d5b21b5ec5']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'npc_update': [611314, 17180, '__text', 'sha256:e6a3db4e2bdaf51990eddaec2e03514db9eb5bb8a89976338b28605117681d20'],
+ 'npc_constructor': [605720, 2562, '__text', 'sha256:69ffded45ed01c0720d4524c45cb78a5be444af55b84ea7c93f85df3bf003325'],
+ 'membership': [59038, 2050, '__text', 'sha256:5cec2a39970c6bba7be2beaa7f36316ff243a1f731629df566750696ea854d8c'],
+ 'merge_targets': [536934, 334, '__text', 'sha256:06ae2aceba19cb749e65280bc07294f07360f468372d26af8dd136a846ea7d44'],
+ 'assign_targets': [536518, 246, '__text', 'sha256:ff47315d28679257b791333e1fe10b4367278cc6178be89af11b3e354dad0c55'],
+ 'player_constructor': [550476,
+                        3862,
+                        '__text',
+                        'sha256:289fd4c3fd181835b86546bd64ac04a88648b04f2e5cc587dd6aa9acbffbb88d'],
+ 'alternate_body_test': [559278,
+                         18,
+                         '__text',
+                         'sha256:6b738d958b540ac7848fbaefd018ea3b8d09880001e9e091b7d8060210c4eb7e'],
+ 'alternate_body': [605426, 14, '__text', 'sha256:c5946a85e257d476efc588737da015d421e35ca2127715a2b3b40cde71341637'],
+ 'alternate_model': [905726, 10, '__text', 'sha256:e65d0e5b3e004bca7221190010f8d17cf9cccee4894c85ad38b21fc472e35095'],
+ 'model_position': [-730252, 26, '__text', 'sha256:cdfdc367ae782b1b2c866a6baf2c66d3aef870696cfdeef3554f84dbc75f2600'],
+ 'model_constructor': [-731340,
+                       430,
+                       '__text',
+                       'sha256:299e133fff7705582f236fefde425d483469329c3c956d415e4276be184c0224'],
+ 'model_request': [-728364, 14, '__text', 'sha256:f453384880d28a2ee6ffcc9815de080745a3837d26eb221c83629fd9c4a1bbaa'],
+ 'model_submission': [-728338, 28, '__text', 'sha256:540b904fcce6c5e1ea643f8bd47b0308b7d55d48370a4f7b64c9de507a61e3ea'],
+ 'target_alive': [541416, 16, '__text', 'sha256:bca38e523148380515ca2706350183bee63a7bd22423f645be660b05964c0d81'],
+ 'target_activity': [541460, 14, '__text', 'sha256:d6f7f4e0de3d0ca2c0ca3c5d1704d24054473e84e610c53be51a098b7ea977c5'],
+ 'force_route': [536146, 14, '__text', 'sha256:6bae4eccc7327721e488995bac45b92390a376a588c1fac9ef9dbce769b6b3e6'],
+ 'friendly': [536188, 28, '__text', 'sha256:29f61672e56345b7cd33246f9865630c51342b38086156ed5ac59e432e6804c6'],
+ 'friendly_test': [536216, 14, '__text', 'sha256:4671741e26e6139dc26305d34636c6a5a4ba5a3ebbe920688b8a3e921fe411c6'],
+ 'boost_chance': [610288, 12, '__text', 'sha256:de939f85a8df52516ec9bb7b6039fe714eff326c3d911853f7f0685c99476ae3'],
+ 'base_constructor': [-81548, 948, '__text', 'sha256:88437b7848d85fadf366a7bec5c102e8f85b0aa6455fb37d60ea50e6c8ca5d6f'],
+ 'statistics_constructor': [534700,
+                            980,
+                            '__text',
+                            'sha256:f74bfc6d9e7e68d48cb5b5ae52bc98df1c187a60f4df61330abdecf1bcf553fd'],
+ 'attached_test': [-77806, 14, '__text', 'sha256:586cc43f0184717f3c2513d92ebab30601b66aa5463ecb6a12441f6a682e6455'],
+ 'model_initializer': [-79336,
+                       272,
+                       '__text',
+                       'sha256:380c3bc6e668daf7ad475c95eaafbf9e08217068c20b1b749fb0e174eccb617d'],
+ 'model_initializer_wrapper': [609702,
+                               14,
+                               '__text',
+                               'sha256:1299a25c5702946da9b0431a4abec9d78ea4deed0952001a875936eb250462f8'],
+ 'mode_dispatch': [628454, 40, '__text', 'sha256:03414b94bcae54c25b57a0fe3067f93f0284bda1ded55bdd145b21f6b1f37c76'],
+ 'npc_model_vtable': [2377138, 8, '__const', 'sha256:d8695ad8d410eeedeb3288aa0aefa1ef1111d0ec058f0fb0b6b91f7026f69435'],
+ 'companion_boost': [1127, 7, '__text', 'sha256:5da01a5dcc0ce51514a8dab379701045f37e631bb676cc9d905f869fa0b4ab49']}

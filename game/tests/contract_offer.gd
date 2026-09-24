@@ -21,6 +21,7 @@ func verify(args: PackedStringArray):
 	if not lib.open(args[0]) or not bindings.open(args[1],lib.manifest) or not cat.open(lib) or not lib.select_language("gb"):
 		check(false,lib.error+bindings.error+cat.error);return
 	var offer:=Offer.new()
+	var text_shift:=2 if cat.tables.ships.size()==64 else 0
 	var context:={"campaign_cursor":13,"station_id":79,"rank":0,"reputation":{"axes":[30,0],"override":-1},"client_faction":3}
 	var choices:={"kind_index":0,"difficulty_index":0,"destination_station_id":76,"cargo_description_index":0}
 	if bindings.early_contracts.is_empty():
@@ -44,7 +45,7 @@ func verify(args: PackedStringArray):
 			var state: Dictionary=offer.snapshot();var mission: Dictionary=state.mission
 			check(mission.kind==vector.kind and mission.difficulty==difficulty+1 and mission.quantity==vector.quantity[difficulty],"Early mission parameters changed")
 			check(mission.reward==vector.reward[difficulty] and mission.bonus==0 and not mission.story,"Wrong source reward or fictional completion")
-			check(lib.strings[mission.title_text_id]==vector.name and mission.briefing_text_id==773+vector.kind,"Offer lost its original localized title or briefing")
+			check(lib.strings[mission.title_text_id]==vector.name and mission.briefing_text_id==773+text_shift+vector.kind,"Offer lost its original localized title or briefing")
 			check(state.requirements.cargo_tons==(mission.quantity if mission.kind==0 else 0) and state.requirements.passenger_places==(mission.quantity if mission.kind==11 else 0),"Passenger space was confused with cargo tonnage")
 			check(state.requirements.cargo_item_id==(116 if mission.kind==0 else -1),"Courier description was confused with the actual mission cargo")
 			check(not state.has("accepted") and not state.has("completed_side_missions") and not state.has("credits"),"Quotation granted a career mutation")
@@ -53,7 +54,7 @@ func verify(args: PackedStringArray):
 		choices.cargo_description_index=description
 		check(offer.configure(bindings,cat,context,choices),offer.error)
 		var state:=offer.snapshot()
-		check(state.mission.source_parameter==description and state.mission.cargo_text_id==800+description and state.requirements.cargo_item_id==116 and state.mission.quantity==14,"Courier description changed the physical cargo")
+		check(state.mission.source_parameter==description and state.mission.cargo_text_id==800+text_shift+description and state.requirements.cargo_item_id==116 and state.mission.quantity==14,"Courier description changed the physical cargo")
 	choices={"kind_index":3,"difficulty_index":0,"destination_station_id":75,"cargo_description_index":0}
 	context.reputation.axes=[50,-25]
 	for faction in 8:
@@ -131,6 +132,15 @@ func verify_provenance(bindings: RefCounted,pack: String):
 			"architecture":arch="unsupported"
 			"travel":travel.erase("return_visit")
 		check(not Definitions.validate(bad,int(header.source_executable_bytes),arch,bindings.arrival_staging,travel).is_empty(),"Changed contract declaration accepted: "+corruption)
+	if terms.has("acceptance"):
+		var alternate: bool=terms.briefing_text_base==775
+		var bad:=terms.duplicate(true)
+		bad.acceptance.replacement_text_id=851 if alternate else 853
+		check(not Definitions.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.mido_travel).is_empty(),"Mixed source acceptance text was accepted")
+		bad=terms.duplicate(true)
+		var other: Dictionary=Definitions.ACCEPTANCE_SPANS if alternate else Definitions.MAC_ACCEPTANCE_SPANS
+		bad.provenance.contract_replacement_notice.offset=int(bindings.arrival_staging.provenance.actor.offset)+int(other.contract_replacement_notice[0])
+		check(not Definitions.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.mido_travel).is_empty(),"Mixed source acceptance proof was accepted")
 
 func check(condition: bool,message: String):
 	checks+=1

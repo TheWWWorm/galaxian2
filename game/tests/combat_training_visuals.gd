@@ -12,6 +12,7 @@ const TrainingBodies=preload("res://src/content/scenery_body_resources.gd")
 const TrainingEffects=preload("res://src/content/scenery_effect_resources.gd")
 const TrainingTargets=preload("res://src/simulation/opening_target_inventory.gd")
 const TrainingEncounter=preload("res://src/simulation/full_hold_encounter.gd")
+const ContactFixture=preload("res://tests/full_hold_control.gd")
 var _captures:=[]
 
 func run():
@@ -231,7 +232,8 @@ func verify_training_encounter(cat: RefCounted, player: RefCounted, scenery: Ref
 	check(fired_state.primary_fire.weapons[0].result.fired and fired_state.primary_fire.weapons[0].audio_events[0].source_id==66,"Late input omitted the equipped primary or its sound")
 	check(fired_state.combat.actors[0].vitals.hull==2 and fired_state.primaries.guns[0].projectiles.slots[0].remaining_ms==1000,"A new shot contacted or advanced during late input")
 	check(fired_state.elapsed_ms==1 and fired_state.impact_visuals.hits.is_empty(),"Late fire resampled effects or weapon time")
-	var bad: RefCounted=fired.fork_for_frame();bad._weapons._identity.binding_id="f".repeat(64)
+	var bad: RefCounted=ContactFixture.fork_encounter_fixture(fired);bad._weapons._identity.binding_id="f".repeat(64)
+	check(fired.snapshot()==fired_state,"Detached invalid weapon identity changed the accepted encounter")
 	var bad_before: Dictionary=bad.snapshot()
 	check(bad.evaluate_weapons(early.player,pose,0,early.scenery).is_empty() and bad.snapshot()==bad_before and early.scenery.snapshot()==field,"A failed NPC phase committed earlier primary damage")
 	var contact: Dictionary=fired.evaluate_weapons(early.player,pose,0,early.scenery)
@@ -242,7 +244,8 @@ func verify_training_encounter(cat: RefCounted, player: RefCounted, scenery: Ref
 	check(contact_state.primary_contacts[0].motion.cleared==[1] and contact_state.primaries.guns[0].projectiles.slots[0]==null,"Complete contact pass left the projectile live")
 	check(contact_state.impact_visuals.hits.size()>=1 and contact_state.primary_fire.is_empty(),"Early contact lost its impact or replayed firing audio")
 	check(fired.snapshot()==fired_state and early.player.snapshot()==original_player,"Contact phase changed its input encounter or player")
-	bad=hit.fork_for_frame();bad._weapons._definitions[3].actor_kind+=1;bad_before=bad.snapshot()
+	bad=ContactFixture.fork_encounter_fixture(hit);bad._weapons._definitions[3].actor_kind+=1;bad_before=bad.snapshot()
+	check(hit.snapshot()==contact_state,"Detached invalid actor definition changed the accepted encounter")
 	check(bad.evaluate_world(contact.player,pose,0,late.random_state).is_empty() and bad.snapshot()==bad_before,"A late firing failure committed NPC death or counters")
 	world=hit.evaluate_world(contact.player,pose,0,late.random_state)
 	check(not world.is_empty(),hit.error)

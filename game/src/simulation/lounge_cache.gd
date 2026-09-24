@@ -11,12 +11,15 @@ const Numbers=preload("res://src/content/opening_definitions.gd")
 const Reputation=preload("res://src/simulation/faction_reputation.gd")
 const Random=preload("res://src/simulation/seeded_random.gd")
 const Shopping=preload("res://src/content/ordinary_shopping_definitions.gd")
+const DeepScience=preload("res://src/content/deep_science_stock_definitions.gd")
 var error:=""
 var _state:={}
+var _deep_science:={}
 
 func configure(bindings: RefCounted) -> bool:
 	error=""
 	if not _state.is_empty() or not Definitions.available(bindings):return reject("This content has no supported contact retention")
+	if DeepScience.available(bindings):_deep_science=bindings.deep_science_stock.duplicate(true)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
 		"capacity":int(bindings.early_contracts.station_lounges.capacity),"locations":[],"history":[]}
 	if Stock.available(bindings):
@@ -50,6 +53,12 @@ func select_location(bindings: RefCounted,cat: RefCounted,library: RefCounted,co
 		if not Navigation.valid_availability(bindings.early_contracts.base_navigation,availability):return reject("Retain the career's available systems")
 	var stock_context: Dictionary=settings.duplicate(true)
 	stock_context.station_id=context.station_id;stock_context.campaign_cursor=context.campaign_cursor
+	if not _deep_science.is_empty() and context.station_id==int(_deep_science.station_id):
+		# Native careers start with a fresh profile and do not import original or
+		# global medals. One required gold medal cannot be earned before this
+		# source-defined story cursor. Later profiles need a retained medal owner.
+		if context.campaign_cursor>=int(_deep_science.required_campaign_cursor):return reject("Deep Science requires the career's retained medal progress")
+		stock_context.all_base_medals_gold=false
 	var stock:=Stock.new()
 	if not stock.prepare(bindings,cat,stock_context,random.snapshot(),unix_seconds):return reject(stock.error)
 	var contacts:=Contacts.new()
@@ -80,6 +89,8 @@ func remember(contacts: RefCounted,stock: RefCounted=null) -> bool:
 		for key in ["station_id","campaign_cursor"]:
 			if inventory.context[key]!=population.context[key]:return reject("Stock and contacts came from different selections")
 		if inventory.random!=population.initial_random:return reject("Stock must advance the shared stream before contacts")
+		if not _deep_science.is_empty() and station==int(_deep_science.station_id):
+			if inventory.context.campaign_cursor>=int(_deep_science.required_campaign_cursor) or inventory.context.get("all_base_medals_gold")!=false:return reject("This native career cannot retain all-gold Deep Science stock")
 	var offers:={}
 	for contact in population.contacts:
 		if not contact.offer.is_empty():offers[int(contact.contact_id)]={"offer":contact.offer.duplicate(true),"consumed":false}
@@ -129,8 +140,42 @@ func replace_item_stock(bindings: RefCounted,cat: RefCounted,station_id: int,exp
 	return reject("This location has no retained stock")
 
 func snapshot() -> Dictionary:return _state.duplicate(true)
+
+func selection_state() -> Dictionary:
+	return {"current_station_id":int(_state.get("current_station_id",-1)),"random":_state.get("random",{}).duplicate(),
+		"system_availability":_state.get("system_availability",[]).duplicate()}
+
+func adopt_selection_random(random_state: Dictionary) -> bool:
+	error=""
+	var random:=Random.new()
+	if not random.restore(random_state):error=random.error;return false
+	_state.random=random.snapshot()
+	return true
+
+func acknowledge_campaign_coordinates(bindings: RefCounted,visit: RefCounted) -> bool:
+	# The career transaction supplies the same acknowledged native dialogue.
+	# Availability is independent of visited locations and retained market stock.
+	error=""
+	if not is_instance_of(visit,load("res://src/simulation/campaign_visit.gd")):return reject("Coordinates require an acknowledged campaign conversation")
+	var receipt: Dictionary=visit.transition()
+	if receipt.is_empty():return reject("Acknowledge the complete conversation before receiving coordinates")
+	var rules: Dictionary=load("res://src/content/kappa_return_definitions.gd").conversation(bindings,receipt.get("from_cursor"),receipt.get("previous_mission"))
+	if rules.is_empty() or not load("res://src/content/opening_escape_definitions.gd").equal_value(receipt.get("unlock_system_ids"),rules.unlock_system_ids):return reject("The conversation changed its declared coordinates")
+	for key in ["base_content_id","binding_id"]:
+		if _state.get(key)!=bindings.get(key) or receipt.get(key)!=_state[key]:return reject("Coordinates belong to another content identity")
+	if _state.get("current_station_id")!=receipt.get("station_id") or location(receipt.station_id).is_empty():return reject("Coordinates require the conversation's retained station")
+	var available: Variant=_state.get("system_availability")
+	if not Navigation.valid_availability(bindings.early_contracts.base_navigation,available):return reject("Coordinates lost the career's existing available systems")
+	var next: Array=available.duplicate()
+	for id in receipt.unlock_system_ids:
+		if not id is int or id<0 or id>=next.size():return reject("The campaign names an invalid system")
+		next[id]=true
+	_state.system_availability=next
+	return true
+
 func fork() -> RefCounted:
 	var result: RefCounted=get_script().new()
 	result._state=_state.duplicate(true)
+	result._deep_science=_deep_science.duplicate(true)
 	return result
 func reject(message: String) -> bool:error=message;return false

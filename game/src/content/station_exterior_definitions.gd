@@ -1,4 +1,5 @@
 extends RefCounted
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 ## Actual first mining station model and point volumes; no arrival transition.
 const Equal=preload("res://src/content/opening_escape_definitions.gd")
 const Fonts=preload("res://src/content/font_definitions.gd")
@@ -7,23 +8,28 @@ const Travel=preload("res://src/content/mido_travel_definitions.gd")
 const VALUES := {"scope":"first_mining_station_exterior","station_id":78,"system_id":15,"faction":3,"system_faction_field":2,"model_ids":[21078,21878,22078],"render_types":[28,0,2],"position":[0,0,0],"rotation":[0,3.1415927410125732,0],"mesh_axis_map":[1,2,3],"sphere_axis_map":[1,3,-2],"collision_resource":"resources/data/bin/collision.bin","collision_record_limit":136,"collision_box_kind":1,"collision_position_map":[-1,3,2],"collision_half_extent_map":[1,3,2],"collision_scale":1,"bounds_margin":5000,"bounds_rounding":"truncate","bounds_test":"strict_axis_box","volume_test":"strict_axis_box","light_animation_supported":false,"docking_transition_supported":false}
 const SPANS := {"world_station":[-39936,286],"station_exclusion":[872234,488],"station_constructor":[642332,291],"model_choice":[644326,327],"ordinary_layers_gate":[646014,36],"mido_layers":[647628,243],"constructor_finish":[648859,112],"collision_loader":[-677702,346],"little_endian_int":[1394106,53],"shape_dispatch":[645756,197],"box_arguments":[648537,290],"box_constructor":[-710264,147],"box_origin":[-708682,54],"box_point":[-710024,122],"station_point":[649814,244],"station_vtable":[2401210,48],"box_vtable":[2396530,8],"layer_parent":[-724500,48],"layer_bounds_merge":[1164173,94],"sphere_merge":[1063050,810],"layer_sphere":[1061850,1192],"mesh_vertex_copy":[1222939,213],"mesh_sphere_load":[1214430,269],"mesh_sphere_attach":[1163398,45],"model_rotation":[-723494,90],"faction_read":[-673260,45],"faction_argument":[-672644,107],"faction_constructor":[734132,137],"faction_getter":[734664,10],"rotation_pi":[1546070,4],"bounds_padding":[1545990,4],"box_scale":[1544610,4],"box_half":[1544586,4]}
 
+const MAC_ALTERNATE := {"world_station":[-39936,286],"station_exclusion":[872866,488],"station_constructor":[642880,291],"model_choice":[644874,327],"ordinary_layers_gate":[646562,39],"mido_layers":[648176,243],"constructor_finish":[649407,112],"collision_loader":[-683590,346],"little_endian_int":[1384274,53],"shape_dispatch":[646304,197],"box_arguments":[649085,290],"box_constructor":[-716160,147],"box_origin":[-714578,54],"box_point":[-715920,122],"station_point":[650362,244],"station_vtable":[2378642,48],"box_vtable":[2373962,8],"layer_parent":[-730396,48],"layer_bounds_merge":[1161461,94],"sphere_merge":[1063746,769],"layer_sphere":[1062562,1170],"mesh_vertex_copy":[1216380,196],"mesh_sphere_load":[1208146,261],"mesh_sphere_attach":[1160702,45],"model_rotation":[-729390,90],"faction_read":[-679148,45],"faction_argument":[-678532,107],"faction_constructor":[734764,137],"faction_getter":[735296,10],"rotation_pi":[1521054,4],"bounds_padding":[1520974,4],"box_scale":[1519594,4],"box_half":[1519570,4]}
+
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.size()!=VALUES.size()+1 or not data.get("provenance") is Dictionary:return false
 	for key in VALUES:
 		if not Equal.equal_value(data.get(key),VALUES[key]):return false
 	return true
 
-static func for_location(bindings: RefCounted, station_id: int, system_id: int, planet_type: int) -> Dictionary:
+static func for_location(bindings: RefCounted, station_id: int, system_id: int, planet_type: int, catalogue_faction: int=-1) -> Dictionary:
 	if bindings==null or not parameters(bindings.station_exterior):return {}
 	var data: Dictionary=bindings.station_exterior
 	if station_id==int(data.station_id) and system_id==int(data.system_id):return data.duplicate(true)
-	if not Travel.location_supported(bindings.mido_travel,station_id,system_id,planet_type):return {}
+	var sahi: bool=station_id==48 and system_id==9 and load("res://src/content/sahi_encounter_definitions.gd").coherent(bindings.mido_travel)
+	if sahi and catalogue_faction not in [0,1,2,3]:return {}
+	if not sahi and not Travel.location_supported(bindings.mido_travel,station_id,system_id,planet_type):return {}
 	var result:=data.duplicate(true)
 	result.station_id=station_id;result.system_id=system_id
 	# Faction belongs to the system; the exterior models belong to each station.
 	if bindings.mido_travel.has("alioth_arrival") and system_id==int(bindings.mido_travel.alioth_arrival.system_id):result.faction=int(bindings.mido_travel.alioth_arrival.faction)
 	var ordinary: Dictionary=load("res://src/content/ordinary_world_definitions.gd").location(bindings.mido_travel,station_id)
 	if not ordinary.is_empty():result.faction=int(ordinary.faction)
+	if sahi:result.faction=catalogue_faction
 	result.model_ids=bindings.mido_travel.exterior_model_bases.map(func(base):return int(base)+station_id)
 	result.collision_sphere_scale=float(bindings.mido_travel.collision_sphere_scale)
 	return result
@@ -34,8 +40,5 @@ static func validate(data: Variant, source_bytes: int, arch: String, arrival: Di
 	if arch!="x86_64" or not parameters(data) or not Flight.parameters(flight):return "Unsupported station exterior declarations"
 	var origin: Variant=arrival.get("provenance",{}).get("actor")
 	if not Fonts.extent(origin,"offset","bytes",[315],source_bytes):return "Station exterior lacks its source anchor"
-	if data.provenance.size()!=SPANS.size():return "Invalid station exterior provenance"
-	for key in SPANS:
-		var span: Variant=data.provenance.get(key);var rule: Array=SPANS[key]
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],source_bytes) or int(span.offset)!=int(origin.offset)+int(rule[0]):return "Invalid station exterior extent: "+key
-	return ""
+	var layouts: Array=[SPANS,MAC_ALTERNATE]
+	return "" if Layouts.matches(data.provenance,int(origin.offset),source_bytes,layouts) else "Invalid station exterior extents"

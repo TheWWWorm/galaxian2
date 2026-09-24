@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Native ring drilling. The flight owner supplies the shared random stream and
 ## an already docked asteroid. Approach, cargo mutation and missions have separate
 ## owners. Presentation can resize without changing the reference coordinates.
@@ -55,6 +57,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, equipment_ids: Arra
 	var rate:=f32(float(selected[int(rules.rate_property)])/float(rules.property_divisor))
 	if stability<=0 or rate<=0:return reject("The equipped drill cannot extract ore")
 	_rules=rules.duplicate(true)
+	_max_ms=Frames.simulation_limit(bindings,int(_rules.max_frame_ms))
 	_field_identity=null
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"object_index":object_index,
 		"item_id":ore_id,"drill_id":drill_id,"layer_count":int(body.source_size_value),"stability":stability,"rate":rate,
@@ -74,7 +77,7 @@ func set_command(command: Vector2) -> bool:
 
 func advance(milliseconds: Variant, random_state: Variant, paused:=false) -> bool:
 	error=""
-	if _state.is_empty() or not Numbers.integer(milliseconds,0,int(_rules.max_frame_ms)):return reject("Invalid drilling frame")
+	if _state.is_empty() or not Numbers.integer(milliseconds,0,_max_ms):return reject("Invalid drilling frame")
 	var random:=Random.new()
 	if not random.restore(random_state):return reject(random.error)
 	if paused or _state.phase!="drilling":return true
@@ -146,8 +149,8 @@ func _inside() -> bool:
 func fork() -> RefCounted:
 	var copy: RefCounted=get_script().new();copy._state=_state.duplicate(true);copy._rules=_rules.duplicate(true)
 	copy._field_identity=_field_identity
-	return copy
+	copy._max_ms=_max_ms;return copy
 func field_identity() -> RefCounted:return _field_identity
-func clear() -> void:error="";_state={};_rules={};_field_identity=null
+func clear() -> void:_max_ms=0;error="";_state={};_rules={};_field_identity=null
 static func f32(value: float) -> float:return PackedFloat32Array([value])[0]
 func reject(message: String) -> bool:error=message;return false

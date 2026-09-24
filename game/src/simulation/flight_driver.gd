@@ -96,7 +96,7 @@ func step(now_microseconds: int, throttle: float) -> Dictionary:
 		error = _clock.error
 		return {}
 	var input := controls.snapshot()
-	var candidate := _motion.advance(_pose, input.command, throttle, seconds)
+	var candidate := _motion.advance(_pose, input.command, 0.0 if input.held.brake else throttle, seconds, input.strafe)
 	if not _motion.error.is_empty():
 		error = _motion.error
 		return {}

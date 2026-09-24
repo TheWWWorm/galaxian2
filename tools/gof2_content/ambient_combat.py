@@ -3,12 +3,12 @@
 These declarations do not unlock a mission or supply destruction behavior.
 """
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 from .ambient_population import VALUES as POPULATION_VALUES
 
 def extract_ambient_combat(mach,arrival,population):
     if not isinstance(population,dict) or any(population.get(key)!=value for key,value in POPULATION_VALUES.items()):return {}
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
+    _variant,proof=hashed_variants(mach,arrival,[LAYOUTS,MAC_ALTERNATE])
     if not proof:return {}
     result=copy.deepcopy(VALUES);result['provenance']=proof
     return result
@@ -81,6 +81,43 @@ LAYOUTS = {'factory': [77944,
                 '__const',
                 'abbc25d14673f54cff918e1102c121ccada75722b5dce4ec0e6e32502637896c'],
  'half_extent_scale': [1544586,
+                       4,
+                       '__const',
+                       'd99e58435243d9fef9c88273b8d553b4fba4d0baf8009d29eae74fa99e0d9f57']}
+
+
+MAC_ALTERNATE = {'factory': [77944, 3478, '__text', '1edb599619eeabcc4601e757d01307eba28fc1a7bfb5ea74ea86ef4b365fcbf3'],
+ 'base_actor': [-81548, 948, '__text', '88437b7848d85fadf366a7bec5c102e8f85b0aa6455fb37d60ea50e6c8ca5d6f'],
+ 'statistics': [534700, 980, '__text', 'f74bfc6d9e7e68d48cb5b5ae52bc98df1c187a60f4df61330abdecf1bcf553fd'],
+ 'freighter_constructor': [631792,
+                           1108,
+                           '__text',
+                           'da32bb3227d19f7636735e421a93bb29534de26db93526df2a102370f9e37d2f'],
+ 'normal_hit': [539472, 1846, '__text', '407b208cd78b7b7e70b5bc505bc9509f70781ad9d1af9c2b9a9f80104cd54242'],
+ 'point_wrapper': [-76580, 26, '__text', '9bead5a886f6540a33e6b291db2ce8b8ce31f47b43028700a06efa9ae6676fb0'],
+ 'freighter_point': [639380,
+                     218,
+                     '__text',
+                     'f3939053e839e83f54fc8886f028bf8daef9d07c152b299addb966381e760e57'],
+ 'box_constructor': [-716150,
+                     138,
+                     '__text',
+                     'ed1b33eabc9ac0588b159815a2100fdf8b20ca75e7019d44467390d4b60fb660'],
+ 'box_point': [-715920, 122, '__text', 'ed39d6edebadeaa30e762599d6c92439c73a5786159abc733801b6cf712a8f76'],
+ 'freighter_position': [633590,
+                        280,
+                        '__text',
+                        'fdfb300814052a7b8fadea53652fee5b0557ca5c5b48d48304398659bc426237'],
+ 'projectile_point_selection': [-181733,
+                                192,
+                                '__text',
+                                '591e882df968a35960bcddd6d8bc0cf9242e782cbf320030727ee07138d8e57b'],
+ 'freighter_hostility': [634751,
+                         154,
+                         '__text',
+                         '36e02ad30f047a9e0a0e4417dadd7b5a80b6bfc0e03ec1daa13da4eb0ddc5c5c'],
+ 'box_values': [1550426, 32, '__const', 'abbc25d14673f54cff918e1102c121ccada75722b5dce4ec0e6e32502637896c'],
+ 'half_extent_scale': [1519570,
                        4,
                        '__const',
                        'd99e58435243d9fef9c88273b8d553b4fba4d0baf8009d29eae74fa99e0d9f57']}

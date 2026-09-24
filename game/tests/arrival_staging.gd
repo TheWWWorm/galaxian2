@@ -156,7 +156,9 @@ func verify_declarations(pack: String, library: RefCounted, bindings: RefCounted
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		var reader:=Bindings.new();check(reader.open(pack,library.manifest),reader.error)
 		var accepted:=reader.open(directory,library.manifest)
-		if scenario=="empty":check(accepted and reader.arrival_staging.is_empty() and not reader.arrival_dialogue.is_empty(),"Explicit unsupported staging was rejected")
+		# Later packs retain world initialization, which requires staging. An
+		# optional empty declaration is valid only without that consumer.
+		if scenario=="empty" and body.get("arrival_world_initialization",{}).is_empty():check(accepted and reader.arrival_staging.is_empty() and not reader.arrival_dialogue.is_empty(),"Explicit unsupported staging was rejected: "+reader.error)
 		else:check(not accepted and reader.arrival_staging.is_empty() and reader.arrival_dialogue.is_empty(),"Failed replacement retained rescue data: "+scenario)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)
 

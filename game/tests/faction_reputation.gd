@@ -74,6 +74,28 @@ func verify_profile(content: String, pack: String):
 		var malformed:=opening.duplicate(true);malformed.combat.reputation.events.pop_back()
 		check(handoff.prepare(bindings,cat,malformed).is_empty(),"Rescue accepted an incomplete actual hit history")
 	verify_clamping(bindings)
+	verify_recovery(bindings)
+
+func verify_recovery(bindings: RefCounted) -> void:
+	var expected:=[{"axis":0,"change":-2},{"axis":0,"change":2},{"axis":1,"change":-2},{"axis":1,"change":4}]
+	for kind in [0,1,2,3]:
+		var history:=Reputation.new();var difficulty:=1.5 if kind==3 else 1.0
+		if not history.configure(bindings,10 if kind==3 else 18,[kind],difficulty):check(false,history.error);return
+		var actor:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
+			"campaign_cursor":10 if kind==3 else 18,"actor_id":0,"actor_kind":kind,"actor_mode":4,"vitals":{"hull":0},"nonplayer_kill":false}
+		if history.snapshot().has("spawn_generations"):actor.spawn_generation=0
+		if not Reputation.RecoveryRules.available(bindings):
+			check(not history.record_cargo_recovery(actor) and history.snapshot().events.is_empty(),"An older pack invented cargo affiliation changes")
+			continue
+		if not history.record_lethal(actor) or not history.record_cargo_recovery(actor):check(false,history.error);return
+		var state: Dictionary=history.snapshot();var event: Dictionary=state.events[-1]
+		check(event.event_kind=="cargo_recovered" and event.axis==expected[kind].axis and event.change==expected[kind].change,"Recovered cargo lost its original faction axis, sign or difficulty scaling")
+		check(not history.record_cargo_recovery(actor) and history.snapshot()==state,"A repeated recovery changed faction standing twice")
+		var restored:=Reputation.new();check(restored.restore(bindings,state) and restored.snapshot()==state,restored.error)
+		var malformed:=state.duplicate(true);malformed.events.append(event.duplicate(true))
+		check(not restored.restore(bindings,malformed) and restored.snapshot()==state,"A loaded history repeated the same wreck's faction change")
+		malformed=state.duplicate(true);malformed.events[-1].change+=1
+		check(not restored.restore(bindings,malformed) and restored.snapshot()==state,"A loaded history altered the source cargo affiliation amount")
 
 func verify_clamping(bindings: RefCounted):
 	# Declared terminal-state fixtures isolate order: clamp each hit rather than

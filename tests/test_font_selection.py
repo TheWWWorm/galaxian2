@@ -3,7 +3,7 @@ import importlib.util
 import struct
 from types import SimpleNamespace
 import unittest
-from gof2_content.font_selection import (MAC, ARM, MAC_REFS, MAC_CALLS, ARM_FIELDS,
+from gof2_content.font_selection import (MAC, MAC_ALTERNATE, ARM, MAC_REFS, MAC_CALLS, ARM_FIELDS,
                                          ARM_REFS, ARM_CALLS, extract_font_selection)
 from gof2_content.font_bindings import MAC_RECORD, font_records
 from test_materials import arm_wide
@@ -20,8 +20,8 @@ def expand(spec):
     return code, fields
 
 
-def selection_fixture(mac, relocation=0):
-    body, fields = expand(MAC if mac else ARM)
+def selection_fixture(mac, relocation=0, alternate=False):
+    body, fields = expand((MAC_ALTERNATE if alternate else MAC) if mac else ARM)
     address = 0x100000 + relocation + 128
     def put(key, data):
         at, size = fields[key]
@@ -33,7 +33,7 @@ def selection_fixture(mac, relocation=0):
             if key.startswith('value_'): put(key, (1).to_bytes(size, 'little'))
         for index, key in enumerate(font_keys): put('value_'+key, (100+index).to_bytes(4, 'little'))
         for index, group in enumerate(MAC_REFS + MAC_CALLS):
-            target = address + 554 if group[0][0] == 'ref_10' else address + 1800 + index * 8
+            target = address + len(body) - 24 if group[0][0] == 'ref_10' else address + 1800 + index * 8
             for key, end in group: put(key, struct.pack('<i', target-address-end))
     else:
         values = {}
@@ -59,6 +59,17 @@ def selection_fixture(mac, relocation=0):
 
 @unittest.skipUnless(importlib.util.find_spec('capstone'), 'optional static-reader dependency')
 class FontSelection(unittest.TestCase):
+    def test_alternate_mac_alignment_retains_dispatch_links(self):
+        for relocation in (0, 0x20000):
+            mach, fields = selection_fixture(True, relocation, alternate=True)
+            result = extract_font_selection(mach)
+            self.assertEqual(result['source_bytes'], 576)
+            self.assertEqual(result['default_font_id'], 105)
+            data = bytearray(mach.data)
+            data[192 + fields['ref_10'][0]] += 2
+            mach.data = bytes(data)
+            self.assertEqual(extract_font_selection(mach), {})
+
     def test_relocated_changed_parameters(self):
         for mac in [False,True]:
             for relocation in [0,0x20000]:
@@ -157,8 +168,13 @@ class FontAtlasBranches(unittest.TestCase):
 @unittest.skipUnless(importlib.util.find_spec('capstone'), 'optional static-reader dependency')
 class FontLanguageDispatch(unittest.TestCase):
     def test_language_file_order_comes_from_dispatch(self):
-        from gof2_content.font_bindings import MAC_LANGUAGE, language_files
-        body,fields=expand(MAC_LANGUAGE);data=bytearray(4096);start=128;table=512
+        from gof2_content.font_bindings import MAC_LANGUAGE, MAC_LANGUAGE_ALTERNATE
+        for spec in (MAC_LANGUAGE, MAC_LANGUAGE_ALTERNATE):
+            self.check_language_dispatch(spec)
+
+    def check_language_dispatch(self, spec):
+        from gof2_content.font_bindings import language_files
+        body,fields=expand(spec);data=bytearray(4096);start=128;table=512
         at,n=fields['table'];body[at:at+n]=struct.pack('<i',table-start-at-4)
         data[start:start+len(body)]=body
         for i in range(16):

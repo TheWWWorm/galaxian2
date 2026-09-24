@@ -1,4 +1,5 @@
 extends RefCounted
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 ## Original small-ship launch, route and departure rules. No mission-unlock permission.
 const Equal=preload("res://src/content/opening_escape_definitions.gd")
 const Fonts=preload("res://src/content/font_definitions.gd")
@@ -8,6 +9,9 @@ const SPANS = {"park":[-77334,26],"parked_predicate":[-77838,16],"travel_predica
 
 const RECYCLING = {"patrol_check_after_ms":45000,"patrol_launch_all_inactive":true,"killed_small_ships_recycle":true,"freighters_recycle":false,"initial_world_clocks_ms":0,"launch_statistics_from_root":true}
 const RECYCLING_SPANS = {"patrol_check":[112882,327],"patrol_iteration":[113730,22],"initial_clocks":[-45856,11],"initial_travel_flag":[-81071,7],"freighter_reset_dispatch":[2399978,8],"freighter_no_reset":[-76880,6],"launch_position":[609228,176]}
+
+const MAC_SPANS = {"park":[-77334,26],"parked_predicate":[-77838,16],"travel_predicate":[-79050,14],"relaunch":[631168,488],"restore_statistics":[536354,164],"reset_route":[722774,60],"periodic_check":[112696,186],"ordinary_timer_entry":[112550,21],"world_schedule":[117678,71],"actor_timers":[611354,75],"route_clock":[617276,87],"outbound":[620100,130],"mode_table":[628454,40],"multiplier":[1532770,4],"speed_limit":[1531926,4]}
+const MAC_RECYCLING_SPANS = {"patrol_check":[112882,327],"patrol_iteration":[113730,22],"initial_clocks":[-45856,11],"initial_travel_flag":[-81071,7],"freighter_reset_dispatch":[2377410,8],"freighter_no_reset":[-76880,6],"launch_position":[609776,176]}
 
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.size()!=VALUES.size()+(2 if data.has("recycling") else 1) or not data.get("provenance") is Dictionary:return false
@@ -24,12 +28,10 @@ static func validate(data: Variant,source_bytes: int,arch: String,arrival: Dicti
 	if arch!="x86_64" or not parameters(data) or not Combat.parameters(combat):return "Unsupported ambient lifecycle declarations"
 	var origin: Variant=arrival.get("provenance",{}).get("actor")
 	if not Fonts.extent(origin,"offset","bytes",[315],source_bytes):return "Ambient lifecycle lacks its source anchor"
-	var spans:=SPANS.duplicate()
-	if data.has("recycling"):spans.merge(RECYCLING_SPANS)
-	if data.provenance.size()!=spans.size():return "Invalid ambient lifecycle provenance"
-	for key in spans:
-		var span: Variant=data.provenance.get(key);var rule: Array=spans[key]
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],source_bytes) or int(span.offset)!=int(origin.offset)+int(rule[0]):return "Invalid ambient lifecycle extent: "+key
+	var spans:=SPANS.duplicate();var alternate:=MAC_SPANS.duplicate()
+	if data.has("recycling"):
+		spans.merge(RECYCLING_SPANS);alternate.merge(MAC_RECYCLING_SPANS)
+	if not Layouts.matches(data.provenance,int(origin.offset),source_bytes,[spans,alternate]):return "Invalid ambient lifecycle source layout"
 	return ""
 
 static func guidance(bindings: RefCounted,packet: Dictionary,rank: Variant,difficulty: Variant) -> Dictionary:

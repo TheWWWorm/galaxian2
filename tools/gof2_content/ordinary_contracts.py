@@ -1,9 +1,9 @@
 """Ordinary delivery traffic and selected courier construction. Constant declarations only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_ordinary_contracts(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'ordinary_delivery_contracts',
@@ -55,6 +55,48 @@ LAYOUTS = {'ordinary_contracts_reseed': [-31265,
                                   '__const',
                                   'd87578fc2a1f2df1ec73a44e1f78593c5c7ab979f8b9f86960206c70798fe342'],
  'ordinary_contracts_y_offset': [1575142,
+                                 4,
+                                 '__const',
+                                 'bb8ae8eac34cb5200e9958e6d9be0fd571c010b50d3e43d5d19015e8d02f2676']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'ordinary_contracts_reseed': [-31265,
+                               31,
+                               '__text',
+                               '619ff2a0445cdeff77423ba3fc6a0cd3a2eea23952ed533d44579ed9cee2b070'],
+ 'ordinary_contracts_side_slot': [860132,
+                                  22,
+                                  '__text',
+                                  '435cd70592cf3d5ae79358d3aafb4659f2960d066098e8e84cb68f9f4dc4685b'],
+ 'ordinary_contracts_count': [-31097,
+                              103,
+                              '__text',
+                              'fd6536bae899b4b5b23d3d599175018b64aec0b7791768a30458f43d9eaa0456'],
+ 'ordinary_contracts_pirates': [-18932,
+                                503,
+                                '__text',
+                                '9c6596d6210475164330d1a9aaeb940ed3531ebb91f7bac62713682e15c0db50'],
+ 'ordinary_contracts_dispatch': [-15605,
+                                 124,
+                                 '__text',
+                                 '6a8e1b051fe3b1962846ee3b4317bfac087c23cb443cbec0ab70aa930abfb035'],
+ 'ordinary_contracts_empty_return': [-4930,
+                                     38,
+                                     '__text',
+                                     'f2476efc0c075512fd0ff6325b5b023806e00ca3e2b1ce2e4b6daeb7d0e993dc'],
+ 'ordinary_contracts_divisor': [1532090,
+                                4,
+                                '__const',
+                                '80c8a717ccd70c8809eb78e6a9591c003e11c721fe0ccaf62fd592abda1a5593'],
+ 'ordinary_contracts_multiplier': [1532114,
+                                   4,
+                                   '__const',
+                                   'fca31f1667a6aa1bba12fca4e4ea1becd503379d80da3213af07f6cc5702828d'],
+ 'ordinary_contracts_xz_offset': [1550190,
+                                  4,
+                                  '__const',
+                                  'd87578fc2a1f2df1ec73a44e1f78593c5c7ab979f8b9f86960206c70798fe342'],
+ 'ordinary_contracts_y_offset': [1550206,
                                  4,
                                  '__const',
                                  'bb8ae8eac34cb5200e9958e6d9be0fd571c010b50d3e43d5d19015e8d02f2676']}

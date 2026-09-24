@@ -1,6 +1,8 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 const FreeFlight=preload("res://src/content/free_flight_definitions.gd")
+const Sahi=preload("res://src/content/sahi_encounter_definitions.gd")
 ## Content-bound Opening, rescue and supported departure player pools.
 ## The world owner supplies ordering; full player lifecycle remains separate.
 const Definitions = preload("res://src/content/player_initialization_definitions.gd")
@@ -80,6 +82,34 @@ func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,equipme
 	_state.alioth_context=construction.snapshot().alioth_context.duplicate(true)
 	return true
 
+## Composition of the generated rescue and retained equipment. Career entry
+## and fitting acknowledgement remain the enclosing station session's job.
+func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,construction: RefCounted,previous_cache: Variant=null) -> bool:
+	clear()
+	if not construction is Construction or not equipment is StationEquipment:return reject("Kappa player requires its equipped ship and generated encounter")
+	var data: Dictionary=load("res://src/content/kappa_population_definitions.gd").lifecycle(bindings,construction.snapshot())
+	if data.is_empty():return reject("Kappa player requires its source-bound population")
+	var owned: Dictionary=equipment.snapshot();var loadout: Dictionary=owned.get("loadout",{})
+	if not equipment.cargo_cache_valid() or loadout.get("station_id")!=data.station_id or loadout.get("system_id")!=data.system_id or loadout.get("ship_id")!=data.player_ship_id:return reject("Kappa player differs from its retained equipped location")
+	if load("res://src/simulation/equipment_slots.gd").checked_slots(bindings,catalogues,loadout).is_empty():return reject("Kappa player requires valid retained equipment slots")
+	if not _configure(bindings,catalogues,int(data.campaign_cursor),previous_cache,equipment,data):return false
+	_state.kappa_context=construction.snapshot().kappa_context.duplicate(true)
+	return true
+
+func configure_sahi(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,construction: RefCounted,previous_cache: Variant=null) -> bool:
+	clear()
+	if not construction is Construction or not equipment is StationEquipment:return reject("Sahi player requires its equipped ship and generated encounter")
+	var packet: Dictionary=construction.snapshot();var context: Dictionary=packet.get("sahi_context",{})
+	var data: Dictionary=load("res://src/content/story_encounter_definitions.gd").compose(bindings,catalogues,packet)
+	if data.is_empty():return reject("Sahi player requires its source-selected encounter")
+	var owned: Dictionary=equipment.snapshot();var loadout: Dictionary=owned.get("loadout",{})
+	if not equipment.cargo_cache_valid() or loadout.get("station_id")!=context.station_id or loadout.get("system_id")!=context.system_id or loadout.get("ship_id")!=packet.get("player_ship_id"):
+		return reject("Sahi player differs from its retained equipped location")
+	if load("res://src/simulation/equipment_slots.gd").checked_slots(bindings,catalogues,loadout).is_empty():return reject("Sahi player requires valid retained equipment slots")
+	if not _configure(bindings,catalogues,int(context.campaign_cursor),previous_cache,equipment,data):return false
+	_state.sahi_context=context.duplicate(true)
+	return true
+
 func configure_free(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,construction: RefCounted,previous_cache: Variant=null) -> bool:
 	clear()
 	if not FreeFlight.available(bindings) or not construction is Construction:return reject("Ordinary player requires its source-bound population")
@@ -87,7 +117,7 @@ func configure_free(bindings: RefCounted,catalogues: RefCounted,equipment: RefCo
 	var data:=FreeFlight.Life.population(bindings,packet)
 	if data.is_empty() or not equipment is StationEquipment:return reject("Ordinary player differs from its retained equipment or population")
 	var owned: Dictionary=equipment.snapshot();var loadout: Dictionary=owned.get("loadout",{})
-	if owned.get("cargo_cache_stale",true) or loadout.get("station_id")!=int(data.station_id) or loadout.get("ship_id")!=packet.player_ship_id:return reject("Ordinary player differs from its retained equipment or population")
+	if not equipment.cargo_cache_valid() or loadout.get("station_id")!=int(data.station_id) or loadout.get("ship_id")!=packet.player_ship_id:return reject("Ordinary player differs from its retained equipment or population")
 	if not _configure(bindings,catalogues,int(data.campaign_cursor),previous_cache,equipment,data):return false
 	_state.free_context=packet.free_context.duplicate(true)
 	return true
@@ -108,8 +138,8 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 		return reject("This profile has no supported fresh player initialization")
 	var seed: Dictionary
 	if entry.uses_equipment:
-		if cursor in [10,11,12,13,14,16,18,19] and (not equipment.snapshot().get("training_inventory_released",false) or not equipment.snapshot().get("prototype_drill_replaced",false)):return reject("Complete the station drill exchange before local flight")
-		if not (cursor in [18,19] and Fitting.available(bindings)) and not equipment.requirements().satisfied:return reject("Install the required weapon and armor before combat training")
+		if cursor in FlightStages.LOCAL and (not equipment.snapshot().get("training_inventory_released",false) or not equipment.snapshot().get("prototype_drill_replaced",false)):return reject("Complete the station drill exchange before local flight")
+		if not (cursor in FlightStages.FREE+FlightStages.POST_SAHI and Fitting.available(bindings)) and not equipment.requirements().satisfied:return reject("Install the required weapon and armor before combat training")
 		seed=equipment.snapshot().loadout
 		if seed.get("base_content_id")!=bindings.base_content_id or seed.get("binding_id")!=bindings.binding_id or catalogues.content_id!=bindings.base_content_id:return reject("Equipped player belongs to another source identity")
 		for key in ["ship_id","station_id","system_id"]:
@@ -172,7 +202,7 @@ func _configure(bindings: RefCounted, catalogues: RefCounted, cursor: int, previ
 		if not FlightCache.matches(previous_cache,seed,cursor):return reject("Local arrival cache belongs to another equipped location")
 		current=FlightCache.restore_values(cache_parameters,base_hull,capacities,previous_cache.values)
 		if current.is_empty():return reject("Unsupported local arrival player values")
-		current.gamma=Vitals.single(cache_parameters.gamma_full)
+		if cursor not in FlightStages.POST_SAHI:current.gamma=Vitals.single(cache_parameters.gamma_full)
 	if base_hull>=0:
 		max_hull=maxi(base_hull,current.hull)
 		repair=Repair.new()
@@ -251,17 +281,40 @@ func supports_weapon_hit(weapon: Variant) -> bool:
 
 func loadout() -> Dictionary:return _loadout.duplicate(true)
 
+## Only an accepted launch history can change equipped ammunition in flight.
+## Updating ownership must not reconstruct pools, repair timers or hit state.
+func retain_secondary_ammunition(owner: RefCounted) -> bool:
+	error=""
+	if _state.is_empty() or not is_instance_of(owner,load("res://src/simulation/secondary_weapons.gd")):return reject("Player ammunition requires its equipped secondary owner")
+	for key in ["base_content_id","binding_id","ship_id","equipment_ids"]:
+		if _state.get(key)!=_loadout.get(key):return reject("Player ammunition lost its retained equipment identity")
+	if _state.get("campaign_cursor")!=_loadout.get("campaign_cursor"):return reject("Player ammunition belongs to another encounter")
+	var next: Dictionary=owner.reconcile_loadout(_loadout)
+	if next.is_empty():return reject(owner.error)
+	if not _flight_cache.is_empty() and not FlightCache.matches(_flight_cache,_loadout,int(_loadout.get("campaign_cursor",0))):return reject("Player ammunition lost its flight cache identity")
+	_loadout=next
+	_state.equipment_ids=next.equipment_ids.duplicate()
+	if not _flight_cache.is_empty():_flight_cache.equipment_ids=next.equipment_ids.duplicate()
+	return true
+
 func weapon_hit(weapon: Variant, shooter_present: Variant, shooter_hostile: Variant, special_flight: Variant) -> Dictionary:
 	if not supports_weapon_hit(weapon): return {}
 	var resolver := Damage.new()
 	var resolved := resolver.resolve(weapon.damage,_hit_policy,shooter_present,shooter_hostile,special_flight)
 	if resolved.is_empty(): reject(resolver.error);return {}
+	var result:=normal_hit(resolved.amount)
+	if result.is_empty():return {}
+	result.resolution=resolved
+	return result
+
+func normal_hit(amount: Variant) -> Dictionary:
+	error=""
+	if _state.is_empty():reject("Configure player statistics before applying damage");return {}
 	var pools := Vitals.new()
 	if not pools.configure(_state.vitals.hull,_state.vitals.armor,_state.vitals.shield): reject(pools.error);return {}
-	var result: Dictionary=pools.normal_hit(resolved.amount,_state.active and _state.damage_allowed)
+	var result: Dictionary=pools.normal_hit(amount,_state.active and _state.damage_allowed)
 	if result.is_empty(): reject(pools.error);return {}
 	_state.vitals=pools.snapshot()
-	result.resolution=resolved
 	return result
 
 func collision_context(pose: Variant) -> Dictionary:

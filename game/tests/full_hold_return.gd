@@ -141,7 +141,7 @@ func verify_arrival():
 	check(before.cargo==accepted.cargo and before.arrival_player==accepted.player and before.progress==accepted.progress and before.campaign_cursor==5,"Station changed its accepted cargo/player/progress")
 	for i in 6:
 		var current: Dictionary=station.snapshot()
-		check(current.dialogue.text_id==1719+i and current.dialogue.speaker_id==[2,0,2,0,2,16][i] and current.cargo==accepted.cargo and current.campaign_cursor==5,"Second return line or cargo lifetime differs from source")
+		check(current.dialogue.text_id==int(bindings.full_hold_return.events[i].text_id) and current.dialogue.speaker_id==[2,0,2,0,2,16][i] and current.cargo==accepted.cargo and current.campaign_cursor==5,"Second return line or cargo lifetime differs from source")
 		check(station.prepare_departure(bindings,cat).is_empty() and station.snapshot()==current,"Conversation allowed an early departure")
 		check(station.acknowledge(),station.error)
 	var finished: Dictionary=station.snapshot()
@@ -161,7 +161,7 @@ func verify_presentation(args: PackedStringArray):
 		var station:=Station.new();check(station.configure_return(bindings,cat,lib,docked) and panel.configure_station_return(lib,bindings,visuals,5),station.error+panel.error)
 		if language in ["gb","de"]:check(speech.configure_station_return(lib,bindings,5),speech.error)
 		for i in 6:
-			check(panel.present(station.snapshot()) and panel._body.text==lib.strings[1719+i],"Wrong second-return localization: "+language)
+			check(panel.present(station.snapshot()) and panel._body.text==lib.strings[int(bindings.full_hold_return.events[i].text_id)],"Wrong second-return localization: "+language)
 			if language in ["gb","de"]:
 				check(speech.present(i),speech.error)
 				if i<5:

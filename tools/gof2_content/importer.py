@@ -13,7 +13,7 @@ from .formats import ContentError, MAX_LANGUAGE, envelope, language
 
 SCHEMA = 1
 # Counts describe supported structural layouts, not decoded ship semantics.
-LAYOUTS = {'ios-hd': (64, 3402), 'mac-full-hd': (61, 3371)}
+LAYOUTS = {'ios-hd': {64: 3402}, 'mac-full-hd': {61: 3371, 64: 3385}}
 
 
 def encoded(value):
@@ -57,6 +57,14 @@ def verify_cache(root: Path, checkpoint=lambda *_: None):
             raise ContentError('Unsupported content manifest')
         if identity(profile, files) != manifest['content_id']:
             raise ContentError('Content identity does not match its resources')
+        ships = manifest['ship_table']
+        count = ships['records']
+        strings = LAYOUTS[profile['edition']].get(count) if type(count) is int else None
+        if (strings is None or ships['record_bytes'] != 36
+                or files['resources/data/bin/ships.bin']['bytes'] != count * 36
+                or not manifest['languages']
+                or any(row['records'] != strings for row in manifest['languages'].values())):
+            raise ContentError('Ship and language metadata do not match the content layout')
         total = 0
         for index, (name, row) in enumerate(files.items()):
             if not name.startswith(('resources/', 'definitions/')):
@@ -101,8 +109,9 @@ def install(source: Path, cache: Path, checkpoint=lambda *_: None):
     try:
         with Bundle(source, checkpoint) as bundle:
             resources = bundle.resources()
-            ships, strings = LAYOUTS[bundle.profile['edition']]
-            if resources['data/bin/ships.bin'] != ships * 36:
+            ships, remainder = divmod(resources['data/bin/ships.bin'], 36)
+            strings = LAYOUTS[bundle.profile['edition']].get(ships)
+            if remainder or strings is None:
                 raise ContentError('Unsupported ship table layout for this edition; field semantics remain unverified')
             profile = dict(bundle.profile, layout='gof2-bundle-v1')
             stage = Path(tempfile.mkdtemp(prefix='.stage-', dir=cache))

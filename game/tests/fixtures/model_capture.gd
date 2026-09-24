@@ -1,5 +1,10 @@
 extends RefCounted
 ## Fit one already isolated source model and capture its actual GPU output.
+static func arguments() -> PackedStringArray:
+	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
+	return args
+
 static func capture(tree: SceneTree, model: Node3D, path: String) -> Dictionary:
 	var bounds:=AABB();var first:=true
 	for mesh in model.instances:

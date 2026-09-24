@@ -8,11 +8,12 @@ from test_materials import arm_wide
 from test_ship_models import branch
 
 
-def fixture(mac,shift=0):
+def fixture(mac,shift=0,alternate=False):
     base=0x100000+shift;data=bytearray(10000);blocks={};locations={'select':64,'bind':512}
     links=({'call_a':1800,'call_2f':1900,'call_37':2000,'call_4d':3000,'call_59':512} if mac else {'call_14':1800,'call_30':1900,'call_36':2000,'call_4a':3000,'call_5a':512})
     for key,at in locations.items():
-        name=('MAC_' if mac else 'ARM_')+key.upper();body,fields=expand(getattr(reader,name))
+        name=('MAC_' if mac else 'ARM_')+key.upper()
+        body,fields=expand(reader.MAC_BIND_ALTERNATE if mac and alternate and key=='bind' else getattr(reader,name))
         for field,(off,size) in fields.items():
             site=base+at+off
             if mac:
@@ -38,6 +39,19 @@ def fixture(mac,shift=0):
 
 
 class ReflectionSelection(unittest.TestCase):
+    def test_alternate_binding_keeps_linked_identifiers(self):
+        for shift in [0,0x240000]:
+            m,p,s,blocks=fixture(True,shift,alternate=True)
+            result=reader.extract_reflection_selection(m,p,s)
+            self.assertEqual({key:result.get(key) for key in ['texture_base','special_id']},{'texture_base':22000,'special_id':31000})
+            self.assertEqual(result['provenance']['bind']['bytes'],310)
+            for key in ['call_8b','call_13f']:
+                at,_,fields=blocks['bind'];offset,_=fields[key]
+                damaged=bytearray(m.data);damaged[256+at+offset]^=4
+                original=m.data;m.data=bytes(damaged)
+                self.assertEqual(reader.extract_reflection_selection(m,p,s),{})
+                m.data=original
+
     def test_identifiers_and_relocation(self):
         for mac in [True,False]:
             for shift in [0,0x240000]:

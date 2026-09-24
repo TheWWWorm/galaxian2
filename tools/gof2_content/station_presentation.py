@@ -2,30 +2,30 @@
 Only semantic values and provenance leave this reader. Other stations and the
 instruction's actor-dependent voice fallback are outside this capability.
 """
-import copy,hashlib
+import copy
 from .radio_audio import constant_bytes
+from .declaration_layouts import recognize
 
 def extract_station_presentation(mach, arrival, station):
     if mach.architecture != 'x86_64' or station.get('scope') != 'first_station_entry':return {}
     try:
         origin=arrival['provenance']['actor']
         if origin['bytes'] != 315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            if section=='__header':
-                offset=anchor+delta-mach.text['address']+mach.text['offset']
-                if not 32<=offset<=4096-size:return {}
-                found=(mach.data[offset:offset+size],mach.slice_offset+offset)
-            else:found=constant_bytes(mach,anchor+delta,size,section.encode())
-            if found is None:return {}
-            if pattern.startswith('sha256:'):
-                if hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            elif found[0] != bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=_proof_bytes)
+        if not proof:return {}
+        alternate=proof['scene_kind']['offset']==origin['offset']+MAC_ALTERNATE['scene_kind'][0]
+        result=copy.deepcopy(MAC_VALUES if alternate else VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
+
+
+def _proof_bytes(mach,address,size,section):
+    if section==b'__header':
+        offset=address-mach.text['address']+mach.text['offset']
+        if not 32<=offset<=4096-size:return None
+        return mach.data[offset:offset+size],mach.slice_offset+offset
+    return constant_bytes(mach,address,size,section)
 
 VALUES = {'scope': 'first_station_presentation',
  'station_id': 78,
@@ -211,3 +211,183 @@ LAYOUTS = {'scene_kind': [414874,
                        80,
                        '__header',
                        '5f5f62737300000000000000000000005f5f44415441000000000000000000002005310001000000a2150000000000000000000004000000000000000000000001000000000000000000000000000000']}
+
+# Complete alternate Mac source layout and its own localized event IDs.
+MAC_ALTERNATE = {'scene_kind': [415292, 39, '__text', 'bfc8000000e832ca10004889c34889dfbe17000000e816daeeff49895c24284889dfe8f5ddeeff'],
+ 'projection': [-706303,
+                39,
+                '__text',
+                '418bb59c000000498b3ff30f10052ffc2100f30f100d2bfc2100f30f101527fc2100e89a8d1c00'],
+ 'initial_camera': [-706249,
+                    193,
+                    '__text',
+                    '418bb59c000000498b3fe8dc881c00488dbd78feffff4c8db5b8fefffff30f100dfafb2100488b4820488b5028488b70308b5838899df0feffff4889b5e8feffff488995e0feffff48898dd8feffff488b481848898dd0feffff488b481048898dc8feffff488b08488b4008488985c0feffff48898db8feffff4c89f60f57c00f57d2e823a01d00488dbd38fefffff30f10058cfb2100f30f100d88fb2100f30f101584fb21004c89f6e81cae1d00418bb59c000000498b3f4c89f2e8ba871c00'],
+ 'light_direction': [422758,
+                     141,
+                     '__text',
+                     '488d05fd6f1e00488b184889dfe87a520b004889df89c6e8a04e0b004889c7e828610c00498dbc2494010000488db5d8fefffff30f118de0fefffff30f1185d8feffff660f70c001f30f1185dcfefffff30f1085dcfefffff30f580514521100f30f1185dcfefffff30f1085d8fefffff30f58051c521100f30f1185d8feffffe897b509004c89e7e8230d0000'],
+ 'station_lights': [426262,
+                    467,
+                    '__text',
+                    '554889e54156534889fb4c8d357b621e00498b3ee823e90d00f30f1015d7de10004889c70f28c20f28cae86d5a0d00498b3ee805e90d00f30f101dfd4c1100f30f108394010000f30f108b980100000f57c30f57cbf30f10939c0100000f57d34889c7be00400000e8ef4f0d00498b3ee8c7e80d00f30f101557ae10004889c70f28c20f28cabe00400000e80c520d00488d05ad611e00488b38e8d5d106004889c7e883b60400ffc883f8070f87b1000000488d0d1b010000486304814801c8ffe0488d05c3611e00488b38e86be80d00f30f100d4b4c1100f30f10150bde10004889c70f28c2e997000000488d0599611e00488b38e841e80d00f30f10051d4c1100f30f1015e1dd10004889c7eb70488d0575611e00488b38e81de80d00f30f100d15491100f30f1015ed4b11004889c70f28c1eb4c488d054e611e00488b38e8f6e70d00f30f1005c64b1100f30f100d3e421100f30f1015ba4b11004889c7eb20488d0522611e00488b38e8cae70d00f30f101572dd10004889c70f28c20f28cabe00400000e82f530d00488d1df8601e00488b3be8a0e70d00f30f101518ad10004889c70f28c20f28cabe00400000e845550d00488b3be87de70d00f30f1005614b11004889c75b415e5de9595c0d00'],
+ 'environment_row': [422915,
+                     222,
+                     '__text',
+                     '488d05506f1e00488b38e892a6060083f84d756c488d053c6f1e00488b38e836a606004889c7e8e28b060083f8647550488d05206f1e00488b38e81aa606004889c7e89a8c06004989c64d85f6743141833e00742b31db498b4608488b3cd8e869ae040083f825750f498b4608488b3cd831f6e86dbe040048ffc3413b1e72d7488d05d06e1e00488b38e8caa506004889c7e8768b060041bf0800000083f865743c488d05ae6e1e00488b38e8a8a506004889c7e8548b060041bf0700000083f864741a488d058c6e1e00488b38e8b4de06004889c7e862c304004189c7'],
+ 'camera_seed': [423137,
+                 800,
+                 '__text',
+                 'c78598feffff0000803f48c785a4feffff0000000048c7859cfeffff00000000c785acfeffff0000803f48c785b8feffff0000000048c785b0feffff00000000c785c0feffff0000803f438d047f4863c8488d05b9591100f30f2a0c88c785c4feffff00000000c785c8feffff0000803f438d4c7f024863c9c785ccfeffff0000803fc785d0feffff0000803ff3410f118c24ac010000f30f2a0488f30f118560fcffff438d4c7f014863c9f30f2a1488f30f119558fcfffff3410f119424b0010000f3410f118424b4010000498bbc24b80100004885ff7413660f6fc1f30f118d68fcffffe8d69c0d00eb31bf10000000f30f118d68fcffffe898aa10004889c34889dff30f108d68fcffff660f6fc1e84b9c0d0049899c24b8010000498bbc24c00100004885ff7415f3410f108c24b0010000660f6fc1e8839c0d00eb2bbf10000000e84daa10004889c3f3410f108c24b00100004889df660f6fc1e8fe9b0d0049899c24c0010000498bbc24c80100004885ff7415f3410f108c24b4010000660f6fc1e8369c0d00eb2bbf10000000e800aa10004889c3f3410f108c24b40100004889df660f6fc1e8b19b0d0049899c24c8010000f30f108568fcffff49837c2428000f84cf050000488dbd58feffff488d8598feffff4889c64989c6f30f108d58fcfffff30f109560fcffffe82c710c00488d05c1731e008a00488d0dec5811004d89e54c8d25b2581100a8014c89e0480f44c14d63fff3420f100cb8488d0569581100f3420f1004b8f30f118550fcffff488dbd18fefffff30f1015fc5611004c89f6ba02000000e88f640c00488d05306c1e00488b184889dfe8ad4e0b004889df89c64c89f34889dae85d4a0b00488db508feffff498b7d28f30f108568fcfffff30f118508fefffff30f108558fcfffff30f11850cfefffff30f108560fcfffff30f118510feffff4883c70ce8e9b10900488db5f8fdffff498b7d28488d05f3721e00f60001f30f108550fcfffff30f1185f8fdffff488d050d5811004c0f44e0f3430f1004bc4d89ecf30f1185fcfdffffc78500feffff8fc2f5bc4883c718e895b10900498b442428488b78284889de4989dfe81d64eeff'],
+ 'camera_jitter': [423937,
+                   273,
+                   '__text',
+                   '4c8d35826b1e00498b3ebe14000000e80da10a0083f80a410f9c8424a9010000498b3ebe14000000e8f4a00a0083f80a410f9f8424aa010000498b3ebe14000000e8dba00a0083f80a410f9c8424ab010000418a9c24aa010000498b3ebe96000000e8baa00a0089c1f7d9f6c3010f44c8f30f2ac1498b442428f30f58400cf30f11400c418a9c24a9010000498b3ebe96000000e888a00a0089c1f7d9f6c3010f44c80f57c0f30f2ac1498b442428f30f584010f30f114010418a9c24ab010000498b3ebe96000000e853a00a00488dbdb8fdffff89c1f7d9f6c3010f44c80f57c0f30f2ac1498b442428f30f584014f30f114014498b442428f30f105014f30f10400cf30f1048104c89fee8f06e0c00'],
+ 'frame_clock': [443450,
+                 75,
+                 '__text',
+                 '4989fd498b7d10e88cad0d003d960000007f12498b7d10e87cad0d004889c131c085c97822498b7d10e86aad0d004889c1b89600000081f9960000007f09498b7d10e851ad0d0041894544'],
+ 'camera_update': [444550,
+                   942,
+                   '__text',
+                   '41f685a0000000010f85a003000041f685a1000000010f859203000041f685a2000000010f858403000041f685a3000000010f857603000041f685a4000000010f856803000041f6859c000000010f855a030000498b7d304885ff7409418b7544e87c750000498b7d284885ff740731f6e8be78eeff458b7d444589fe41f7de41f685aa010000014489f8410f45c6f30f2ac0498bbdb8010000e8cd490d00498bbdb8010000e8414c0d00f30f1185dcfeffff498bbdb8010000e8cd4c0d00f30f1185e0feffff498bbdb8010000e8b94c0d000f57d2f30f109ddcfeffff0f28cbf30f5cc80f28c3f30f5c85e0feffff0f2ec277070f570de0041100f30f1005489710000f2ec1726c418a9daa01000088d824013401418885aa0100004d8ba5b8010000f3410f1085ac010000f30f1185e0feffff488d05c8191e00488b38be83000000e8534f0a00b9eeffffff29c183c01280e3010f44c1f30f2ac8f30f588de0feffff4c89e7f30f1085dcfeffffe8a7480d0041f685a9010000014489f0410f45c70f57c0f30f2ac0498bbdc0010000e8d5480d00498bbdc0010000e8494b0d00f30f1185d8feffff498bbdc0010000e8d54b0d00f30f1185e0feffff498bbdc0010000e8c14b0d000f57d2f30f109dd8feffff0f28cbf30f5cc80f28c3f30f5c85e0feffff0f2ec277070f570de8031100f30f1005509610000f2ec1726c418a9da901000088d824013401418885a90100004d8ba5c0010000f3410f1085b0010000f30f1185e0feffff488d05d0181e00488b38be78000000e85b4e0a00b9e2ffffff29c183c01e80e3010f44c1f30f2ac8f30f588de0feffff4c89e7f30f1085d8feffffe8af470d0041f685ab01000001450f45f70f57c0f3410f2ac6498bbdc8010000e8df470d00498bbdc8010000e8534a0d00f30f1185e0feffff498bbdc8010000e8df4a0d00f30f1185d4feffff498bbdc8010000e8cb4a0d00f30f109de0feffff0f57d20f28cbf30f5cc80f28c3f30f5c85d4feffff0f2ec277070f570df2021100f30f119de0fefffff30f1005529510000f2ec1726c418a9dab01000088d824013401418885ab0100004d8bb5c8010000f3410f1085b4010000f30f1185d4feffff488d05d2171e00488b38be64000000e85d4d0a00b9ceffffff29c183c03280e3010f44c1f30f2ac8f30f588dd4feffff4c89f7f30f1085e0feffffe8b1460d00488d0572171e00488b184889dfe8eff90a004889df89c6e815f60a00488dbde8feffff4889c6f30f1085dcfefffff30f108dd8fefffff30f1095e0feffffe8ce1b0c00'],
+ 'rotation_dispatch': [1236085,
+                       37,
+                       '__text',
+                       '8b45e84883f805488945b80f8778070000488d0595070000488b4db8486314884801c2ffe2'],
+ 'rotation_yxz': [1236756,
+                  307,
+                  '__text',
+                  '48ba3c00000000000000f30f1045d4f30f5945d0f30f104de4f30f1055e0f30f5955dcf30f59caf30f58c1488b45f8f30f1100f30f1045d0f30f5945e4f30f5945e0f30f104dd4f30f594ddcf30f5cc1488b45f8f30f114004f30f1045d8f30f5945e0488b45f8f30f114008f30f1045d8f30f5945dc488b45f8f30f114010f30f1045d8f30f5945d0488b45f8f30f114014f30f1045e4660f7ec181f100000080660f6ec1488b45f8f30f114018f30f1045d0f30f5945e0660f7ec181f100000080660f6ec1f30f104dd4f30f594de4f30f594ddcf30f58c1488b45f8f30f114020f30f1045d4f30f5945d0f30f5945e4f30f104de0f30f594ddcf30f58c1488b45f8f30f114024f30f1045d8f30f5945d4488b45f8f30f114028488b45f8488b75c04889f74889c6e826410400e9d4030000'],
+ 'tween_sample': [1315234,
+                  157,
+                  '__text',
+                  '554889e54883ec10f20f1005c0e8030048897df8488b7df8f30f5a4f08660f2ec848897df00f851d0000000f8a17000000488b45f0f30f1000f30f584004f30f11400ce94f000000488b45f0f30f104008e83adefefff20f100daab1030048b80200000000000000f2480f2ad0f30f5ac0f20f5ec2f20f58c1488b45f0f30f5a4804f20f59c1f30f5a08f20f58c1f20f5ac0f30f11400c4883c4105dc3'],
+ 'tween_reset': [1315490,
+                 74,
+                 '__text',
+                 '554889e54883ec10f30f1015b8e7030048897df8f30f1145f4f30f114df0488b7df8f30f1045f4f30f1107f30f1045f0f30f5c45f4f30f114704f30f115708e8bcfeffff4883c4105dc3'],
+ 'tween_clock': [1315570,
+                 166,
+                 '__text',
+                 '554889e54883ec20f20f100d70e70300f20f1015a0c6030048b80000010000000000f2480f2ad848897df8f30f1145f4488b45f8f30f5a45f4f20f5ec3f20f59c2f30f5a5008f20f58d0f20f5ac2f30f114008f30f5a4008660f2ec1488945e80f8612000000f20f100512e70300f20f1145e0e90e000000488b45e8f30f5a4008f20f1145e0f20f1045e0f20f5ac0488b45e8f30f1140084889c7e810feffff4883c4205dc3'],
+ 'next_label_and_voice_stop': [-698337,
+                               90,
+                               '__text',
+                               '498b5f08488d05488b2f00488b38beb3000000e87bbd1b004889df4889c6e8a8a2180041c787a400000000000000488d053e912f0041c787a800000000000000418bb7a0000000488b38e87878000041c787a0000000ffffffff'],
+ 'final_label_and_voice_start': [-692849,
+                                 143,
+                                 '__text',
+                                 'e81c020000ffc839c37523498b5f08488d05cd752f00488b38beb4000000e800a81b004889df4889c6e82d8d1800488d05ce752f00488b18498b7f7031d24885ff7408e8cbb310004889c24889df4489f6e8af450700418987a000000085c0782e488d1d9b7b2f00488b3b89c631d231c90f57c0e8485f0000418bb7a0000000488b3be82f690000418987a8000000'],
+ 'voice_lookup': [-216172,
+                  68,
+                  '__text',
+                  '554889e5415741564154534989d689f331c0488d0d45b91a00eb044883c0023dbf0b00007f15391c8175f0488d0d2cb91a008b448104e9d50800004d85f60f84c7080000'],
+ 'voice_not_found': [-213857, 14, '__text', 'b8ffffffff5b415c415e415f5dc3'],
+ 'atmosphere_start': [425432,
+                      38,
+                      '__text',
+                      '488d1db36b1e00488b3bbe7a00000031d231c9660fefc0e85c4fefff488b3b31f6e8ea57efff'],
+ 'dialogue_delay': [445492, 14, '__text', '49817d50e80300000f8c4b0e0000'],
+ 'portrait_selection': [-698051, 24, '__text', '898560fcffff4863d8488d05e5e02e00488b04d849894738'],
+ 'portrait_composition': [-86396,
+                          159,
+                          '__text',
+                          '554889e5415741564154534989f64531ff4d85f6747dbf18000000e8d47118004989c7bf08000000e8c17118004989470841c747100100000048c7000000000041c70700000000bf040000004c89fee83d04000031db458b26418b4c9e0483f9ff74124489e689dae845000000498b4f08488904d948ffc383fb0475dc498b4f08488b01488b5110488911498b4f08488941104c89f85b415c415e415f5dc3'],
+ 'mission_no_actor': [399874, 16, '__text', '48c743380000000048c7430800000000'],
+ 'mission_actor_getter': [401826, 10, '__text', '554889e5488b47085dc3'],
+ 'position_table': [1560306,
+                    120,
+                    '__const',
+                    '34040000840300001ff7fffffb0600003e040000a0f9ffff39f7fffff2030000cbf8ffff08070000200300000ef9ffff000000000000000000000000000000000000000000000000000000000000000000000000b0040000200300008af5ffff980800002003000072f9ffff000000000000000000000000'],
+ 'pitch_table': [1560434,
+                 40,
+                 '__const',
+                 '713d8abe9a9999beec5138becdcc4cbe000000000000000000000000cdcc4cbecdcc4cbe00000000'],
+ 'yaw_table': [1560482,
+               40,
+               '__const',
+               '3d0a57c0000070c0333303c0e17a2440000000000000000000000000000040406666164000000000'],
+ 'alternate_yaw_table': [1560530,
+                         40,
+                         '__const',
+                         '3d0a57c0000070c0333303c0e17a2440000000000000000000000000000040400000204000000000'],
+ 'roll': [1560098, 4, '__const', '8fc2f5bc'],
+ 'projection_values': [1520962, 12, '__const', 'cdcc4c3f000048430050c347'],
+ 'initial_yaw': [1520982, 4, '__const', 'db0fc93e'],
+ 'direction_x_bias': [1558010, 4, '__const', 'cdcc4cbe'],
+ 'direction_y_bias': [1557978, 4, '__const', '9a9999be'],
+ 'light_material_ambient': [1531918, 4, '__const', '3333333f'],
+ 'light_diffuse': [1519594, 4, '__const', '0000803f'],
+ 'light_ambient_rg': [1560118, 8, '__const', '6666e63ecdcc0c3f'],
+ 'light_ambient_gb': [1531906, 4, '__const', '0000803e'],
+ 'light_specular': [1519570, 4, '__const', '0000003f'],
+ 'light_power': [1560126, 4, '__const', '0000c042'],
+ 'tween_phase': [1571434, 16, '__const', 'e4cb9640d253fb40000000387a6a1f40'],
+ 'tween_tau': [1563050, 8, '__const', '00000060fb211940'],
+ 'tween_half': [1557418, 8, '__const', '000000000000e03f'],
+ 'endpoint_tolerance': [1532114, 4, '__const', '0000a040'],
+ 'rotation_slots': [1238050, 24, '__text', '78f8ffffb5f9fffff2faffff25fcffff60fdffffa5feffff'],
+ 'light_slots': [426730, 32, '__text', 'eefeffff3cffffff18ffffff8fffffff8fffffff8fffffff8fffffff63ffffff'],
+ 'voice_lookup_table': [1535218,
+                        12032,
+                        '__const',
+                        'sha256:71d7f260f073a866f0c2c15cbb1de4360add0790bba948ac33ff006cea251e5d'],
+ 'portrait_pointer_0': [2374194, 8, '__const', '30c5300001000000'],
+ 'portrait_pointer_2': [2374210, 8, '__const', '900b300001000000'],
+ 'portrait_pointer_16': [2374322, 8, '__const', '500d300001000000'],
+ 'portrait_gunant': [2388818, 20, '__data', '0200000001000000010000000100000001000000'],
+ 'portrait_instruction': [2389266, 20, '__data', '0b00000001000000000000000000000002000000'],
+ 'zero_fill_section': [-756982,
+                       80,
+                       '__header',
+                       '5f5f62737300000000000000000000005f5f444154410000000000000000000030c5300001000000a2150000000000000000000004000000000000000000000001000000000000000000000000000000']}
+
+MAC_VALUES = {'scope': 'first_station_presentation',
+ 'station_id': 78,
+ 'hangar_row': 3,
+ 'camera': {'position': [1800, 800, -1778],
+            'angles': [-0.20000000298023224, 2.569999933242798, -0.029999999329447746],
+            'rotation_order': 'YXZ',
+            'projection': [0.800000011920929, 200.0, 100000.0],
+            'initial_jitter_bound': 150,
+            'phase_start': 4.71238899230957,
+            'phase_limit': 7.853981852531433,
+            'phase_rate': 9.58738019107841e-05,
+            'endpoint_tolerance': 5.0,
+            'endpoint_min': [18, 30, 50],
+            'endpoint_range': [131, 120, 100],
+            'max_frame_ms': 150},
+ 'light': {'initial_camera_yaw': 0.39269909262657166,
+           'direction_bias': [-0.20000000298023224, -0.30000001192092896, 0],
+           'material_ambient': 0.699999988079071,
+           'diffuse': [1, 1, 1],
+           'ambient': [0.44999998807907104, 0.25, 0.25],
+           'specular': [0.5, 0.5, 0.5],
+           'specular_power': 96.0},
+ 'portraits': {'0': {'status': 'fixed', 'family': 0, 'parts': [0, 0, 0, 0]},
+               '2': {'status': 'fixed', 'family': 2, 'parts': [1, 1, 1, 1]},
+               '16': {'status': 'fixed', 'family': 11, 'parts': [1, 0, 0, 2]}},
+ 'dialogue': {'next_text_id': 179,
+              'final_text_id': 180,
+              'start_delay_ms': 1000,
+              'silent_text_id': 1707,
+              'voice_event_ids': [267,
+                                  268,
+                                  277,
+                                  278,
+                                  279,
+                                  280,
+                                  281,
+                                  282,
+                                  283,
+                                  284,
+                                  269,
+                                  270,
+                                  271,
+                                  272,
+                                  273,
+                                  274,
+                                  275,
+                                  276],
+              'stop_previous_voice': True,
+              'atmosphere_event_id': 122}}

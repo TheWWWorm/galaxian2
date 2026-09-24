@@ -9,8 +9,9 @@ var failures := 0
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	check(not args.is_empty() and args.size()%3==0,"Pass content/bindings/visuals triples")
-	for i in range(0,args.size()-2,3): check_profile(args[i],args[i+1])
+	var stride:=2 if args.size()==2 else 3
+	check(not args.is_empty() and args.size()%stride==0,"Pass a content/bindings pair or content/bindings/visuals triples")
+	for i in range(0,args.size()-stride+1,stride): check_profile(args[i],args[i+1])
 	print("NPC death accounting checks: %d failures" % failures)
 	quit(1 if failures else 0)
 

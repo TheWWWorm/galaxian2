@@ -10,6 +10,7 @@ const Resources = preload("res://src/content/planet_resource_definitions.gd")
 const Arrival = preload("res://src/simulation/arrival_location.gd")
 const Travel = preload("res://src/content/mido_travel_definitions.gd")
 const LocalArrival = preload("res://src/content/local_arrival_environment_definitions.gd")
+const Worlds = preload("res://src/content/ordinary_world_definitions.gd")
 var error := ""
 
 static func view_position(entry: Dictionary, camera_position: Vector3) -> Vector3:
@@ -45,14 +46,30 @@ func for_lounge(bindings: RefCounted,catalogues: RefCounted,station_id: int,curs
 	if source.is_empty():return reject(location.error)
 	return _for_location(bindings,catalogues,source,bindings.opening_sky.planet_resources,bindings.base_content_id,quality,true)
 
-func _for_location(bindings: RefCounted, catalogues: RefCounted, opening: Dictionary, data: Dictionary, base_content_id: String, quality: String, ordinary: bool) -> Dictionary:
+static func supports_station(bindings: RefCounted,catalogues: RefCounted,station_id: int) -> bool:
+	var world: Dictionary=Worlds.catalogue_location(bindings,catalogues,station_id)
+	if world.is_empty():return false
+	var station: Dictionary=catalogues.tables.stations[station_id]
+	return LocalArrival.available(bindings) and int(station.planet_type) in LocalArrival.SUPPORTED_TYPES and int(world.sky_index) not in [11,12] and int(world.sky_index)<=14
+
+func for_station(bindings: RefCounted,catalogues: RefCounted,station_id: int,cursor: int,quality:="high") -> Dictionary:
+	error=""
+	if not supports_station(bindings,catalogues,station_id):return reject("This station has no supported exterior planet layout")
+	var station: Dictionary=catalogues.tables.stations[station_id]
+	var resources: Dictionary=bindings.opening_sky.planet_resources
+	if not Resources.parameters(resources):return reject("Station planet resources are unavailable")
+	var context:={"station_id":station_id,"system_id":int(station.system_id),"campaign_cursor":cursor,
+		"current_planet_texture_id":int(resources.near_textures[int(station.planet_type)])}
+	return _for_location(bindings,catalogues,context,resources,bindings.base_content_id,quality,true,true)
+
+func _for_location(bindings: RefCounted, catalogues: RefCounted, opening: Dictionary, data: Dictionary, base_content_id: String, quality: String, ordinary: bool, station_preview:=false) -> Dictionary:
 	var system: Dictionary=catalogues.tables.systems[opening.system_id]
 	var station: Dictionary=catalogues.tables.stations[opening.station_id]
 	# Other planet types and special system/campaign constructors need their own
 	# verified selector. A familiar mesh is not evidence those contexts work.
 	var travel_context:=ordinary and Travel.location_supported(bindings.mido_travel,int(opening.station_id),int(opening.system_id),int(station.planet_type))
 	var local_arrival:=ordinary and LocalArrival.location_supported(bindings,catalogues,int(opening.station_id),int(opening.get("campaign_cursor",-1)))
-	travel_context=travel_context or local_arrival
+	travel_context=travel_context or local_arrival or station_preview
 	if (station.planet_type!=0 and not travel_context) or opening.system_id==27 or not Numbers.integer(system.get("sky_index"),0,14):
 		return reject("This planet layout requires an ordinary supported location")
 	var ordered:=[]
@@ -62,7 +79,7 @@ func _for_location(bindings: RefCounted, catalogues: RefCounted, opening: Dictio
 		if system.station_ids.has(row.id):
 			if not Numbers.integer(row.get("planet_type"),0,int(data.far_textures.size())-1):return reject("Station planet type is outside the resource table")
 			ordered.append(int(row.id))
-	var layout:=arrange(int(opening.station_id),int(station.planet_type),ordered,not ordinary,bindings.mido_travel.local_arrival_environment if local_arrival else {})
+	var layout:=arrange(int(opening.station_id),int(station.planet_type),ordered,not ordinary,bindings.mido_travel.local_arrival_environment if local_arrival or station_preview else {})
 	if layout.is_empty():return {}
 	var mesh_path: String=bindings.resolve(int(data.mesh_id),"mesh")
 	if mesh_path.is_empty():return reject(bindings.error)

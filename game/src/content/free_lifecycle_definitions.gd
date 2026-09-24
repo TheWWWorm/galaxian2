@@ -6,6 +6,8 @@ const VALUES = {"scope":"augmenta_ordinary_lifecycle","campaign_cursor":18,"syst
 const SPANS = {"free_lifecycle_hostile":[807440,128],"free_lifecycle_friendly":[807568,128],"free_lifecycle_secondary":[734674,76],"free_lifecycle_hostile_relaunch":[113209,238],"free_lifecycle_nivelian_death":[80766,17],"free_lifecycle_wreck_kind":[633786,41],"free_lifecycle_wreck_material":[637724,129],"free_lifecycle_wreck_table":[638178,20]}
 
 # Native composition.
+const MAC_SPANS = {"free_lifecycle_hostile":[808072,128],"free_lifecycle_friendly":[808200,128],"free_lifecycle_secondary":[735306,76],"free_lifecycle_hostile_relaunch":[113209,238],"free_lifecycle_nivelian_death":[80766,17],"free_lifecycle_wreck_kind":[634334,41],"free_lifecycle_wreck_material":[638272,129],"free_lifecycle_wreck_table":[638726,20]}
+
 static func parameters(data: Variant) -> bool:
 	return Equal.equal_value(data,VALUES)
 
@@ -17,10 +19,15 @@ static func population(bindings: RefCounted,packet: Dictionary) -> Dictionary:
 	var context: Dictionary=packet.free_context
 	var data: Dictionary=load("res://src/content/ambient_lifecycle_definitions.gd").guidance(bindings,packet,context.get("rank"),context.get("difficulty"))
 	if data.is_empty():return {}
+	var world: Dictionary=load("res://src/content/ordinary_world_definitions.gd").location(bindings.mido_travel,context.station_id)
+	var population_rules: Dictionary=bindings.mido_travel.free_population
+	if world.is_empty() or world.system_id!=context.system_id or world.faction<0 or world.faction>=population_rules.enemy_factions.size():return {}
 	data.merge(context,true);data.free_context=context.duplicate(true)
 	data.free_lifecycle=bindings.mido_travel.free_lifecycle.duplicate(true)
 	data.lifecycle=bindings.early_contracts.ship_lifecycle.duplicate(true)
 	data.lifecycle.reactions=data.free_lifecycle.reactions.duplicate(true)
+	data.lifecycle.reactions.primary_faction=int(world.faction)
+	data.lifecycle.reactions.eligible_factions=[int(world.faction),int(population_rules.enemy_factions[int(world.faction)])]
 	data.cargo=bindings.combat_training_destruction.cargo.duplicate(true)
 	data.actors=[];data.npc_weapons=[]
 	for actor in packet.actors:
@@ -62,13 +69,15 @@ static func live_population(bindings: RefCounted,combat: Dictionary) -> bool:
 	if combat.get("campaign_cursor")!=context.campaign_cursor or combat.get("provocation",{}).get("station_id")!=context.station_id:return false
 	var actors: Variant=combat.get("actors")
 	if not actors is Array or actors.size()>Traffic.Population.maximum_actor_count(bindings,int(context.rank),float(context.difficulty),context):return false
-	if actors.is_empty() and not Traffic.Delivery.active_courier(context) and not Traffic.Campaign.active_visit(bindings.mido_travel,context):return false
+	if actors.is_empty() and not Traffic.Delivery.active_courier(context) and not Traffic.Campaign.empty_story(bindings.mido_travel,context):return false
+	var world: Dictionary=load("res://src/content/ordinary_world_definitions.gd").location(bindings.mido_travel,context.station_id)
+	if world.is_empty():return false
 	var order: Array=Traffic.Delivery.group_order(bindings,context)
 	var previous:=-1
 	for id in actors.size():
 		var row: Variant=actors[id]
 		if not row is Dictionary or row.get("actor_id")!=id or row.get("free_traffic")!=true or row.get("ambient_traffic")!=true:return false
 		var group: int=order.find(row.get("population_group"))
-		if group<previous or group<0 or not Traffic.actor_matches(bindings,row,order[group],-1,true):return false
+		if group<previous or group<0 or not Traffic.actor_matches(bindings,row,order[group],-1,true,int(world.faction)):return false
 		previous=group
 	return true

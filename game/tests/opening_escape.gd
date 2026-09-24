@@ -46,7 +46,7 @@ func verify(content: String, pack: String) -> void:
 	var state:=owner.snapshot()
 	check(state.phase==5 and state.cruise_speed==2.0 and state.elapsed_ms==0,"Entry also consumed a drive frame")
 	check(state.input_blocked and not state.hud_visible and state.frame.entry,"Entry did not hold input/HUD")
-	check(state.frame.player_pose_override.origin==pose.origin and state.frame.player_pose_override.basis.z.is_equal_approx(Vector3(-1,0,0)),"Entry lost position or yaw convention")
+	check(state.frame.player_pose_override.origin==pose.origin and state.frame.player_pose_override.basis.z.is_equal_approx(Vector3(1,0,0)),"Entry lost position or source forward yaw convention")
 	check(state.eye==pose.origin+Vector3(25000,-200,-1000) and state.frame.camera_operations.size()==1,"Entry camera offset or immediate refresh differs")
 	finish_through(radio,11)
 	check(owner.advance(150,radio,pose,eye),owner.error)

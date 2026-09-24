@@ -20,7 +20,7 @@ func verify_free_application() -> void:
 	for destination in local_destinations():
 		var mobile: bool=destination==96
 		root.size=Vector2i(960,540) if mobile else Vector2i(1280,720)
-		app.set_mobile_layout(mobile);app.set_touch_controls(mobile)
+		app.set_mobile_layout(mobile);TouchInput.set_preference(app,mobile)
 		if not app.request_departure() or not app.enter_first_flight(now_us,4096,1789100000):check(false,app.status.text);return
 		if not await release_application_flight():return
 		check(app.touch_overlay.visible==mobile and app._pause_button.visible==mobile,"Ordinary local travel ignored the touch-controls preference")

@@ -1,10 +1,10 @@
 """Convoy-specific ordinary ship lifecycle declarations, import only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_convoy_lifecycle(mach,arrival):
-    proof=hashed_declarations(mach,arrival,LAYOUTS)
-    return (copy.deepcopy(VALUES),proof) if proof else ({},{})
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
+    return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'mido_convoy_ship_lifecycle',
  'campaign_cursor': 14,
@@ -51,6 +51,40 @@ LAYOUTS = {'convoy_lifecycle_factory_death_model': [79935,
                                 '__text',
                                 '209daf40d4ec5e88c1313c37445ee4a0ef33d73404653b3a058a617a037fae4d'],
  'convoy_lifecycle_friendliness': [807568,
+                                   128,
+                                   '__text',
+                                   'a32c7ef7f73abed32663bdf810d8affba26b4f3c3dccb168afc7abfaa939f8ed']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'convoy_lifecycle_factory_death_model': [79935,
+                                          13,
+                                          '__text',
+                                          'c186282b99e10a72c52674b261cfb64da1970de2f9456f9c0cf094d0b93b3f03'],
+ 'convoy_lifecycle_death_model_context': [634134,
+                                          336,
+                                          '__text',
+                                          '749376daa2364b02e990cdfdb75449de79c1aa5e426db70ca83dba025b77155c'],
+ 'convoy_lifecycle_capital_death_effects': [634682,
+                                            4064,
+                                            '__text',
+                                            '1fcae1e52a8e660198a8848c7aaf10a4d899c62314132da2eb1fcbd6462569f7'],
+ 'convoy_lifecycle_default_attachment': [-81548,
+                                         948,
+                                         '__text',
+                                         '88437b7848d85fadf366a7bec5c102e8f85b0aa6455fb37d60ea50e6c8ca5d6f'],
+ 'convoy_lifecycle_small_ship_constructor': [605720,
+                                             2562,
+                                             '__text',
+                                             '69ffded45ed01c0720d4524c45cb78a5be444af55b84ea7c93f85df3bf003325'],
+ 'convoy_lifecycle_large_ship_constructor': [631792,
+                                             1108,
+                                             '__text',
+                                             'da32bb3227d19f7636735e421a93bb29534de26db93526df2a102370f9e37d2f'],
+ 'convoy_lifecycle_hostility': [808072,
+                                128,
+                                '__text',
+                                '209daf40d4ec5e88c1313c37445ee4a0ef33d73404653b3a058a617a037fae4d'],
+ 'convoy_lifecycle_friendliness': [808200,
                                    128,
                                    '__text',
                                    'a32c7ef7f73abed32663bdf810d8affba26b4f3c3dccb168afc7abfaa939f8ed']}

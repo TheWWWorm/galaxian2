@@ -58,6 +58,7 @@ var fade_overlay: ColorRect
 var _fade: RefCounted
 var audio: Node3D
 var _audio_revision:=0
+var _skip_cinematic:=false
 const BOUNDARIES := ["encounter_required","mission_transition_required","player_death_required","arrival_transition_required"]
 # Explicit native preview preset. Source preference restoration and fogged
 # variants remain separate work; these values do not claim automatic selection.
@@ -134,7 +135,15 @@ func configure(library: RefCounted, bindings: RefCounted, visuals: RefCounted, n
 		if _world_frame.damage_particle_owner()!=null:
 			damage_particles=DamageGeometry.new();add_child(damage_particles)
 			if not damage_particles.build(_world_frame.damage_particle_owner(),library,visuals,bindings):return fail(damage_particles.error)
-		if interactive and not _world_frame.configure_player_flight(bindings,catalogues,library,_scenery,1.0):return fail(_world_frame.error)
+		var mounts: RefCounted
+		var exhaust: bool=WorldFrame.EngineParticles.Definitions.available_for(bindings,10)
+		if interactive or exhaust:
+			mounts=WorldFrame.Mounts.new()
+			if not mounts.open(library,catalogues):return fail(mounts.error)
+		if exhaust:
+			if not _world_frame.configure_engine_particles(bindings,mounts,seed_seconds):return fail(_world_frame.error)
+			if not geometry.build_player_exhaust(_world_frame.engine_particle_owner(),library,visuals,bindings):return fail(geometry.error)
+		if interactive and not _world_frame.configure_player_flight(bindings,catalogues,library,_scenery,1.0,mounts):return fail(_world_frame.error)
 		if interactive and not bindings.opening_staging.get("player_aim",{}).is_empty() and not _world_frame.configure_player_aim(bindings):return fail(_world_frame.error)
 		if interactive and not bindings.opening_staging.get("npc_scanner",{}).is_empty():
 			var frame := TargetFrame.source_geometry(library,bindings)
@@ -184,7 +193,7 @@ func set_pause(reason: String, paused: bool, now_microseconds: int) -> bool:
 	if not _clock.rebase(now_microseconds):return reject(_clock.error)
 	if paused:_pauses[reason]=true
 	else:_pauses.erase(reason)
-	if audio!=null:audio.set_paused(is_paused() or status in BOUNDARIES)
+	if audio!=null:audio.set_paused(is_paused() or _skip_cinematic or status in BOUNDARIES)
 	return true
 
 func is_paused() -> bool:
@@ -223,7 +232,36 @@ func flight_hud_visible(state: Dictionary = {}) -> bool:
 func can_control() -> bool:
 	return status=="running" and not is_paused() and flight_hud_visible()
 
-func step(now_microseconds: int, commands := Vector2.ZERO, fire_primary := false) -> bool:
+func can_skip_cinematic() -> bool:
+	return interactive and status=="running" and not is_paused() and _timeline!=null and int(_timeline.snapshot().camera.shot.phase)!=4
+
+func cinematic_skipping() -> bool:return _skip_cinematic
+
+func request_cinematic_skip() -> bool:
+	error=""
+	if not can_skip_cinematic():return reject("A cinematic can be skipped only while it is playing")
+	_skip_cinematic=true
+	if audio!=null:audio.set_paused(true)
+	return true
+
+func step(now_microseconds: int, commands := Vector2.ZERO, fire_primary := false, strafe:=0.0, brake:=false) -> bool:
+	if not _skip_cinematic or is_paused():return _step_once(now_microseconds,commands,fire_primary,strafe,brake)
+	if now_microseconds<0:return reject("Invalid opening timestamp")
+	# Each bounded pass uses the normal native sequence, radio dependencies and
+	# transactional presentation. Yield between batches so focus/pause still work.
+	if not rebase_time(now_microseconds):return false
+	var accepted:=true
+	for index in 8:
+		if not can_skip_cinematic():break
+		if not _step_once(now_microseconds+(index+1)*150000,Vector2.ZERO,false):accepted=false;break
+	if not accepted or not can_skip_cinematic():_skip_cinematic=false
+	var message:=error
+	if not rebase_time(now_microseconds):return false
+	if audio!=null:audio.set_paused(is_paused() or _skip_cinematic or status in BOUNDARIES)
+	if not accepted:return reject(message)
+	return true
+
+func _step_once(now_microseconds: int, commands := Vector2.ZERO, fire_primary := false, strafe:=0.0, brake:=false) -> bool:
 	error=""
 	if status!="running" and status not in BOUNDARIES:return reject("Start the opening before advancing it")
 	if not commands.is_finite() or absf(commands.x)>1.0 or absf(commands.y)>1.0:return reject("Invalid opening flight commands")
@@ -242,7 +280,7 @@ func step(now_microseconds: int, commands := Vector2.ZERO, fire_primary := false
 	var fade: RefCounted=null if _fade==null else _fade.fork_for_frame()
 	if fade!=null and not fade.advance(roundi(seconds*1000.0)):return reject(fade.error)
 	if world_frame!=null:
-		var result: Dictionary=world_frame.evaluate(timeline,scenery_owner,roundi(seconds*1000.0),true,1.0,commands,fire_primary,Vector2i(camera.get_viewport().get_visible_rect().size),true if fade==null else fade.is_active())
+		var result: Dictionary=world_frame.evaluate(timeline,scenery_owner,roundi(seconds*1000.0),true,1.0,commands,fire_primary,Vector2i(camera.get_viewport().get_visible_rect().size),true if fade==null else fade.is_active(),-1 if audio==null else audio.current_music_id(),strafe,brake)
 		if result.is_empty():return reject(world_frame.error)
 		world_frame=result.world_frame;timeline=result.timeline;scenery_owner=result.scenery
 	else:
@@ -279,9 +317,15 @@ func present(advance_sun := false) -> bool:
 	var world_state: Dictionary={} if _world_frame==null else _world_frame.snapshot()
 	var audio_frame:={}
 	if audio!=null:
-		audio_frame=audio.prepare_frame(_audio_revision,state,world_state)
+		var music: Array[Dictionary]=[]
+		music.assign(world_state.get("flight_music",{}).get("operations",[]))
+		audio_frame=audio.prepare_frame(_audio_revision,state,world_state,music)
 		if audio_frame.is_empty():return reject(audio.error)
 	var particle_frame:={}
+	var engine_frame:={}
+	if world_state.has("engine_particles"):
+		engine_frame=geometry.prepare_player_exhaust(_world_frame.engine_particle_owner(),world_state,state.camera.view.get("pose",Transform3D.IDENTITY))
+		if engine_frame.is_empty():return reject(geometry.error)
 	if damage_particles!=null:
 		particle_frame=damage_particles.prepare_world(_world_frame.damage_particle_owner(),world_state,state.camera.view.get("pose",Transform3D.IDENTITY))
 		if particle_frame.is_empty():return reject(damage_particles.error)
@@ -324,6 +368,7 @@ func present(advance_sun := false) -> bool:
 			geometry.actors[id].visible=state.scene.actors[id].visible and npc_deaths.body_visibility[id]
 	if impacts!=null:impacts.commit_world(impact_frame)
 	if damage_particles!=null:damage_particles.commit_world(particle_frame)
+	if not engine_frame.is_empty():geometry.commit_player_exhaust(engine_frame)
 	if projectiles!=null:projectiles.commit_world(projectile_frame)
 	if hyperdrive!=null:hyperdrive.commit_frame(hyperdrive_frame)
 	if sun!=null:sun.commit_frame(sun_frame)
@@ -357,6 +402,7 @@ func clear() -> void:
 	_timeline=null;_scenery=null;_targets=null;scenery=null;_clock=null;_projection=null;_pauses.clear();_combat_event=-1
 	_world_frame=null;npc_deaths=null;projectiles=null;impacts=null;damage_particles=null;interactive=false;_postcombat_event=-1
 	hyperdrive=null;fade_overlay=null;_fade=null;escape_sequence=false;audio=null;_audio_revision=0
+	_skip_cinematic=false
 
 func fail(message: String) -> bool:
 	clear();status="error";error=message

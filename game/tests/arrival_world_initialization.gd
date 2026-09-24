@@ -116,7 +116,7 @@ func verify_world(result: Dictionary, expected: Dictionary):
 func verify_pack(pack: String, lib: RefCounted, bindings: RefCounted):
 	var header: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(pack.path_join("bindings.json")))
 	var body: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(pack.path_join("registrations.json")))
-	var directory:=OS.get_user_data_dir().path_join("rescue-world-invalid")
+	var directory:=OS.get_user_data_dir().path_join("rescue-world-invalid-%d-%d"%[OS.get_process_id(),Time.get_ticks_usec()])
 	DirAccess.make_dir_recursive_absolute(directory)
 	for mutation in ["missing","item","center","extent","numeric_condition"]:
 		var bad:=body.duplicate(true)

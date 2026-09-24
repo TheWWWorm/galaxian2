@@ -22,7 +22,7 @@ func configure(bindings: RefCounted, field: Dictionary) -> bool:
 			if not row.get(key) is Vector3 or not row[key].is_finite():return reject("Invalid scenery motion vector")
 		if not row.get("basis") is Basis or not row.basis.is_equal_approx(Basis.from_euler(row.angles,EULER_ORDER_XYZ)):return reject("Scenery orientation does not match its angles")
 		if maxf(absf(row.spin.x),maxf(absf(row.spin.y),absf(row.spin.z)))>1.0:return reject("Unsupported scenery spin")
-	_field=field.duplicate(true);_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_field=field.duplicate(true);_max_ms=Frames.simulation_limit(bindings)
 	for row in _field.objects:
 		if row.has("ore_draws"):preload("res://src/simulation/readonly_state.gd").freeze(row.ore_draws)
 	return true
@@ -42,6 +42,11 @@ func update(presentation_delta_ms: Variant, skip_motion: Array = []) -> bool:
 		row.angles=angles
 		row.basis=Basis.from_euler(angles,EULER_ORDER_XYZ)
 	return true
+
+## Tractor translation changes the physical model only. Statistics and contact
+## bounds belong to the scenery body and deliberately retain their old origin.
+func _retain_recovery_frame(index: int,frame: Dictionary) -> void:
+	if frame.actor_changes.has("body_pose"):_field.objects[index].position=frame.actor_changes.body_pose.origin
 
 func snapshot() -> Dictionary:
 	return _field.duplicate(true)

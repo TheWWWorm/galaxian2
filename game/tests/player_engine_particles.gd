@@ -28,6 +28,7 @@ func _initialize():
 
 func run():
 	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
 	if args.size() not in [3,4]:check(false,"Expected Mac content, bindings, visuals and optional captures")
 	elif not library.open(args[0]) or not catalogues.open(library) or not mounts.open(library,catalogues) or not bindings.open(args[1],library.manifest) or not visuals.open(args[2],library.manifest):check(false,library.error+catalogues.error+mounts.error+bindings.error+visuals.error)
 	elif bindings.engine_particles.is_empty():check(false,"This fixture requires the Mac engine-particle capability")
@@ -35,6 +36,7 @@ func run():
 		verify_attachments()
 		verify_motion()
 		verify_lifecycle()
+		verify_ring_overflow()
 		verify_invalid()
 		if DisplayServer.get_name()!="headless":await render_probe(args[3] if args.size()==4 else "")
 	print("Player engine particles: %d checks; %d failures"%[checks,failures])
@@ -126,8 +128,40 @@ func verify_lifecycle():
 	emitter.set_visible(true);pose.origin=Vector3(700000,20000,-100000)
 	check(emitter.advance(pose,100,100).get("births")==0,"Relocation emitted across the discarded path")
 	before=emitter.snapshot()
-	pose.origin.z+=1e10
+	pose.origin.z+=2e10
 	check(emitter.advance(pose,1000,1000).has("error") and emitter.snapshot()==before,"Excessive birth work changed accepted state")
+
+func verify_ring_overflow():
+	# The opening jump can request more births than the old fixed work guard,
+	# while only the last 20 original nozzle slots can remain visible.
+	var emitter:=nozzle();check(emitter.advance(Transform3D.IDENTITY,10,10).get("births")==0,"Overflow fixture lost its baseline")
+	var pose:=Transform3D(Basis.IDENTITY,Vector3(0,0,136000))
+	var result: Dictionary=emitter.advance(pose,100,100)
+	check(not result.has("error") and int(result.get("births",0))>Emitter.MAX_BIRTHS_PER_FRAME,"Source jump failed its bounded ring rollover: "+str(result))
+	if result.has("error"):return
+	var count: int=int(result.births)
+	var state: Dictionary=emitter.snapshot()
+	check(state.cursor==count%20 and state.slots.all(func(slot):return slot.appearance.age_ms>=0),"Jump did not retain the final 20 ring slots")
+	var random:=Random.new();random.seed_from(73)
+	var tail: Array=[]
+	for birth in count:
+		var scatter:=Vector3(random.next_int(200)-100,random.next_int(200)-100,random.next_int(200)-100)
+		if birth>=count-20:tail.append(scatter)
+	check(state.random==random.snapshot(),"Overwritten births failed to consume the original random stream")
+	var inherited: Vector3=state.velocity*0.8
+	for index in 20:
+		var slot: Dictionary=state.slots[(count-20+index)%20]
+		check(slot.velocity.is_equal_approx(tail[index]+Vector3(0,0,-3000)+inherited),"A retained tail birth changed its inherited velocity")
+	# The original fast inverse-square-root spacing approximation drifts by
+	# several dozen units over this synthetic 136,000-unit movement.
+	check(state.slots[(count-1)%20].position.distance_to(pose.origin+Vector3(-160,99,-256))<100,"The final source birth was not near the new nozzle pose")
+	# A longer but finite flight must not hit a second arbitrary distance cap.
+	var farther:=nozzle();farther.advance(Transform3D.IDENTITY,10,10)
+	var farther_result: Dictionary=farther.advance(Transform3D(Basis.IDENTITY,Vector3(0,0,2096000)),100,100)
+	check(int(farther_result.get("births",0))>262144,"Longer source jump hit a replacement birth cap: "+str(farther_result))
+	if not farther_result.has("error"):
+		var farther_state: Dictionary=farther.snapshot()
+		check(farther_state.cursor==int(farther_result.births)%20 and farther_state.slots.all(func(slot):return slot.appearance.age_ms>=0),"Longer jump lost its bounded final ring")
 
 func verify_invalid():
 	var emitter:=Emitter.new()

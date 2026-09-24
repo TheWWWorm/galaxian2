@@ -5,7 +5,7 @@ counter values, achievement status, mission completion, cargo or rewards.
 """
 import copy
 from .opening_npc_guidance import LAYOUTS as GUIDANCE
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {
     'actor_kind':8, 'initial_nonplayer_kill':False,
@@ -29,14 +29,11 @@ def extract_npc_death_accounting(mach, actors, weapons):
         if selection['bytes']!=size:return {}
         origin=selection['offset']-relative
         # Separate dependencies must point at the same hit and statistics owners.
-        if weapons['ordinary_hit_policy']['provenance']['normal_hit']['offset']!=origin+LAYOUTS[arch]['hit_argument'][0]:return {}
-        if npc['provenance']['stats_entry']['offset']+(0x2f9 if arch=='x86_64' else 0x20c)!=origin+LAYOUTS[arch]['initial_attribution'][0]:return {}
-        update=mach.text['address']+origin-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,pattern) in LAYOUTS[arch].items():
-            found=section_bytes(mach,update+delta,size,b'__text')
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        links={'hit_argument':weapons['ordinary_hit_policy']['provenance']['normal_hit']['offset'],
+               'initial_attribution':npc['provenance']['stats_entry']['offset']+(0x2f9 if arch=='x86_64' else 0x20c)}
+        layouts=[LAYOUTS[arch]]+([MAC_ALTERNATE] if arch=='x86_64' else [])
+        proof=recognize(mach,origin,layouts,links)
+        if not proof:return {}
         value=copy.deepcopy(VALUES);value['provenance']=proof
         return value
     except (KeyError,ValueError,TypeError,IndexError,OverflowError):return {}
@@ -74,3 +71,21 @@ LAYOUTS = {'x86_64': {'initial_attribution': [-75841, 4, 'c6434800'],
                               '0446002ad4f81801a0f10100c4f81801d4f82c0100f10100c4f82c0103d0206a0130206267e143f29a40c0f228007844d0f800b0dbf80000adf032fa606a01306062'],
            'player_counter': [266600, 28, '46f25001c0f21d01d0f8ac2179440132c0f8ac210968086832f6e6b9'],
            'pirate_counter': [266644, 28, '46f22401c0f21d01d0f8c42179440132c0f8c4210968086832f6d4b9']}}
+
+
+# Independently verified alternate Mac compiler layout.
+MAC_ALTERNATE = {'initial_attribution': [-75853, 4, 'c6434800'],
+ 'hit_argument': [-71842,
+                  82,
+                  '554889e54157415641554154534883ec18894dd44189f64989fc41f68424ca000000010f84fe06000041f68424c8000000010f84ef0600004183bc2480000000000f8ee006000084d28955d00f858b040000'],
+ 'lethal_attribution': [-70402, 38, '85d28b45d00f8ffe00000041c7842480000000000000003c01750b41c644244801e9e3000000'],
+ 'death_guard': [7251, 28, '4585e40f8fe1050000418b86bc00000083c0fd83f8020f82ce050000'],
+ 'hostile_kind': [7681, 32, '498b4608f64060010f84e0010000418b4e4483f909742783f9080f85b5000000'],
+ 'pirate_credit': [7713, 30, 'f64048010f85a7010000488d0536711b00488b38e858ef0300e993010000'],
+ 'world_call': [8146, 29, '418bb6e0000000498b4608498b7e780fb6504883e201e82f2cf8ffeb20'],
+ 'world_counters': [-504789,
+                    44,
+                    '4989fe41ff8eb801000041ff86cc01000084d20f85db030000488d1d1d432300488b3be80dc10b0041ff4628'],
+ 'other_counter': [-503777, 4, '41ff4624'],
+ 'player_counter': [265568, 26, '554889e5ff8750020000488d052f831700488b385de9d873e7ff'],
+ 'pirate_counter': [265618, 26, '554889e5ff8768020000488d05fd821700488b385de9ba73e7ff']}

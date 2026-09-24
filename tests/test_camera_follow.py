@@ -11,11 +11,11 @@ from gof2_content.opening_staging import extract_opening_staging
 from gof2_content.opening_camera import extract_opening_camera
 
 
-def fixture(mac,relocation=0):
+def fixture(mac,relocation=0,alternate=False):
     m,parents,parent_addresses,_,helpers=camera_fixture(mac,relocation)
     data=bytearray(m.data);base=m.text['address'];prefix='MAC_' if mac else 'ARM_'
     names=['follow','curve','reset','rate_scale','scale','add','subtract','point']
-    blocks={k:expand(getattr(reader,prefix+k.upper())) for k in names}
+    blocks={k:expand(reader.MAC_ALTERNATES[k] if mac and alternate and k in reader.MAC_ALTERNATES else getattr(reader,prefix+k.upper())) for k in names}
     addresses={};at=base+30000
     for key,(body,_) in blocks.items():addresses[key]=at;at=(at+len(body)+527)&~15
     assert at<base+49000
@@ -81,6 +81,21 @@ def fixture(mac,relocation=0):
 
 @unittest.skipUnless(importlib.util.find_spec('capstone'),'optional static-reader dependency')
 class CameraFollow(unittest.TestCase):
+    def test_alternate_helpers_keep_coefficients_links_and_stack_consistent(self):
+        for relocation in [0,0x80000]:
+            m,blocks,addresses,_=fixture(True,relocation,alternate=True)
+            camera=extract_opening_camera(m,extract_opening_staging(m))
+            result=reader.extract_camera_follow(m,camera)
+            self.assertTrue(result)
+            self.assertEqual(result['response_matrix'][0][0],-57.25)
+            self.assertEqual([result['provenance'][key]['bytes'] for key in ['add','point']],[128,256])
+            for key,offset in [('add',7),('point',30)]:
+                damaged=bytearray(m.data)
+                damaged[256+addresses[key]-m.text['address']+offset]^=0x10
+                original=m.data;m.data=bytes(damaged)
+                self.assertEqual(reader.extract_camera_follow(m,camera),{})
+                m.data=original
+
     def test_relocated_changed_rates_and_coefficients(self):
         for mac in [True,False]:
             for relocation in [0,0x80000]:

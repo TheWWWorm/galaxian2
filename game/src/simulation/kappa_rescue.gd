@@ -9,6 +9,7 @@ var error:=""
 var _state:={}
 var _rules:={}
 var _radio:={}
+var _flight_identity: RefCounted
 
 func configure(bindings: RefCounted) -> bool:
 	error=""
@@ -18,7 +19,24 @@ func configure(bindings: RefCounted) -> bool:
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(_rules.campaign_cursor),
 		"phase":int(_rules.choreography.initial_phase),"completion_ready":false,"failure_ready":false,"force_hostile_actor_ids":[]}
 	_radio={}
+	_flight_identity=null
 	return true
+
+## A detached predicate observation cannot authorize earned career progress.
+## The encounter attaches its native flight identity before exposing a result.
+func bind_flight(controller: RefCounted) -> bool:
+	error=""
+	if not is_instance_of(controller,load("res://src/simulation/combat_training_control.gd")):return reject("Rescue observations require the actual native flight")
+	var context: Dictionary=controller.kappa_context()
+	for key in ["base_content_id","binding_id","campaign_cursor"]:
+		if _state.is_empty() or context.get(key)!=_state.get(key):return reject("Rescue observations belong to another native flight")
+	var identity: RefCounted=controller.flight_identity()
+	if identity==null or (_flight_identity!=null and _flight_identity!=identity):return reject("Rescue observations cannot change their retained flight")
+	_flight_identity=identity
+	return true
+
+func matches_flight(controller: RefCounted) -> bool:
+	return _flight_identity!=null and is_instance_of(controller,load("res://src/simulation/combat_training_control.gd")) and controller.flight_identity()==_flight_identity
 
 func advance(radio: RefCounted,combat: Dictionary) -> bool:
 	error=""
@@ -48,7 +66,7 @@ func advance(radio: RefCounted,combat: Dictionary) -> bool:
 		if activate:next.phase+=1
 	next.completion_ready=observed.finished[int(_rules.completion.last_radio_event)]
 	# Failure waits for retirement; zero hull and dormant inactivity differ.
-	# The session owns the ordering if completion and failure both become ready.
+	# Readiness is independent of the earlier completion-poll eligibility gate.
 	next.failure_ready=true
 	for id in int(_rules.failure.first_actor_count):
 		next.failure_ready=next.failure_ready and actors[id].actor_mode==int(_rules.failure.actor_mode)
@@ -56,11 +74,23 @@ func advance(radio: RefCounted,combat: Dictionary) -> bool:
 	_radio={"started":observed.started.duplicate(),"finished":observed.finished.duplicate()}
 	return true
 
+## The ordinary flight checks eligible completion before failure and leaves
+## that pass immediately when a completion panel opens. Failure is still checked
+## when completion polling is gated. Selection is prospective: only the session
+## may present/acknowledge a result or advance an earned campaign.
+func poll_outcome(completion_allowed: bool) -> String:
+	error=""
+	if _state.is_empty():reject("Kappa outcome requires its configured rescue observations");return ""
+	if completion_allowed and _state.completion_ready:return "completed"
+	if _state.failure_ready:return "failed"
+	return ""
+
 func snapshot() -> Dictionary:return _state.duplicate(true)
 
 func fork() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy._state=_state.duplicate(true);copy._rules=_rules.duplicate(true);copy._radio=_radio.duplicate(true)
+	copy._flight_identity=_flight_identity
 	return copy
 
 func reject(message: String) -> bool:

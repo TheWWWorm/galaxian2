@@ -1,5 +1,6 @@
 """Mac second-trip NPC control declarations; no original runtime code is emitted."""
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_full_hold_control(mach,arrival,pirate,actors):
@@ -10,15 +11,12 @@ def extract_full_hold_control(mach,arrival,pirate,actors):
         if not all(npc.get(k) for k in ['guidance','flight','holding','routes','construction','hostility']):return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None:return {}
-            if pattern.startswith('sha256:'):
-                if hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            elif found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'full_hold_pirate_control',
@@ -78,3 +76,33 @@ LAYOUTS = {'npc_update': [610766,
  'target_alive': [540880, 16, '__text', '554889e583bf80000000000f9ec05dc3'],
  'target_activity': [540924, 14, '__text', '554889e58a87c800000024015dc3'],
  'force_route': [535610, 14, '__text', '554889e58a87fa00000024015dc3']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'npc_update': [611314, 17180, '__text', 'sha256:e6a3db4e2bdaf51990eddaec2e03514db9eb5bb8a89976338b28605117681d20'],
+ 'npc_constructor': [605720, 2562, '__text', 'sha256:69ffded45ed01c0720d4524c45cb78a5be444af55b84ea7c93f85df3bf003325'],
+ 'membership': [59038, 2050, '__text', 'sha256:5cec2a39970c6bba7be2beaa7f36316ff243a1f731629df566750696ea854d8c'],
+ 'merge_targets': [536934,
+                   334,
+                   '__text',
+                   '554889e5415741564155415453504989f74989fe49837e78000f8415010000bf18000000e8e9ee0e004989c4bf08000000e8d6ee0e00498944240841c74424100100000048c7000000000041c7042400000000498b4e7831f6833900743e31db488b49084c8b2cd9ffc6418974241048c1e6034889c7e8abef0e00498944240848ffc3418b0c244c892cc8418b74241041893424498b4e783b1972c441833f00743b31db498b4f084c8b2cd9ffc6418974241048c1e6034889c7e867ef0e00498944240848ffc3418b0c244c892cc8418b74241041893424413b1f72c74c89f74c89e6e878fdffff4d85e47425498b7c24084885ff7405e804ee0e004c89e74883c4085b415c415d415e415f5de9f4ed0e004883c4085b415c415d415e415f5dc34989c64c89e7e8daed0e004c89f7e80eee0e004c89f74c89fe4883c4085b415c415d415e415f5de913fdffff90'],
+ 'assign_targets': [536518,
+                    246,
+                    '__text',
+                    '554889e5415741564154534989f64989fc4d8b7c24784d85ff7416498b7f084885ff7405e877f00e004c89ffe875f00e0049c7442478000000004d85f67441bf18000000e869f00e004989c7bf08000000e856f00e004989470841c747100100000048c7000000000041c707000000004d897c24784c89f74c89fee8b4250000498b04244885c07451833800744c4531f64d63fe488b48084a8b0cf94885c9743131db833900742a488b4908488b3cd94885ff740e498b742478e8f7eef4ff498b0424488b48084a8b0cf948ffc33b1972d641ffc6443b3072b75b415c415e415f5dc34889c34c89ffe8b8ef0e004889dfe8ecef0e00'],
+ 'player_constructor': [550476,
+                        3862,
+                        '__text',
+                        'sha256:289fd4c3fd181835b86546bd64ac04a88648b04f2e5cc587dd6aa9acbffbb88d'],
+ 'alternate_body_test': [559278, 18, '__text', '554889e54883bf00020000000f95c05dc390'],
+ 'alternate_body': [605426, 14, '__text', '554889e5488b87b80000005dc390'],
+ 'alternate_model': [905726, 10, '__text', '554889e5488b47085dc3'],
+ 'model_position': [-730252, 26, '__text', '554889e58b7714488b7f38e89ede1c004889c75de985f91d0090'],
+ 'model_constructor': [-731340,
+                       430,
+                       '__text',
+                       '554889e5415741564154534189cc4989d64189f74889fbc783a000000000000000c783a400000000000000c783a800000000000000c783ac0000000000803f48c783b80000000000000048c783b000000000000000c783c00000000000803f488d732048c783cc0000000000000048c783c400000000000000c783d40000000000803fc783d800000000000000c783dc0000000000803fc783e00000000000803fc783e40000000000803f6644897b104c897338c7431400000000c74320000000004c89f7e8b4d91c00488d5324410fb6cc4c89f74489fee8b1a81c008b73208b53244c89f7e843dd1c00c7434800000000c7434400000000c7434000000000c743540000803fc743500000803fc7434c0000803fc6435801c6435901c7435c0000000048c7839800000000000000c743300000000048c783880000000000000048c783800000000000000048c743780000000048c743700000000048c74368000000008b7320897314c74328ffffffffc7431cffffffffc74318ffffffffc7432cffffffff4c89f7e860e11c00488dbbac0000004889c6e8a1ed1d0048c74308000000005b415c415e415f5dc3'],
+ 'model_request': [-728364, 14, '__text', '554889e540887758408877595dc3'],
+ 'model_submission': [-728338, 28, '__text', '554889e5f647580175025dc38b7714488b7f3831d25de999901c0090'],
+ 'target_alive': [541416, 16, '__text', '554889e583bf80000000000f9ec05dc3'],
+ 'target_activity': [541460, 14, '__text', '554889e58a87c800000024015dc3'],
+ 'force_route': [536146, 14, '__text', '554889e58a87fa00000024015dc3']}

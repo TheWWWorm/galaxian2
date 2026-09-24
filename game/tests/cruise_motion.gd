@@ -16,6 +16,8 @@ func _initialize() -> void:
 	check(motion.configure(bindings, bindings.base_content_id), motion.error)
 	check(motion.advance(pose, 1.0, 2.0).origin == Vector3(17, -23, 7080), "Source units or positive forward direction lost")
 	check(motion.advance(pose, 0.25, 2.0).origin == Vector3(17, -23, 1830), "Throttle did not scale source cruise")
+	check(motion.advance(pose,0.0,0.1,0.5).origin.distance_to(pose.origin+Vector3(50,0,0))<0.0001,"Signed local lateral rate failed with stopped forward throttle")
+	check(motion.advance(pose,0.0,0.1,-0.5).origin.distance_to(pose.origin+Vector3(-50,0,0))<0.0001,"Rightward local lateral rate had wrong sign")
 	var divided := pose
 	for i in 120: divided = motion.advance(divided, 0.4, 1.0 / 60.0)
 	check(divided.origin.distance_to(motion.advance(pose, 0.4, 2.0).origin) < 0.01, "Travel depends on time subdivision")
@@ -27,6 +29,8 @@ func _initialize() -> void:
 		check(next.basis == rotated.basis, "Cruise unexpectedly changed heading")
 	check(motion.advance(pose, 1.0, 0.0) == pose and motion.error.is_empty(), "Paused elapsed time moved the ship")
 	check(motion.advance(pose, 0.0, 2.0) == pose and motion.error.is_empty(), "Zero throttle moved the ship")
+	check(motion.advance(pose,0.0,0.0,0.5)==pose and motion.error.is_empty(),"Paused lateral input moved the ship")
+	check(motion.advance(pose,0.0,1.0,2.1)==pose and not motion.error.is_empty(),"Lateral rate above source cap was accepted")
 	for values in [[-1.0, 1.0], [1.01, 1.0], [NAN, 1.0], [1.0, -0.01], [1.0, INF]]:
 		check(motion.advance(pose, values[0], values[1]) == pose and not motion.error.is_empty(), "Invalid cruise input accepted")
 	var singular := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO)

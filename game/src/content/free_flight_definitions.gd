@@ -4,10 +4,13 @@ const Equal=preload("res://src/content/opening_escape_definitions.gd")
 const Campaign=preload("res://src/content/free_campaign_definitions.gd")
 const Life=preload("res://src/content/free_lifecycle_definitions.gd")
 const Worlds=preload("res://src/content/ordinary_world_definitions.gd")
+const FlightStages=preload("res://src/content/flight_stages.gd")
 const VALUES = {"scope":"augmenta_ordinary_entry","campaign_cursor":18,"initial_station_id":98,"system_id":19,"departure_flags":{"special_arrival":false,"void_encounter":false},"special_confirmation_cursor":48,"launch_clear_after_ms":7000,"launch_clear_strict":true}
 const SPANS = {"free_flight_convoy_clear":[155626,87],"free_flight_scene_clear":[134971,325],"free_flight_confirmation":[431803,192],"free_flight_launch_clear":[151066,205],"free_flight_ordinary_dispatch":[152236,50]}
 
 # Native composition.
+const MAC_SPANS = {"free_flight_convoy_clear":[155626,87],"free_flight_scene_clear":[134971,325],"free_flight_confirmation":[432231,192],"free_flight_launch_clear":[151066,205],"free_flight_ordinary_dispatch":[152236,50]}
+
 static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
 
 static func available(bindings: RefCounted) -> bool:
@@ -56,4 +59,4 @@ static func _docking_values(station_id: int,system_id: int=19,cursor: int=18) ->
 
 static func docking_parameters(data: Dictionary) -> bool:
 	var system: Variant=data.get("system_id")
-	return data.get("campaign_cursor") in [18,19] and system is int and Worlds.SYSTEMS.has(system) and data.get("station_id") is int and data.station_id in Worlds.SYSTEMS[system].station_ids and Equal.equal_value(data,_docking_values(data.station_id,system,int(data.get("campaign_cursor",-1))))
+	return data.get("campaign_cursor") in FlightStages.FREE and system is int and Worlds.SYSTEMS.has(system) and data.get("station_id") is int and data.station_id in Worlds.SYSTEMS[system].station_ids and Equal.equal_value(data,_docking_values(data.station_id,system,int(data.get("campaign_cursor",-1))))

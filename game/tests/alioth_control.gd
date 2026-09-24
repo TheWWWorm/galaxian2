@@ -139,7 +139,7 @@ func verify_live(bindings: RefCounted,cat: RefCounted,lib: RefCounted,constructi
 	check(control.evaluate_alioth_sequence(attack,weapons).is_empty() and control.snapshot()==state,"A repeated escape frame changed combat")
 	check(state.combat.actors.slice(3,7).all(func(actor):return actor.alioth_script_retired and actor.vitals.hull==retired_hulls[actor.actor_id]),"Retired Void hulls changed after leaving")
 	var before: Dictionary=control.snapshot()
-	check(control.advance(int(bindings.frame_clock.max_frame_milliseconds)+1,target(bindings,pose,player),null,random).is_empty() and control.snapshot()==before,"Overlong frame partially advanced Alioth")
+	check(control.advance(751 if not bindings.fast_forward.is_empty() else 151,target(bindings,pose,player),null,random).is_empty() and control.snapshot()==before,"Overlong frame partially advanced Alioth")
 	var wrong: RefCounted=control.combat_owner();wrong._identity.campaign_cursor=14
 	check(control.advance(0,target(bindings,pose,player),wrong,random).is_empty() and control.snapshot()==before,"Foreign combat partially advanced Alioth")
 	print("Alioth unassisted battle/escape: ",now,"ms; ",fired," shots; ",hits," NPC contacts; freighter lethal clocks ",dead_at,"; phases ",phases,"; player hull ",player.snapshot().vitals.hull)

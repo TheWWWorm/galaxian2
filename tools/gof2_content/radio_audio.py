@@ -5,7 +5,7 @@ The source table has additional campaign rows; their owners are not implemented.
 """
 import copy
 import struct
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 VALUES = {'trigger': 'radio_display', 'repeat': 'once_per_event', 'spatial': False,
           'stop_on_radio_finish': False, 'default_language': 'english',
@@ -37,17 +37,18 @@ def extract_radio_audio(mach, dialogue, fonts):
             return {}
         origin = dialogue['provenance']['display_delay']['offset']
         address = mach.text['address'] + origin - mach.slice_offset - mach.text['offset']
-        proof = {}
-        for key, (delta, size, pattern) in LAYOUTS[arch].items():
-            found = section_bytes(mach, address + delta, size, b'__text')
-            if found is None or found[0] != bytes.fromhex(pattern):
-                return {}
-            proof[key] = {'offset': found[1], 'bytes': size}
+        layouts = [LAYOUTS[arch]] + ([MAC_ALTERNATE] if arch == 'x86_64' else [])
+        proof = recognize(mach, origin, layouts)
+        if not proof:
+            return {}
+        data = DATA[arch]
+        if arch == 'x86_64' and proof['lookup']['offset'] == origin + MAC_ALTERNATE['lookup'][0]:
+            data = MAC_DATA
         for key in ['duration', 'display_delay']:
             if proof[key] != dialogue['provenance'][key]:
                 return {}
         values = {}
-        for key, (delta, size) in DATA[arch].items():
+        for key, (delta, size) in data.items():
             found = constant_bytes(mach, address + delta, size,
                                    b'__cstring' if key.endswith('_name') else b'__const')
             if found is None or len(found[0]) != size:
@@ -56,7 +57,7 @@ def extract_radio_audio(mach, dialogue, fonts):
             proof[key] = {'offset': found[1], 'bytes': size}
         pointers = struct.unpack('<2Q' if arch == 'x86_64' else '<2I', values['language_table'])
         for index, key in enumerate(['default_name', 'override_name']):
-            if pointers[index] != address + DATA[arch][key][0]:
+            if pointers[index] != address + data[key][0]:
                 return {}
         names = [values[key].removesuffix(b'\0').decode('ascii') for key in ['default_name', 'override_name']]
         if names != [VALUES['default_language'], VALUES['override_language']]:
@@ -134,3 +135,31 @@ DATA = {'x86_64': {'lookup_table': [876965, 12032],
            'language_table': [2135054, 8],
            'default_name': [1578070, 8],
            'override_name': [1578078, 8]}}
+
+
+# Independently verified complete alternate Mac compiler layout.
+MAC_ALTERNATE = {'duration': [-352, 32, '488b45b049894528498b45106900d007000005dc0500004189453841c6453d01'],
+ 'selection': [-212,
+               44,
+               '498b4500488b40084a8b3ce0488d057a751a00488b18e83a0500004889df89c64c89f2e86745f2ff41894540'],
+ 'text_getter': [1153, 10, '554889e58b47105dc390'],
+ 'lookup': [-899909,
+            59,
+            '554889e5415741564154534989d689f331c0488d0d45b91a00eb044883c0023dbf0b00007f15391c8175f0488d0d2cb91a008b448104e9d5080000'],
+ 'lookup_return': [-897594, 14, 'b8ffffffff5b415c415e415f5dc3'],
+ 'display_delay': [0, 26, 'b8d0070000480343284839f0488975a80f8dff010000f6433d01'],
+ 'display': [22,
+             39,
+             'f6433d0174218b734085f6781a488d058f7a1a00488b3831d231c90f57c0e83e5eebffc6433d00'],
+ 'finish': [443,
+            90,
+            'f6433d017404c6433d00488b034885c074488b0885c9744248635338488b7328488d9416d0070000483b55a87d2c488b7b08488b4008ffc94863c9483b3cc87504c6433c0148c7432800000000e8aa02000048c7430800000000'],
+ 'language': [-1353935,
+              52,
+              '554889e5488bbfd84700004885ff75025dc383fe010f94c00fb6c0488d0d26762e00488b34c1e8c952210089c65de9bdf9ffff90'],
+ 'language_init': [-1355805, 16, 'e841561b000fbff04c89e7e83e070000'],
+ 'language_getter': [435753, 13, '554889e50fbf05759b13005dc3']}
+MAC_DATA = {'lookup_table': [851481, 12032],
+ 'language_table': [1691001, 16],
+ 'default_name': [981897, 8],
+ 'override_name': [981905, 8]}

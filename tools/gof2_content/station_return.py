@@ -1,5 +1,6 @@
 """Recover bounded station return content; emit no executable payload."""
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_station_return(mach, arrival, flight):
@@ -7,16 +8,11 @@ def extract_station_return(mach, arrival, flight):
     try:
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None:return {}
-            if pattern.startswith('sha256:'):
-                if hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            elif found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=MAC_VALUES if proof['mode1_return_events']['offset']==origin['offset']+MAC_ALTERNATE['mode1_return_events'][0] else VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
@@ -148,3 +144,129 @@ LAYOUTS = {'pre_motion_position_cache': [571243,
  'voice_1713': [1562154, 8, '__const', 'b10600009d010000'],
  'voice_1714': [1562162, 8, '__const', 'b20600009e010000'],
  'voice_1715': [1562170, 8, '__const', 'b30600009f010000']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'pre_motion_position_cache': [571779,
+                               52,
+                               '__text',
+                               '498b7e10e8e821ecfff30f114dd0f30f1145c8660f70c001f30f1145cc488d75c8498dbe980100004889bd38fbffffe8cb6f0700'],
+ 'player_contact_stage': [576839,
+                          90,
+                          '__text',
+                          '41f6869401000001746f498b3ee8bb75ffff3c01756341c686d002000000498b7e18e888d0f8ff4c89f74889c6e8b3210000498b7e18e866d0f8ff4c89f74889c6e89f210000498b7e18e86ed0f8ff4c89f74889c6e88b210000'],
+ 'station_contact_radius': [585669,
+                            67,
+                            '__text',
+                            '4585ff753e488d0589f31b00488b38e8692a040084c0752b488bbd58feffffe859450700f30f100d7d730e000f2ec8761241f685a100000001740841c686d002000001'],
+ 'contact_radius_constant': [1532782, 4, '__const', '00007a46'],
+ 'flight_arrival_order': [368664,
+                          50,
+                          '__text',
+                          '41f6850901000001752841f6850a01000001751e4c89efe8c239000084c00f85ab2d000041f6850b010000010f859d2d0000'],
+ 'mission_permission_and_notice': [383554,
+                                   272,
+                                   '__text',
+                                   '488d0d11091f0041888710010000488b39e86c4007004889c7e8d843000084c00f85ea000000488d05eb081f00488b38e84d4007004889c7e84f44000083f80b0f84ca000000488d05cb081f00488b38e82d4007004889c7e82f44000085c00f84ab000000488d05ac081f00488b38e80e4007004889c7e8104400003dbd0000000f8489000000488d058a081f00488b38e8ec3f07004889c7e8ee4300003dab000000746b488d056c081f00488b38e8ce3f07004889c7e8d04300003dac000000744d41f6871001000001751030c041f6870f010000010f846f070000498b7f60e8eabc020088c130c084c90f845a070000498b5760498bbf88000000be1500000031c9e8f159f8ff30c0e93c070000'],
+ 'station_contact_alternative': [385314,
+                                 73,
+                                 '__text',
+                                 '41f6871001000001753f498b7f60e87fb602004889c3498bbf90000000e8b2bcfbff4889c130c0488b4908483b190f8538010000498b7f60e88344030088c130c084c90f8423010000'],
+ 'station_transition': [385459,
+                        219,
+                        '__text',
+                        '498b7f60e890b6020088c130c084c90f84c6000000488d058b011f00488b38e86b38070088c130c084c90f85ab000000488d0570011f00488b38e8b06f070088c130c084c90f8590000000498b7760488d0589021f00488b38e871ebeeff488d058e081f00c70000000000498b4760488b38e8c0530200488d1d29011f00488b0b8981a8000000498b4760488b38e8a8520200488b0b8981a0000000498b4760488b38e8c7520200488b0b8981a4000000498b4760488b38e8ca520200488b0b8981ac000000498b7f10be05000000e83b850e00b00141c6475c00'],
+ 'station_world_entry': [415224,
+                         550,
+                         '__text',
+                         '554889e54157415641554154534881ec180400004989fc498b7c2410e839140e004889c7be0200400131d2e81a9e0d0049c78424080100000000000049837c2428007527bfc8000000e832ca10004889c34889dfbe17000000e816daeeff49895c24284889dfe8f5ddeeff418b44241883f8270f8fb201000083f8140f855e27000041f684242101000001754e41f684242001000001754341f6842479010000017438488d05b88c1e00488b38e8fac3060083f84d751c488d05a48c1e00488b38e89ec306004889c7e84aa9060083f86574084c89e7e8af290000488d05808c1e00488b38e8c2c3060083f8010f85e30000004c8d35688c1e00498b1e488d058e8d1e00488b00488b4008488b38beffffffffe808da04004889df4889c6e803fa0600498b3ee863c306004889c7be08000000e88ccb04004c8d3d4b8d1e00498b07488b4008488bb8d0020000e83a69f8ff4889c34889dfbe01000000e8bc5df8ff498b3ee824c306004889c74889de31d2e873d60400498b07488b4008488bb888020000e80269f8ff4889c3498b3ee8f9c206004889c74889deba01000000e845d604004889dfbe01000000e86c5df8ff498b5c2428498b3ee8cfc206004889c7e811cb04004889df89c6ba03000000e8d8f4eeff488d05858b1e00488b38e8c7c206004189c74183ff040f8fd91a0000498b8424e8000000488b4008488b38be01000000e8dba30700498d9c24e80000004530f6e9cc1a00004989c74889dfe84ec81000'],
+ 'station_mission_poll': [446607,
+                          55,
+                          '__text',
+                          '488d05c4121e00488b184530f641f685a100000001b000740c498bbdb8000000e8b27f04000fb6d04889dfbe0100000031c9e896850600'],
+ 'station_dialogue_select': [447844,
+                             69,
+                             '__text',
+                             '488b9de0feffff4885db0f848400000049899d08010000bfb0000000e8f34a10004989c64c89f74889de31d2b901000000e8d879eeff4d89b5d800000041c685a500000001'],
+ 'return_kind_dispatch': [876038, 4, '__text', '3cf9ffff'],
+ 'return_station_condition': [874294, 16, '__text', '8b45d43c010f84b3050000e9c1040000'],
+ 'return_station_match': [875764, 33, '__text', '498bbd18020000e810a3ffff89c34c89ffe8f2c2f8ff39c34c89f80f85f2feffff'],
+ 'final_story_advance': [430231,
+                         47,
+                         '__text',
+                         'e8088a06003d940000007414488d05b0521e00488b38be01000000e85b900600488d059c521e00488b38e8de890600'],
+ 'final_reward_and_retire': [431930,
+                             173,
+                             '__text',
+                             '498bbd08010000e84488ffff4189c4498bbd08010000e85d88ffff89c34401e381fb41420f007265498bbd08010000e81c88ffff4189c4498bbd08010000e83588ffff488d3dddb8140089de4489e289c130c0e800890f00488d05c14b1e00488b38e803830600bb400d030083f837741c83f83a7507bba0860100eb10b950c3000083f83dbb0a1a00000f44d94c8d358c4b1e00498b3e89dee816b90600498bb508010000498b3ee89bc60600'],
+ 'story_cursor_increment': [860483, 23, '__text', 'ffc041898678020000498b8e4802000049898e60010000'],
+ 'next_story_dispatch': [872050, 4, '__text', 'a8d5ffff'],
+ 'next_mining_factory': [861198,
+                         82,
+                         '__text',
+                         '498bbe0002000031f6e88a05feffbf98000000e852fc09004889c34889dfbe9a00000031d2b94e000000e85ff5f8ff4c89f74889dee8c8fbffff498b8610020000488b4008488b38be19000000e856faf8ff'],
+ 'mode1_counts': [1530242, 16, '__const', '0000000026000000060000000a000000'],
+ 'mode1_return_events': [1521522,
+                         40,
+                         '__const',
+                         '02000000ba06000000000000bb06000002000000bc06000000000000bd06000002000000be060000'],
+ 'player_active': [541460, 14, '__text', '554889e58a87c800000024015dc3'],
+ 'empty_mission': [400952, 14, '__text', '554889e5837f10ff0f94c05dc390'],
+ 'actual_station_target': [563276,
+                           64,
+                           '__text',
+                           '554889e553504889fb488b7b18e89805f9ff488b480830c048833900741a488b7b18488b9bb0010000e87c05f9ff488b4008483b180f94c04883c4085b5dc390'],
+ 'pre_contact_flag': [599522, 14, '__text', '554889e58a87d002000024015dc3'],
+ 'current_position': [562920, 14, '__text', '554889e5488b7f105de97e44ecff'],
+ 'station_point_query': [107990,
+                         114,
+                         '__text',
+                         '554889e5534883ec18f30f114df4660f7f45e04889fb488b8b8801000030c04885c97446488b490830c048833900743a488d054d3d2300488b38e88dab0b0088c130c084c97523660f6f45e0660f70c801488b8388010000488b4008488b38488b07f30f1055f4ff50704883c4185b5dc390'],
+ 'exploration_cursor': [858690, 26, '__text', '554889e5488bb7b8000000488bbf18020000e847edffff5dc390'],
+ 'station_exclusion': [872866,
+                       192,
+                       '__text',
+                       '554889e54156534889fb488bbb18020000e858aeffff4189c683bb78020000017f0cb0014183fe4e0f8480000000488bb3b8000000488bbb18020000e8bdb5ffff3c0175108b8b7802000083c1d5b00183f9297259488bb3b8000000488bbb18020000e896b5ffff3c01750eb00181bb78020000990000007f344183c69b4183fe217728b00148b90e030080030000004c0fa3f172184d85f674184983fe0a750bb00183bb780200005d7f0230c05b415e5dc3b00183bb78020000537eeeebee'],
+ 'current_hull': [538090, 12, '__text', '554889e58b87800000005dc3'],
+ 'current_shield': [537838, 14, '__text', '554889e5f30f2c87900000005dc3'],
+ 'current_armor': [537890, 12, '__text', '554889e58b87940000005dc3'],
+ 'current_gamma': [537914, 14, '__text', '554889e5f30f2c87c00000005dc3'],
+ 'cargo_list_setter': [731558,
+                       112,
+                       '__text',
+                       '554889e54156534989fe4989767841c74610000000004885f67423833e00741e31db488b4608488b3cd8e81d8cf3ff4101461048ffc3498b76783b1e72e44c89f7e8a0f2ffff418b46284103460c412b4610488d0d5bb91900488b0939813c0100007d0689813c0100005b415e5dc390'],
+ 'voice_1711': [1537202, 8, '__const', 'ba0600009b010000'],
+ 'voice_1712': [1537210, 8, '__const', 'bb0600009c010000'],
+ 'voice_1713': [1537218, 8, '__const', 'bc0600009d010000'],
+ 'voice_1714': [1537226, 8, '__const', 'bd0600009e010000'],
+ 'voice_1715': [1537234, 8, '__const', 'be0600009f010000']}
+MAC_VALUES = {'scope': 'first_mining_station_return',
+ 'station_id': 78,
+ 'system_id': 15,
+ 'departing_cursor': 2,
+ 'campaign_cursor': 3,
+ 'source_state': 5,
+ 'contact_radius': 16000.0,
+ 'contact_before_motion': True,
+ 'volume_after_motion': True,
+ 'requires_station_target': True,
+ 'mission_kind': 11,
+ 'restricted_mission_kind': 154,
+ 'restricted_notice': 21,
+ 'minimum_delivered_cargo': 10,
+ 'cache_pools': ['hull', 'armor', 'shield', 'gamma'],
+ 'cache_truncates': ['shield', 'gamma'],
+ 'cargo_preserved_on_arrival': True,
+ 'clear_cargo_after_acknowledgement': True,
+ 'mode': 1,
+ 'next_text_id': 179,
+ 'final_text_id': 180,
+ 'cursor_after_acknowledgement': 4,
+ 'next_mission_kind': 154,
+ 'next_mission_parameter': 25,
+ 'reward_credits': 0,
+ 'bonus_credits': 0,
+ 'events': [{'speaker_id': 2, 'text_id': 1722, 'voice_event_id': 411},
+            {'speaker_id': 0, 'text_id': 1723, 'voice_event_id': 412},
+            {'speaker_id': 2, 'text_id': 1724, 'voice_event_id': 413},
+            {'speaker_id': 0, 'text_id': 1725, 'voice_event_id': 414},
+            {'speaker_id': 2, 'text_id': 1726, 'voice_event_id': 415}]}

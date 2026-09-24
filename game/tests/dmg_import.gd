@@ -1,5 +1,6 @@
 extends SceneTree
 const Importer=preload("res://src/content/dmg_import.gd")
+const Frontend=preload("res://src/presentation/player_frontend.gd")
 var failures:=0
 var checks:=0
 
@@ -23,11 +24,24 @@ func run() -> void:
 	if directory.is_empty() or not preload("res://tests/fixtures/convoy_station_scenario.gd").private_path(directory+"/installation.json"):
 		check(false,"Supply a private import test directory");finish();return
 	DirAccess.make_dir_recursive_absolute(directory)
+	var app_path:=directory.path_join("Renamed.app")
+	DirAccess.make_dir_recursive_absolute(app_path.path_join("Contents"))
+	var info:=FileAccess.open(app_path.path_join("Contents/Info.plist"),FileAccess.WRITE);info.store_string("synthetic picker input");info.close()
+	check(Importer.valid_source(app_path),"The player entry must accept an extracted Mac app directory")
+	check(not Importer.valid_source(directory) and not Importer.valid_source("relative.app"),"Do not accept parent or relative directories as apps")
+	var frontend:=Frontend.new();root.add_child(frontend)
+	check(frontend._picker.file_mode==FileDialog.FILE_MODE_OPEN_ANY,"Use one picker for disk images and application folders")
+	check(frontend._picker.file_selected.is_connected(frontend._picked) and frontend._picker.dir_selected.is_connected(frontend._picked),"Both picker selections must enter the same importer")
+	frontend.free()
 	var receipt:=directory.path_join("installation.json")
 	var identity:="1".repeat(64)
 	var record:={"schema":1,"format":"mac-dmg","source_sha256":identity,"base_content_id":identity,"binding_id":identity,"visual_id":identity}
 	for kind in ["content","bindings","visuals"]:record[kind]=kind+"/"+identity
 	var file:=FileAccess.open(receipt,FileAccess.WRITE);file.store_string(JSON.stringify(record));file.close()
+	record.format="mac-app";file=FileAccess.open(receipt,FileAccess.WRITE);file.store_string(JSON.stringify(record));file.close()
+	check(not Importer.read_receipt(receipt).is_empty(),"Accept the new app receipt without rejecting existing disk-image receipts")
+	record.format="mac-dmg";file=FileAccess.open(receipt,FileAccess.WRITE);file.store_string(JSON.stringify(record));file.close()
+	check(not Importer.read_receipt(receipt).is_empty(),"Existing disk-image receipts remain valid")
 	for mode in ["success","running","cancelled","failed"]:
 		var worker:=Worker.new()
 		worker._pid=123;worker._status_path=directory.path_join("status.json")
@@ -49,6 +63,7 @@ func run() -> void:
 		check(results.size()==1,"A finished helper must not emit twice")
 		worker.free()
 	DirAccess.remove_absolute(receipt)
+	DirAccess.remove_absolute(app_path.path_join("Contents/Info.plist"));DirAccess.remove_absolute(app_path.path_join("Contents"));DirAccess.remove_absolute(app_path)
 	finish()
 
 func check(value: bool,message: String) -> void:

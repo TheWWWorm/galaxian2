@@ -1,4 +1,7 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Source timed text queue for the first mining flight. It never pauses flight,
 ## accepts acknowledgement, advances missions or consumes randomness.
 const Definitions=preload("res://src/content/flight_notice_definitions.gd")
@@ -40,10 +43,10 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 		for component in rule.rgb:rgb.append(int(component))
 		for source_id in rule.text_ids:text_ids.append(int(source_id))
 		messages[int(key)]={"source_id":int(key),"text_ids":text_ids,"display_text_ids":display_ids,"text":str(rule.separator).join(pieces),"rgb":rgb}
-	if not bindings.station_flight.is_empty():
+	if entry.location.station_id>=0 and not bindings.station_flight.is_empty():
 		var data: Dictionary=bindings.station_flight
 		if not StationFlight.parameters(data):return reject("Station notices require their verified declarations")
-		if entry.campaign_cursor in [10,11,12,13,14,16,18,19]:
+		if entry.campaign_cursor in FlightStages.LOCAL+FlightStages.POST_SAHI:
 			data=data.duplicate(true);data.station_id=int(entry.location.station_id);data.system_id=int(entry.location.system_id)
 		if entry.location.station_id!=int(data.station_id) or entry.location.system_id!=int(data.system_id):return reject("Station notices belong to another flight location")
 		var tables: RefCounted=catalogues
@@ -63,6 +66,7 @@ func configure(bindings: RefCounted, library: RefCounted, construction: RefCount
 		messages[int(data.target_notice.source_id)]={"source_id":int(data.target_notice.source_id),"text_ids":source_ids.slice(0,2),"display_text_ids":display_ids.slice(0,2),"text":text,"rgb":data.target_notice.rgb.duplicate(),"station_id":int(data.station_id)}
 		messages[int(data.restricted_notice.source_id)]={"source_id":int(data.restricted_notice.source_id),"text_ids":[source_ids[2]],"display_text_ids":[display_ids[2]],"text":library.strings[display_ids[2]],"rgb":data.restricted_notice.rgb.duplicate()}
 	_rules=bindings.flight_notices.duplicate(true);_messages=messages
+	_max_ms=Frames.simulation_limit(bindings,int(_rules.max_frame_ms))
 	_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"language":library.active_language}
 	_pending=[];_elapsed=0;_falling=false;_suppressed=false
 	return true
@@ -80,7 +84,7 @@ func enqueue(source_id: Variant) -> bool:
 
 func advance(milliseconds: Variant, suppressed:=false, paused:=false) -> bool:
 	error=""
-	if _rules.is_empty() or not Numbers.integer(milliseconds,0,int(_rules.max_frame_ms)):return reject("Invalid timed-notice frame")
+	if _rules.is_empty() or not Numbers.integer(milliseconds,0,_max_ms):return reject("Invalid timed-notice frame")
 	if paused:return true
 	_suppressed=suppressed
 	if suppressed or _pending.is_empty():return true
@@ -103,8 +107,8 @@ func fork_for_frame() -> RefCounted:
 	var copy: RefCounted=get_script().new()
 	copy._rules=_rules;copy._identity=_identity;copy._messages=_messages
 	copy._pending=_pending.duplicate(true);copy._elapsed=_elapsed;copy._falling=_falling;copy._suppressed=_suppressed
-	return copy
-func clear() -> void:error="";_rules={};_identity={};_messages={};_pending=[];_elapsed=0;_falling=false;_suppressed=false
+	copy._max_ms=_max_ms;return copy
+func clear() -> void:_max_ms=0;error="";_rules={};_identity={};_messages={};_pending=[];_elapsed=0;_falling=false;_suppressed=false
 static func f32(value: float) -> float:
 	var bytes:=PackedByteArray();bytes.resize(4);bytes.encode_float(0,value);return bytes.decode_float(0)
 func reject(message: String) -> bool:error=message;return false

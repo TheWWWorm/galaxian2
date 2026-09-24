@@ -9,6 +9,8 @@ const Campaign=preload("res://src/content/free_campaign_definitions.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const Vitals=preload("res://src/simulation/combat_vitals.gd")
 
+const MAC_SPANS = {"ordinary_contracts_reseed":[-31265,31],"ordinary_contracts_side_slot":[860132,22],"ordinary_contracts_count":[-31097,103],"ordinary_contracts_pirates":[-18932,503],"ordinary_contracts_dispatch":[-15605,124],"ordinary_contracts_empty_return":[-4930,38],"ordinary_contracts_divisor":[1532090,4],"ordinary_contracts_multiplier":[1532114,4],"ordinary_contracts_xz_offset":[1550190,4],"ordinary_contracts_y_offset":[1550206,4]}
+
 static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
 
 static func available(bindings: RefCounted) -> bool:
@@ -23,9 +25,10 @@ static func active_courier(context: Dictionary) -> bool:
 	return context.get("mission_kind")==0 and context.get("mission_completed")==false and context.get("side_missions_empty")==false
 
 static func mission_context_valid(bindings: RefCounted,context: Dictionary) -> bool:
-	if Campaign.active_visit(bindings.mido_travel,context):
+	if Campaign.empty_story(bindings.mido_travel,context):
 		if context.get("side_missions_empty")==true:return context.get("side_mission",{})=={}
 		return context.get("side_missions_empty")==false and delivery_mission(bindings,context.get("side_mission"))
+	if Campaign.ordinary_story_at(bindings.mido_travel,context.get("campaign_cursor"),context.get("station_id")) or Campaign.rescue_at(bindings.mido_travel,context.get("campaign_cursor"),context.get("station_id")):return false
 	if context.get("mission_story")!=false:return false
 	if context.get("side_missions_empty")==true:
 		return context.get("side_mission",{})=={} and context.get("mission_kind")==-1 and context.get("mission_completed")==true
@@ -38,7 +41,7 @@ static func mission_context_valid(bindings: RefCounted,context: Dictionary) -> b
 	return context.get("mission_kind")== (0 if selected else -1) and context.get("mission_completed")== (not selected)
 
 static func extra_count(bindings: RefCounted,context: Dictionary) -> int:
-	if not available(bindings) or context.get("side_missions_empty",true) or active_courier(context) or Campaign.active_visit(bindings.mido_travel,context):return 0
+	if not available(bindings) or context.get("side_missions_empty",true) or active_courier(context) or Campaign.empty_story(bindings.mido_travel,context):return 0
 	var side: Dictionary=context.get("side_mission",{})
 	if not delivery_mission(bindings,side):return 0
 	var data: Dictionary=bindings.mido_travel.ordinary_contracts.population

@@ -114,8 +114,8 @@ func verify_pack(pack: String, lib: RefCounted, bindings: RefCounted):
 			"construction":changed.opening_actors.npc_initialization.construction={}
 			"empty":
 				changed.arrival_actor_construction={}
-				# Later flight and station capabilities require this rescue world.
-				# An explicitly unsupported fixture must remove those dependents too.
+				# Remove the early dependent branch. Later destruction declarations
+				# still require it and must make the incomplete pack fail.
 				for key in ["arrival_world_initialization","opening_handoff","arrival_session","station_entry","station_presentation","station_departure","first_flight","mining_briefing","mining_drill","mining_targeting","mining_approach","mining_session","flight_notices","mining_objective","station_exterior","station_autopilot","station_flight","station_return","full_hold_departure","full_hold_flight","full_hold_pirate","full_hold_control","full_hold_story","full_hold_appearance","full_hold_destruction","full_hold_return"]:
 					if changed.has(key):changed[key]={}
 		var serialized:=JSON.stringify(changed,"",true,true)
@@ -125,7 +125,7 @@ func verify_pack(pack: String, lib: RefCounted, bindings: RefCounted):
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		check(bindings.open(pack,lib.manifest),bindings.error)
 		var accepted: bool=bindings.open(directory,lib.manifest)
-		if scenario=="empty":check(accepted and bindings.arrival_actor_construction.is_empty(),"Explicit unsupported construction capability rejected")
+		if scenario=="empty" and changed.get("player_destruction",{}).is_empty():check(accepted and bindings.arrival_actor_construction.is_empty(),"Explicit unsupported construction capability rejected: "+bindings.error)
 		else:check(not accepted and bindings.arrival_actor_construction.is_empty() and bindings.arrival_environment.is_empty(),"Rejected pack retained rescue construction: "+scenario)
 	check(bindings.open(pack,lib.manifest),bindings.error)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)

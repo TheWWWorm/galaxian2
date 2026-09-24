@@ -1,4 +1,5 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
 ## Native attack choreography. The owning flight applies these prospective cues
 ## to its actual actors, portal and camera before accepting a frame. This owner
 ## neither kills freighters nor awards progress; radio observes their real hulls.
@@ -23,7 +24,7 @@ func configure(bindings: RefCounted) -> bool:
 	if not Library.valid_hash(bindings.base_content_id) or not Library.valid_hash(bindings.binding_id):return reject("Alioth attack requires a verified content identity")
 	if not Numbers.integer(bindings.frame_clock.get("max_frame_milliseconds"),1,150):return reject("Alioth attack requires the ordinary frame clock")
 	_rules=bindings.mido_travel.alioth_attack.duplicate(true)
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(_rules.campaign_cursor),
 		"phase":Stage.ATTACK,"elapsed_ms":0,"revision":0,"input_blocked":false,"player_update_suspended":false,"hud_visible":true,"completion_ready":false}
 	return true

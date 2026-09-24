@@ -50,6 +50,17 @@ Desktop import helpers include CPython 3.12.14 from Astral's
 `importer/licenses/python/`, along with Python's own license in its installation.
 Python uses the PSF license; its bundled dependencies have their own licenses.
 
+Android importer builds embed Chaquopy 17.0.0 and its CPython 3.12.12 runtime.
+The APK includes the engine, Godot, Chaquopy and Python notices under
+`assets/licenses/`, along with `OpenSSL-LICENSE.txt` (OpenSSL 3.0.18),
+`SQLite-copyright.html` (SQLite 3.50.4), `LLVM-libcxx-LICENSE.txt`, and
+`Android-NDK-NOTICE.toolchain` for the native runtime dependencies.
+The custom Capstone and texture2ddecoder wheels retain their
+upstream licenses under their `.dist-info/licenses/` directories. Android builds
+compile these same pinned importer dependencies for the selected Android ABI;
+they do not include original-game content or executable code.
+Chaquopy: https://chaquo.com/chaquopy/ .
+
 DMG extraction uses [7-Zip 26.03](https://github.com/ip7z/7zip/releases/tag/26.03),
 Copyright (C) Igor Pavlov, under GNU LGPL with the BSD and unRAR restrictions
 described in its included `importer/7zip/License.txt`. Corresponding source is

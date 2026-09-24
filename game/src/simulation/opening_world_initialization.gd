@@ -14,6 +14,8 @@ const Random = preload("res://src/simulation/seeded_random.gd")
 const ContractWorld=preload("res://src/content/contract_world_definitions.gd")
 const Convoy=preload("res://src/content/convoy_world_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
+const Sahi=preload("res://src/content/sahi_encounter_definitions.gd")
+const VoidCrystals=preload("res://src/content/void_crystal_definitions.gd")
 var error := ""
 var _identity := {}
 var _definition := {}
@@ -113,6 +115,28 @@ func configure_free_factory(bindings: RefCounted,catalogues: RefCounted,player_s
 	if not construction.configure_free_factory(bindings,catalogues,player_ship_id,equipment_ids,context,unix_seconds):return reject(construction.error)
 	return _configure_free(bindings,catalogues,construction,player_ship_id,equipment_ids,context,entry_conditions)
 
+func configure_void_factory(bindings: RefCounted,catalogues: RefCounted,player_ship_id: int,equipment_ids: Array,context: Dictionary,entry_conditions: Dictionary) -> bool:
+	clear()
+	if bindings==null or not VoidCrystals.selected_void(bindings.mido_travel,context):return reject("Void initialization requires its selected nonstory crystal world")
+	if entry_conditions!={"companions_empty":true,"location_match":true,"special_placement":false}:return reject("Void initialization requires its matched ordinary placement")
+	if not Sahi.coherent(bindings.mido_travel):return reject("Void fighter weapon effects require their imported source declarations")
+	var construction:=Construction.new()
+	if not construction.configure_void_factory(bindings,catalogues,player_ship_id,equipment_ids,context):return reject(construction.error)
+	var shared: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("world_initialization",{})
+	var ordinary: int=ContractWorld.impact_model(bindings,0)
+	var weapon: Dictionary=bindings.mido_travel.sahi_encounter.weapons["void"]
+	var kind: int=int(bindings.mido_travel.void_crystals.void_population.actor_kind)
+	if ordinary<0 or int(weapon.actor_kind)!=kind or bindings.resolve(ordinary,"mesh").is_empty() or bindings.resolve(int(weapon.impact_model_id),"mesh").is_empty():return reject("Void fighter impact resources differ from the shared kind9 factory")
+	var data:={"scope":"ordinary_void_population_initialization","weapon_groups":["void"],
+		"weapon_item_sequence":[],"weapon_effect_sequence":[],
+		"faction_weapon_effects":{kind:{"items":[0,int(weapon.item_id)],"resources":[ordinary,int(weapon.impact_model_id)]}}}
+	for key in ["weapon_effect_capacity","weapon_effect_random_bound","zero_means_flipped"]:data[key]=shared[key]
+	var equipment: Array=equipment_ids.map(func(id):return {"item_id":id})
+	if not _configure(bindings,catalogues,data,construction,[player_ship_id],equipment,true):return false
+	_identity.merge({"campaign_cursor":int(context.campaign_cursor),"station_id":-1,"system_id":-1,
+		"entry_conditions":entry_conditions.duplicate(true),"void_context":context.duplicate(true)})
+	return true
+
 func configure_free_traffic(bindings: RefCounted,catalogues: RefCounted,equipment: RefCounted,context: Dictionary,unix_seconds: Variant,entry_conditions: Dictionary) -> bool:
 	clear()
 	if not FirstFlight.entry_conditions(entry_conditions):return reject("Ordinary initialization requires ordinary entry with no additional companions")
@@ -174,6 +198,22 @@ func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,seed: D
 	_identity.merge({"campaign_cursor":context.campaign_cursor,"station_id":context.station_id,"entry_conditions":entry_conditions.duplicate(true)})
 	return true
 
+func configure_sahi(bindings: RefCounted,catalogues: RefCounted,seed: Dictionary,context: Dictionary,entry_conditions: Dictionary) -> bool:
+	clear()
+	if entry_conditions!=load("res://src/content/story_encounter_definitions.gd").entry_conditions(int(context.get("campaign_cursor",-1))):return reject("Story initialization requires its selected location and no additional companions")
+	var data:=Sahi.initialization(bindings,context)
+	if data.is_empty():return reject("Sahi initialization requires its selected encounter declarations")
+	var construction:=Construction.new()
+	if not construction.configure_sahi(bindings,catalogues,seed,context):return reject(construction.error)
+	for row in data.faction_weapon_effects.values():
+		for resource in row.resources:
+			if bindings.resolve(int(resource),"mesh").is_empty():return reject(bindings.error)
+	var hulls: Array=data.actors.map(func(actor):return int(actor.hull_catalogue_id))
+	var equipment: Array=seed.get("equipment_ids",[]).map(func(id):return {"item_id":id})
+	if not _configure(bindings,catalogues,data,construction,hulls,equipment):return false
+	_identity.campaign_cursor=int(context.campaign_cursor);_identity.station_id=int(context.station_id);_identity.entry_conditions=entry_conditions.duplicate(true)
+	return true
+
 func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,seed: Dictionary,context: Dictionary,entry_conditions: Dictionary) -> bool:
 	clear()
 	if not FirstFlight.entry_conditions(entry_conditions):return reject("Kappa initialization requires ordinary entry with no additional companions")
@@ -187,11 +227,11 @@ func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,seed: Di
 	_identity.merge({"campaign_cursor":context.campaign_cursor,"station_id":context.station_id,"entry_conditions":entry_conditions.duplicate(true)})
 	return true
 
-func _configure(bindings: RefCounted, catalogues: RefCounted, data: Dictionary, construction: RefCounted, hulls: Array, equipment: Array=[]) -> bool:
+func _configure(bindings: RefCounted, catalogues: RefCounted, data: Dictionary, construction: RefCounted, hulls: Array, equipment: Array=[], explicit_equipment:=false) -> bool:
 	var shared: Dictionary=bindings.opening_actors.get("npc_initialization",{}).get("world_initialization",{})
 	if not Definitions.parameters(shared):return reject("Shared world initialization is unavailable in this pack")
 	# The retained initial equipment excludes both optional population groups.
-	for item in (bindings.opening_loadout.equipment if equipment.is_empty() else equipment):
+	for item in (equipment if explicit_equipment or not equipment.is_empty() else bindings.opening_loadout.equipment):
 		var equipment_type: int=catalogues.tables.items[int(item.item_id)].arrays[2][5]
 		if shared.absent_equipment_types.any(func(value): return int(value)==equipment_type):
 			return reject("Initial equipment does not exclude the optional population")

@@ -23,6 +23,10 @@ static func calculate_progress(rules: Dictionary, cursor: Variant, player_kills:
 		if score>=int(rules.rank_thresholds[i]):rank=i
 	return {"campaign_cursor":cursor,"rank":rank,"rank_score":score,"player_kills":player_kills,"pirate_kills":pirate_kills,"other_score":other_score}
 
+static func recovered_cargo_total(current: int,observed: int,retained: int=0) -> int:
+	var total:=current+observed-retained
+	return total if observed>=retained and Numbers.integer(total,0,2147483647) else -1
+
 func prepare(bindings: RefCounted, catalogues: RefCounted, opening: Dictionary) -> Dictionary:
 	error=""
 	if bindings==null or catalogues==null or not Definitions.parameters(bindings.opening_handoff):return fail("Mac Opening handoff is unavailable; prepare current bindings")

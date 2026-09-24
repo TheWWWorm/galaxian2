@@ -1,4 +1,5 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
 ## Native convoy choreography. Cues are prospective: the flight owner must apply
 ## them to its real actors, camera and player before adopting this frame. Arrival
 ## is a request to the session; this owner never changes career state or rewards.
@@ -20,7 +21,7 @@ func configure(bindings: RefCounted) -> bool:
 	if not Library.valid_hash(bindings.base_content_id) or not Library.valid_hash(bindings.binding_id):return reject("Convoy capture requires a verified content identity")
 	if not Numbers.integer(bindings.frame_clock.get("max_frame_milliseconds"),1,150):return reject("Convoy capture requires the ordinary frame clock")
 	_rules=bindings.mido_travel.convoy_capture.duplicate(true)
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(_rules.campaign_cursor),
 		"phase":Stage.INTERCEPTION,"elapsed_ms":0,"transfer_elapsed_ms":0,"input_blocked":false,"ship_visible":true,"arrival":{}}
 	return true

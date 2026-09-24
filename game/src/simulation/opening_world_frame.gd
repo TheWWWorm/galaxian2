@@ -45,6 +45,28 @@ var _aim: RefCounted
 var _scanner: RefCounted
 var _damage_particles: RefCounted
 var _engine_audio: RefCounted
+const EngineParticles=preload("res://src/simulation/player_engine_particles.gd")
+const Radar=preload("res://src/simulation/fast_forward.gd")
+const Music=preload("res://src/simulation/ordinary_music.gd")
+const PhysicalContacts=preload("res://src/simulation/physical_scenery_contacts.gd")
+var _physical_contacts: RefCounted
+var _physical_phase:=-1
+var _engine_particles: RefCounted
+var _radar: RefCounted
+var _music: RefCounted
+var _music_context:={}
+var _music_faction:=-1
+var _flight_music:={}
+
+func configure_engine_particles(bindings: RefCounted,mounts: RefCounted,seed_seconds: int) -> bool:
+	error=""
+	if _player_state==null or _elapsed_ms!=0 or _engine_particles!=null:return reject("Opening exhaust must join its fresh player once")
+	var engine:=EngineParticles.new()
+	if not engine.configure(bindings,mounts,int(_player_state.snapshot().ship_id),seed_seconds):return reject(engine.error)
+	_engine_particles=engine
+	return true
+
+func engine_particle_owner() -> RefCounted:return null if _engine_particles==null else _engine_particles.fork_for_frame()
 
 func configure_engine_audio(bindings: RefCounted,catalogues: RefCounted,scene: Dictionary) -> bool:
 	error=""
@@ -84,24 +106,40 @@ func configure(bindings: RefCounted, catalogues: RefCounted, scenery: RefCounted
 	_elapsed_ms=int(bindings.opening_clock.initial_elapsed_ms)
 	_random_state=world.random_state.duplicate(true)
 	_scenery_identity=scenery.presentation_identity()
+	if not bindings.physical_scenery_contacts.is_empty():
+		_physical_contacts=PhysicalContacts.new()
+		# Cursor 0/station 78 leaves world contact slot 0 empty in the source constructor.
+		if not _physical_contacts.configure(bindings.physical_scenery_contacts,_identity,{},scenery.read_snapshot().get("bodies",{})):return reject(_physical_contacts.error)
+		_physical_phase=int(bindings.physical_scenery_contacts.opening_collision_enabled_phase)
 	return true
 
-func configure_player_flight(bindings: RefCounted, catalogues: RefCounted, library: RefCounted, scenery: RefCounted, sensitivity: float) -> bool:
+func configure_player_flight(bindings: RefCounted, catalogues: RefCounted, library: RefCounted, scenery: RefCounted, sensitivity: float, mounts: RefCounted=null) -> bool:
 	error=""
 	if _controller==null or _elapsed_ms!=0 or _flight!=null or _projectile_visuals!=null or scenery==null or library==null or bindings==null or _identity.get("binding_id")!=bindings.binding_id:
 		return reject("Player flight must join its fresh opening before time advances")
 	if scenery.snapshot().get("random_state")!=_random_state or scenery.presentation_identity()!=_scenery_identity:
 		return reject("Player flight belongs to another initialized world")
-	var flight := PlayerFlight.new();var primaries := Primaries.new();var mounts := Mounts.new()
+	var flight := PlayerFlight.new();var primaries := Primaries.new()
 	var loadout := Loadout.new();var inventory := Inventory.new()
 	if not flight.configure(bindings,catalogues,sensitivity): return reject(flight.error)
-	if not mounts.open(library,catalogues): return reject(mounts.error)
+	if mounts==null:
+		mounts=Mounts.new()
+		if not mounts.open(library,catalogues):return reject(mounts.error)
 	if not loadout.configure(bindings,catalogues,bindings.base_content_id): return reject(loadout.error)
 	if not primaries.configure(bindings,catalogues,mounts,loadout.snapshot()): return reject(primaries.error)
 	if not inventory.configure(bindings,catalogues,scenery.snapshot()): return reject(inventory.error)
 	if scenery.snapshot().get("bodies",{}).is_empty() or _player_state==null or _player_motion==null:
 		return reject("Player flight requires the complete fresh body and movement owners")
 	_flight=flight;_primaries=primaries;_inventory=inventory
+	if not bindings.ordinary_music.is_empty():
+		var station_id: int=int(scenery.read_snapshot().station_id)
+		var system_id: int=int(catalogues.tables.stations[station_id].system_id)
+		_radar=Radar.new();_music=Music.new()
+		if not _radar.configure(bindings) or not _radar.configure_radar(catalogues,loadout.snapshot().equipment_ids):return reject(_radar.error)
+		if not _music.configure(bindings.ordinary_music):return reject(_music.error)
+		_music_context={"world_type":int(bindings.opening_actors.npc_initialization.world_initialization.world_type),"campaign_cursor":0,"selected_station_id":station_id,"system_id":system_id,"retained_void_station_id":-1,"void_source_station_id":-1}
+		_music_faction=int(catalogues.tables.systems[system_id].fields[int(bindings.station_exterior.system_faction_field)])
+		_flight_music={"operations":[]}
 	return true
 
 func configure_projectile_visuals(bindings: RefCounted, library: RefCounted) -> bool:
@@ -145,7 +183,7 @@ func configure_npc_scanner(bindings: RefCounted, catalogues: RefCounted, radii: 
 	_scanner=scanner
 	return true
 
-func evaluate(timeline: RefCounted, scenery: RefCounted, delta_ms: Variant, present_radio: Variant, detail: Variant = 1.0, commands := Vector2.ZERO, fire_primary := false, hud_viewport := Vector2i.ZERO, fade_active := true) -> Dictionary:
+func evaluate(timeline: RefCounted, scenery: RefCounted, delta_ms: Variant, present_radio: Variant, detail: Variant = 1.0, commands := Vector2.ZERO, fire_primary := false, hud_viewport := Vector2i.ZERO, fade_active := true, current_music_id: int=-1, strafe:=0.0, brake:=false) -> Dictionary:
 	error=""
 	if _controller==null or not timeline is Timeline or not scenery is Scenery: return fail("Configure opening frame owners before updating")
 	var previous: Dictionary=timeline.snapshot();var field: Dictionary=scenery.clock_snapshot()
@@ -164,17 +202,14 @@ func evaluate(timeline: RefCounted, scenery: RefCounted, delta_ms: Variant, pres
 	if previous.get("escape",{}).get("boundary","")!="":return fail("The following arrival scene is not yet connected")
 	var previous_weapons:=snapshot() if _impacts!=null else {}
 	var next: RefCounted=fork_for_frame()
+	if next._music!=null:next._flight_music={"operations":[]}
 	var clock: RefCounted=timeline.fork_for_frame();var world: RefCounted=scenery.fork_for_frame()
 	if next._projectile_visuals!=null and not next._projectile_visuals.advance(delta_ms):return fail(next._projectile_visuals.error)
 	if next._impacts!=null and not next._impacts.advance(delta_ms):return fail(next._impacts.error)
-	# The ordinary player pass precedes world weapons. Its shield pulse therefore
-	# reaches the current frame's hit accounting, including fractional truncation.
-	if next._player_recharge and next._player_state.advance_recharge(delta_ms).is_empty(): return fail(next._player_state.error)
-	if next._player_repair and next._player_state.advance_repair(delta_ms).is_empty(): return fail(next._player_state.error)
 	var contact_pose: Transform3D=previous.scene.player_pose
 	if next._engine_audio!=null and not next._engine_audio.before_motion(int(previous.camera.shot.phase)):return fail(next._engine_audio.error)
 	if previous.camera.shot.phase==4 and next._flight!=null:
-		next._player_motion_event=next._flight.motion(previous.scene,previous.camera.shot.phase,delta_ms)
+		next._player_motion_event=next._flight.motion(previous.scene,previous.camera.shot.phase,delta_ms,strafe,brake)
 		if next._player_motion_event.is_empty(): return fail(next._flight.error)
 		contact_pose=next._player_motion_event.pose
 	elif int(previous.camera.shot.phase)>4 and next._player_motion!=null:
@@ -185,10 +220,25 @@ func evaluate(timeline: RefCounted, scenery: RefCounted, delta_ms: Variant, pres
 		next._player_motion_event=next._player_motion.evaluate(previous.scene,previous.camera.shot.phase,delta_ms)
 		if next._player_motion_event.is_empty(): return fail(next._player_motion.error)
 		contact_pose=next._player_motion_event.pose
+	# The incoming controller phase owns collision permission; physical contact
+	# reads the moved root before aim/recharge and before this frame's controller.
+	if next._physical_contacts!=null:
+		var contact: Dictionary=next._physical_contacts.plan(next._player_state.collision_context(contact_pose),world.read_snapshot().get("bodies",{}),int(previous.camera.shot.phase)==next._physical_phase)
+		if contact.is_empty():return fail(next._physical_contacts.error)
+		if not world.apply_physical_contacts(contact.operations):return fail(world.error)
+		for operation in contact.operations:
+			if operation.kind=="asteroid" and next._player_state.normal_hit(operation.player_damage).is_empty():return fail(next._player_state.error)
+		if contact.center_after!=contact.center_before:
+			contact_pose.origin=contact.center_after
+			next._player_motion_event.pose=contact_pose
 	if next._engine_audio!=null and not next._engine_audio.follow_player(contact_pose,int(next._player_state.snapshot().vitals.hull),int(delta_ms)):return fail(next._engine_audio.error)
 	if next._aim!=null:
 		var preceding_camera: Transform3D=previous.camera.view.get("pose",Transform3D.IDENTITY)
 		if not next._aim.advance(contact_pose,preceding_camera,hud_viewport):return fail(next._aim.error)
+	# The ordinary player pass still precedes world weapons, so its shield pulse
+	# reaches the current frame's projectile accounting and fractional truncation.
+	if next._player_recharge and next._player_state.advance_recharge(delta_ms).is_empty():return fail(next._player_state.error)
+	if next._player_repair and next._player_state.advance_repair(delta_ms).is_empty():return fail(next._player_state.error)
 	if next._primaries!=null:
 		var primary: Dictionary=world.evaluate_primary_contacts(next._primaries,clock.combat_owner(),next._inventory,delta_ms)
 		if primary.is_empty(): return fail(world.error)
@@ -208,6 +258,9 @@ func evaluate(timeline: RefCounted, scenery: RefCounted, delta_ms: Variant, pres
 	# Source particle managers run inside the early weapon/world pass. Player
 	# logical motion is current; NPC roots and emission flags are retained.
 	if next._damage_particles!=null and not next._damage_particles.advance(contact_pose,delta_ms):return fail(next._damage_particles.error)
+	if next._engine_particles!=null:
+		if next._engine_particles.engine_enabled()!=(not (previous.camera.shot.phase==4 and brake)) and not next._engine_particles.set_engine_enabled(not (previous.camera.shot.phase==4 and brake)):return fail(next._engine_particles.error)
+		if not next._engine_particles.advance(contact_pose,delta_ms):return fail(next._engine_particles.error)
 	if not clock.begin_frame(delta_ms,false,detail,next._player_motion_event,{"random_state":field.random_state,"fade_active":fade_active}): return fail(clock.error)
 	var scene: Dictionary=clock.snapshot()
 	if next._engine_audio!=null and not next._engine_audio.apply_controller(scene.get("escape",{}),scene.scene.player_pose):return fail(next._engine_audio.error)
@@ -250,6 +303,12 @@ func evaluate(timeline: RefCounted, scenery: RefCounted, delta_ms: Variant, pres
 				if contact.target.group=="npc":npc_contact=true
 		if not next._aim.sample_feedback(npc_contact,delta_ms,int(scene.camera.shot.phase)==4 and player.hull>0):return fail(next._aim.error)
 	if next._scanner!=null and not next._scanner.advance(clock.combat_owner().snapshot(),scene.scene.player_pose,scene.camera.view.get("pose",Transform3D.IDENTITY),next._aim.snapshot(),delta_ms,int(scene.camera.shot.phase)==4 and player.hull>0):return fail(next._scanner.error)
+	if next._music!=null:
+		var radar_visible: bool=int(scene.camera.shot.phase)==4 and player.hull>0
+		if not next._radar.publish_radar(clock.combat_owner().snapshot().actors,radar_visible,current_music_id):return fail(next._radar.error)
+		var selection: Dictionary=next._music.prepare_for_context(current_music_id,next._radar.battle_count(),next._music_faction,radar_visible,next._music_context.merged(next._radar.radar_music_context()))
+		if selection.is_empty():return fail(next._music.error)
+		next._flight_music={"operations":selection.operations}
 	next._controller=actors.controller;next._weapons=actors.weapons;next._events=actors.actors
 	next._elapsed_ms=clock.snapshot().elapsed_ms;next._random_state=world.random_state()
 	return {"world_frame":next,"timeline":clock,"scenery":world}
@@ -264,13 +323,16 @@ func snapshot() -> Dictionary:
 	if _scanner!=null:result.npc_scanner=_scanner.snapshot()
 	if _damage_particles!=null:result.damage_particles=_damage_particles.snapshot()
 	if _engine_audio!=null:result.player_engine=_engine_audio.snapshot()
+	if _engine_particles!=null:result.engine_particles=_engine_particles.snapshot()
+	if _music!=null:result.flight_music=_flight_music.duplicate(true)
+	result.scenery_collision_supported=_physical_contacts!=null
 	result.elapsed_ms=_elapsed_ms;result.random_state=_random_state.duplicate(true)
 	result.player={} if _player_state==null else _player_state.snapshot()
 	result.player_cache={} if _player_state==null else _player_state.cache_snapshot()
 	result.weapon_events=_weapon_events.duplicate(true)
 	if _player_motion!=null: result.player_motion=_player_motion_event.duplicate(true)
 	if _flight!=null:
-		result.player_flight=_flight.snapshot();result.primaries=_primaries.snapshot()
+		result.player_flight=_flight.snapshot();result.control_throttle=result.player_flight.throttle;result.primaries=_primaries.snapshot()
 		result.primary_contacts=_primary_contacts.duplicate(true);result.primary_fire=_primary_fire.duplicate(true)
 	return result
 
@@ -294,6 +356,11 @@ func fork_for_frame() -> RefCounted:
 	if _scanner!=null:copy._scanner=_scanner.fork_for_frame()
 	if _damage_particles!=null:copy._damage_particles=_damage_particles.fork_for_frame()
 	if _engine_audio!=null:copy._engine_audio=_engine_audio.fork_for_frame()
+	if _engine_particles!=null:copy._engine_particles=_engine_particles.fork_for_frame()
+	if _radar!=null:copy._radar=_radar.fork_for_frame()
+	if _physical_contacts!=null:copy._physical_contacts=_physical_contacts.fork_for_frame()
+	copy._physical_phase=_physical_phase
+	copy._music=_music;copy._music_context=_music_context;copy._music_faction=_music_faction;copy._flight_music=_flight_music.duplicate(true)
 	if _flight!=null: copy._flight=_flight.fork_for_frame()
 	if _primaries!=null: copy._primaries=_primaries.fork_state()
 	copy._inventory=_inventory
@@ -310,7 +377,9 @@ func clear() -> void:
 	_player_motion=null;_player_motion_event={}
 	_projectile_visuals=null;_impacts=null
 	_aim=null;_scanner=null
-	_damage_particles=null
+	_damage_particles=null;_engine_particles=null
+	_radar=null;_music=null;_music_context={};_music_faction=-1;_flight_music={}
+	_physical_contacts=null;_physical_phase=-1
 	_engine_audio=null
 	_flight=null;_primaries=null;_inventory=null;_primary_contacts=[];_primary_fire={}
 	_elapsed_ms=0;_random_state={};_scenery_identity=null

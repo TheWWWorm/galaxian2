@@ -1,9 +1,9 @@
 """Original impact-table declarations; no executable payloads."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_contract_world(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'mido_contract_world_initialization',
@@ -36,6 +36,32 @@ LAYOUTS = {'contract_world_impact_0': [1572842,
                               '__const',
                               'b18cc146d20e56ff0808059bc8ddf272dc008ee143402c5d32424175d3b54720'],
  'contract_world_impact_25': [1572942,
+                              4,
+                              '__const',
+                              'b18cc146d20e56ff0808059bc8ddf272dc008ee143402c5d32424175d3b54720']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'contract_world_impact_0': [1547906,
+                             4,
+                             '__const',
+                             '2f71717123e07e2e209cc0dc807e9d1e48dd2e9d0cddb9e5238afa837b209770'],
+ 'contract_world_impact_3': [1547918,
+                             4,
+                             '__const',
+                             '5d46ede9eac9a05b6830c14009889862d39d162f725c5b949cf477e10051247c'],
+ 'contract_world_impact_7': [1547934,
+                             4,
+                             '__const',
+                             'a03abcf8785a21a27c62f0f7300d747792b7d3aa67ebb20c8712dd1ea7b97e77'],
+ 'contract_world_impact_19': [1547982,
+                              4,
+                              '__const',
+                              'ba68c0bc07a4ca462026f5108537fb3a023f3095f79c0d4c205fde3e86089e80'],
+ 'contract_world_impact_22': [1547994,
+                              4,
+                              '__const',
+                              'b18cc146d20e56ff0808059bc8ddf272dc008ee143402c5d32424175d3b54720'],
+ 'contract_world_impact_25': [1548006,
                               4,
                               '__const',
                               'b18cc146d20e56ff0808059bc8ddf272dc008ee143402c5d32424175d3b54720']}

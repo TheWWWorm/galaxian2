@@ -28,6 +28,7 @@ var captures:={}
 func _initialize():call_deferred("run")
 func run():
 	var args:=OS.get_cmdline_user_args()
+	if args.size()==3 and DisplayServer.get_name()!="headless" and not OS.get_environment("GOF2_CAPTURE_DIR").is_empty():args.append(OS.get_environment("GOF2_CAPTURE_DIR"))
 	check(args.size() in [3,4],"Expected Mac content, bindings, visuals and optional capture directory")
 	if args.size() in [3,4]:await verify(args)
 	print("Flight notices: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
@@ -84,7 +85,7 @@ func verify_queue():
 	check(fork.advance(150,true) and fork.snapshot().elapsed_ms==1000 and not fork.snapshot().visible and fork.snapshot().suppressed and queue.snapshot()==before,"Drilling changed fade time or the accepted parent")
 	var held: Dictionary=fork.snapshot();check(fork.advance(150,false,true) and fork.snapshot()==held,"Pause changed a held notice")
 	check(fork.advance(100) and fork.snapshot().elapsed_ms==1100 and fork.snapshot().visible,"Notice did not resume after drilling")
-	for invalid in [-1,151,1.5,"100"]:check(not queue.advance(invalid) and queue.snapshot()==before,"Invalid notice delta changed the queue")
+	for invalid in [-1,751 if not bindings.fast_forward.is_empty() else 151,1.5,"100"]:check(not queue.advance(invalid) and queue.snapshot()==before,"Invalid notice delta changed the queue")
 	for invalid in [-1,7,65535,8.5,"8"]:check(not queue.enqueue(invalid) and queue.snapshot()==before,"Unsupported notice changed the queue")
 	check(not queue.configure(bindings,lib,Construction.new()) and queue.snapshot()==before,"Failed notice configuration erased a live fade")
 	var original: String=lib.strings[529];lib.strings[529]=lib.strings[528]
@@ -149,6 +150,16 @@ func verify_flight():
 		failed=next
 		if failed.snapshot().mining_session.phase=="finished":break
 	var failure: Dictionary=failed.snapshot()
+	var expected_progress: Dictionary=original.progress.duplicate(true)
+	if bindings.mining_session.has("failure_instruction"):
+		check(failure.phase=="mining_instruction" and failure.dialogue.text_id==606 and failure.flight_notices.pending[-1].source_id==8 and failure.flight_notices.elapsed_ms==started.flight_notices.elapsed_ms,"Failure modal lost the independent queued notice or consumed its clock")
+		check(failed.evaluate(150).snapshot().flight_notices==failure.flight_notices,"Timed notice elapsed behind the failure modal")
+		failed=failed.navigate("next")
+		if failed==null:check(false,"Failure modal could not be acknowledged");return
+		check(failed.snapshot().flight_notices==failure.flight_notices,"Acknowledging the failure modal changed its timed notice")
+		failed=failed.evaluate(100)
+		if failed==null:check(false,"Flight could not resume after the failure modal");return
+		failure=failed.snapshot();expected_progress.mining_failure_hint_seen=true
 	check(failure.mining_session.last_drill.phase=="failed" and failure.flight_notices.pending[-1].source_id==8 and failure.flight_notices.elapsed_ms==100 and not failure.flight_notices.suppressed,"Failure lost its one-time notice or did not resume the queue")
 	var count: int=failure.flight_notices.pending.size()
 	for i in 5:failed=failed.evaluate(100)
@@ -161,7 +172,7 @@ func verify_flight():
 		if not state.current.is_empty() and state.current.source_id==8 and state.elapsed_ms>=2000:break
 		failed=failed.evaluate(100)
 	captures["notice-failure"]=failed
-	check(failed.snapshot().flight_notices.current.source_id==8 and failed.snapshot().campaign_cursor==2 and failed.snapshot().progress==original.progress and failed.snapshot().cargo.used==0,"Failure notice completed the mission or granted cargo")
+	check(failed.snapshot().flight_notices.current.source_id==8 and failed.snapshot().campaign_cursor==2 and failed.snapshot().progress==expected_progress and failed.snapshot().cargo.used==0,"Failure notice completed the mission or granted cargo")
 func verify_gpu(args: Array):
 	var visuals:=Visuals.new();check(visuals.open(args[2],lib.manifest),visuals.error)
 	var canvas:=SubViewport.new();canvas.size=Vector2i(960,720);canvas.render_target_update_mode=SubViewport.UPDATE_ALWAYS;canvas.own_world_3d=true;root.add_child(canvas)
@@ -179,7 +190,7 @@ func verify_gpu(args: Array):
 	var panel:=NoticePanel.new();phone.add_child(panel);panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	check(panel.configure(lib,bindings,visuals),panel.error);panel.set_mobile_layout(true);check(panel.present(german.snapshot()),panel.error)
 	await process_frame;await process_frame;await RenderingServer.frame_post_draw
-	check(panel._label.get_line_count()==panel._label.get_visible_line_count() and panel._bar.get_rect().end.x<=420 and panel._bar.get_rect().end.y<=800,"Phone notice is clipped")
+	check(panel._label.get_line_count()==panel._label.get_visible_line_count() and Rect2(Vector2.ZERO,Vector2(phone.size)).encloses(panel._bar.get_rect()),"Phone notice is clipped")
 	check(panel._bar.get_rect().encloses(panel._label.get_rect()),"Localized text escaped its notice bar")
 	check(phone.get_texture().get_image().save_png(args[3].path_join("notice-full-hold-phone-de.png"))==OK,"Could not save localized phone notice")
 	for language in lib.manifest.languages:

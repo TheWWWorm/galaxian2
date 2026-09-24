@@ -15,6 +15,7 @@ const Library=preload("res://src/content/library.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const RESET_POSITION=Vector3(4294967296.0,4294967296.0,4294967296.0)
 const MAX_BIRTHS_PER_FRAME:=16384
+const SOURCE_SIGNED_BIRTH_LIMIT:=2147483648.0
 var error:=""
 var binding_id:=""
 var base_content_id:=""
@@ -200,7 +201,11 @@ func _advance(pose: Transform3D,delta_ms: float,manager_elapsed_ms: float) -> Di
 	var distance:=single(1.0/inverse_distance)
 	var distance_emission: bool=_preset.flags==0x11
 	var requested: float=single(distance/single(_preset.distance_spacing)) if distance_emission else single(single(single(_preset.emission_per_second)*total)*single(0.001))
-	if not is_finite(requested) or requested>MAX_BIRTHS_PER_FRAME:return fail("Particle births exceed the supported frame work limit")
+	# The source converts distance births to a signed 32-bit count. The timer
+	# path retains its work guard; distance births overwrite a fixed-size ring.
+	if not is_finite(requested) or (distance_emission and requested>=SOURCE_SIGNED_BIRTH_LIMIT) or (not distance_emission and requested>MAX_BIRTHS_PER_FRAME):
+		var reason:="source signed count range" if distance_emission else "supported frame work limit"
+		return fail("Particle births exceed the %s (preset=%d, requested=%s, interval_ms=%s, distance=%s, speed=%s)"%[reason,int(_preset.preset_id),requested,total,distance,_velocity.length()])
 	var count:=int(requested)
 	if distance_emission:
 		if requested<=0:return {"births":0}
@@ -215,7 +220,16 @@ func _advance(pose: Transform3D,delta_ms: float,manager_elapsed_ms: float) -> Di
 	var spacing:=single(_preset.distance_spacing) if distance_emission else single(distance/float(count))
 	var start_position:=pose.origin-movement
 	var inherited:=Vectors.scaled(_velocity,single(_preset.relative_velocity_factor))
-	for birth in count:
+	# Distance-emitting nozzles can cross many spacings in a scripted jump. The
+	# original fixed ring overwrites every birth older than its capacity. Consume
+	# those births' RNG in source order, then construct only the surviving tail.
+	# This retains the final slots, cursor and stream without thousands of
+	# throwaway sprite/geometry updates. RNG draws still follow the exact source
+	# sequence, including bounded-draw rejection sampling.
+	var skipped:=maxi(0,count-_slots.size()) if distance_emission else 0
+	for birth in skipped:_discard_birth_random()
+	_cursor=(_cursor+skipped)%_slots.size()
+	for birth in range(skipped,count):
 		var progress:=birth+1
 		var velocity:=Vector3.ZERO
 		var scatter:=int(_preset.velocity_scatter)
@@ -244,6 +258,20 @@ func _advance(pose: Transform3D,delta_ms: float,manager_elapsed_ms: float) -> Di
 		if not move_particle(_cursor,residual):return fail(error)
 		_cursor=(_cursor+1)%_slots.size()
 	return {"births":count}
+
+func _discard_birth_random() -> void:
+	var scatter:=int(_preset.velocity_scatter)
+	if scatter>0:
+		for axis in 3:_random.next_int(scatter*2)
+	var z_jitter:=int(_preset.local_offset_z_jitter)
+	if z_jitter>0:_random.next_int(z_jitter)
+	scatter=int(_preset.scatter_xz)
+	if scatter>0:
+		for axis in 2:_random.next_int(scatter*2)
+	scatter=int(_preset.scatter_y)
+	if scatter>0:_random.next_int(scatter*2)
+	if _preset.size_jitter>0:
+		for axis in 3:_random.next_int(int(_preset.size_jitter))
 
 func _new_appearance() -> Dictionary:
 	var size_sample:=0

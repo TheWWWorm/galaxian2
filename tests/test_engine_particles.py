@@ -14,7 +14,34 @@ def fixture(shift=0):
     return mach,arrival,damage,layouts
 
 
+def opening_fixture(shift=0):
+    combined={**reader.LAYOUTS,**reader.MAC_OPENING_SPANS}
+    mach,arrival,layouts=declaration_fixture(combined,shift,'sha256:')
+    damage={'scope':'damage_particle_sprite_presets','emitter_defaults':{}}
+    base={key:layouts[key] for key in reader.LAYOUTS}
+    opening={key:layouts[key] for key in reader.MAC_OPENING_SPANS}
+    return mach,arrival,damage,base,opening
+
+
 class EngineParticleTests(unittest.TestCase):
+    def test_opening_hull_requires_complete_additional_source_proof(self):
+        for shift in (0,0x700000):
+            mach,arrival,damage,base,opening=opening_fixture(shift)
+            with patch.multiple(reader,LAYOUTS=base,MAC_OPENING_SPANS=opening):
+                result=reader.extract_engine_particles(mach,arrival,damage)
+                self.assertEqual(result.get('opening_ship'),reader.OPENING_SHIP)
+                self.assertEqual(set(result['provenance']),set(base)|set(opening))
+                for key,(delta,size,_,_) in opening.items():
+                    self.assertEqual(result['provenance'][key],{'offset':arrival['provenance']['actor']['offset']+delta,'bytes':size})
+                    for endpoint in (0,size-1):
+                        changed=copy.copy(mach);data=bytearray(mach.data)
+                        data[arrival['provenance']['actor']['offset']-mach.slice_offset+delta+endpoint]^=255
+                        changed.data=bytes(data)
+                        unsupported=reader.extract_engine_particles(changed,arrival,damage)
+                        self.assertNotIn('opening_ship',unsupported,(key,endpoint))
+                result['opening_ship']['uv_rect'][0]=0
+                self.assertEqual(reader.extract_engine_particles(mach,arrival,damage)['opening_ship'],reader.OPENING_SHIP)
+
     def test_relocated_source_and_detached_data_only_result(self):
         for shift in [0,0x700000]:
             mach,arrival,damage,layouts=fixture(shift)

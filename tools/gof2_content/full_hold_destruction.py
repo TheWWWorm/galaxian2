@@ -1,5 +1,6 @@
 """Mac cargo-bearing pirate death declarations, without executable runtime code."""
-import copy,hashlib
+import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_full_hold_destruction(mach,arrival,control,actors):
@@ -10,15 +11,12 @@ def extract_full_hold_destruction(mach,arrival,control,actors):
         if not all(npc.get(k) for k in ['destruction','death_accounting','construction']):return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset'];proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None:return {}
-            if pattern.startswith('sha256:'):
-                if hashlib.sha256(found[0]).hexdigest()!=pattern[7:]:return {}
-            elif found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof;return result
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
+        return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
 VALUES = {'scope': 'full_hold_pirate_destruction',
@@ -101,3 +99,46 @@ LAYOUTS = {'npc_update': [610766,
  'drift_cutoff': [1573782, 4, '__const', 'cdcc4c3d'],
  'angle_fraction': [1575014, 4, '__const', '00008037'],
  'angle_tau': [1575058, 4, '__const', 'db0fc940']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'npc_update': [611314, 17180, '__text', 'sha256:e6a3db4e2bdaf51990eddaec2e03514db9eb5bb8a89976338b28605117681d20'],
+ 'actor_constructor': [-81548,
+                       948,
+                       '__text',
+                       'sha256:88437b7848d85fadf366a7bec5c102e8f85b0aa6455fb37d60ea50e6c8ca5d6f'],
+ 'npc_constructor': [605720, 2562, '__text', 'sha256:69ffded45ed01c0720d4524c45cb78a5be444af55b84ea7c93f85df3bf003325'],
+ 'cargo_model': [-77266,
+                 246,
+                 '__text',
+                 '554889e541574156534883ec1889f34989ffbfe8000000e82e4e18004989c666b81e4283fb01743e66b81f4283fb02743566b8184283fb03742c418b4f4466b85f4283f901741f66b8144283f909741666b85e4283f903740d85c90f95c00fb6c00d60420000488d0dcf102600488b110fb7f04c89f731c9e87b04f6ff4d89b7a8000000498b7f10e8b908f6fff30f114de0f30f1145d8660f70c001488d75d8f30f1145dc4c89f7e86909f6ff498b5f08498bbfa8000000e82109f6ff4883c3084889df4889c6e878f31300498b7f084c89fee8005c09004883c4185b415e415f5dc34889c34c89f7e8504d18004889dfe8844d1800'],
+ 'cargo_predicate': [-77020,
+                     46,
+                     '__text',
+                     '554889e5488b4f7030c04885c9741d8b1131f6eb044883c60230c039d6730d488b7908b001837cb704007ee95dc3'],
+ 'drift_setter': [538206, 14, '__text', '554889e5f30f1187e00000005dc3'],
+ 'drift_getter': [538234, 14, '__text', '554889e5f30f1087e00000005dc3'],
+ 'cargo_owner': [536326, 14, '__text', '554889e54889b7d80000005dc390'],
+ 'model_constructor': [-731340,
+                       430,
+                       '__text',
+                       '554889e5415741564154534189cc4989d64189f74889fbc783a000000000000000c783a400000000000000c783a800000000000000c783ac0000000000803f48c783b80000000000000048c783b000000000000000c783c00000000000803f488d732048c783cc0000000000000048c783c400000000000000c783d40000000000803fc783d800000000000000c783dc0000000000803fc783e00000000000803fc783e40000000000803f6644897b104c897338c7431400000000c74320000000004c89f7e8b4d91c00488d5324410fb6cc4c89f74489fee8b1a81c008b73208b53244c89f7e843dd1c00c7434800000000c7434400000000c7434000000000c743540000803fc743500000803fc7434c0000803fc6435801c6435901c7435c0000000048c7839800000000000000c743300000000048c783880000000000000048c783800000000000000048c743780000000048c743700000000048c74368000000008b7320897314c74328ffffffffc7431cffffffffc74318ffffffffc7432cffffffff4c89f7e860e11c00488dbbac0000004889c6e8a1ed1d0048c74308000000005b415c415e415f5dc3'],
+ 'model_position_setter': [-730044,
+                           82,
+                           '__text',
+                           '554889e54883ec50f30f104608f30f1145bcf30f1006f30f1145b4f30f104604f30f1145b88b7714488b7f38e8addd1c00488d7dc04889c6f30f1045b4f30f104db8f30f1055bce8720b1e004883c4505dc3'],
+ 'model_rotation': [-728986,
+                    140,
+                    '__text',
+                    '554889e5534881ec880000004889fbf30f584340f30f114340f30f584b44f30f114b44f30f585348f30f1153488b7314488b7b38e883d91c00488d7db88b535cf30f105348f30f104340f30f104b444889c6e805fb1d008b7314488b7b38e859d91c00488dbd78fffffff30f105354f30f10434cf30f104b504889c6e8bb051e004881c4880000005b5dc390'],
+ 'model_translation': [-728798,
+                       200,
+                       '__text',
+                       '554889e54156534881ec90000000f30f119564fffffff30f118d68fffffff30f11856cffffff4889fb8b7314488b7b38e8cbd81c004c8b4018488b5020488b7028488b78308b4838894de848897de0488975d8488955d04c8945c8488b481048894dc0488b08488b4008488945b848894db0f30f109564fffffff30f5855dcf30f108d68fffffff30f584dccf30f10856cfffffff30f5845bc488dbd70ffffff4c8d75b04c89f6e834061e008b7314488b7b384c89f2e825d61c004881c4900000005b415e5dc390'],
+ 'effect_update': [-686346, 538, '__text', 'sha256:0feaec2d98e5c1ce718ddd457ad09564bdc6799c5c4ac9462d9dc9af5dbeef62'],
+ 'world_death': [106510, 1044, '__text', 'sha256:b2b3dd33cbc5f7ce937530800f3e23c5fa9b2e6630f92dd194b7cff902d9baab'],
+ 'retire': [-78854, 18, '__text', '554889e5488b7f08400fb6f65de9fa760900'],
+ 'pirate_counter': [876932, 26, '__text', '554889e5ff8768020000488d05fd821700488b385de9ba73e7ff'],
+ 'drift_decay': [1557634, 4, '__const', '48e17a3f'],
+ 'drift_cutoff': [1548846, 4, '__const', 'cdcc4c3d'],
+ 'angle_fraction': [1550078, 4, '__const', '00008037'],
+ 'angle_tau': [1550122, 4, '__const', 'db0fc940']}

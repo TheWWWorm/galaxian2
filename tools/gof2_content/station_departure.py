@@ -1,6 +1,6 @@
 """First Mac station departure declarations. No original code is executed or emitted."""
 import copy
-from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 def extract_station_departure(mach, arrival, station, player):
     if mach.architecture!='x86_64':return {}
@@ -8,12 +8,8 @@ def extract_station_departure(mach, arrival, station, player):
         if station['scope']!='first_station_entry' or not player['flight_cache'] or not player['repair']:return {}
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,pattern) in LAYOUTS.items():
-            found=section_bytes(mach,anchor+delta,size,b'__text')
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
+        proof=recognize(mach,origin['offset'],[LAYOUTS,MAC_ALTERNATE])
+        if not proof:return {}
         result=copy.deepcopy(VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
@@ -80,3 +76,50 @@ LAYOUTS = {'cargo_gate': [437015,
  'audio_selector_consumer': [337212,
                              42,
                              '488d057b1d20008b3083feff740f488d0569162000488b38e87f8ef7ff488d055e1d2000c700ffffffff']}
+
+# Complete alternate Mac source layout; cursor2 parameters remain unchanged.
+MAC_ALTERNATE = {'cargo_gate': [437451,
+                72,
+                '4c8d3d88361e00498b3fe8ac6d06004889c7e80279040089c3498b3fe89a6d06004889c7e8e478040039c37e1b498b9eb0000000488d056c361e00488b38bec1000000e9e9000000'],
+ 'cursor_gates_early': [437523,
+                        44,
+                        '488d0540361e00488b38e8826d060083f806746a488d052c361e00488b38e86e6d060083f8070f85da000000'],
+ 'cursor_gates_middle': [437785,
+                         277,
+                         '488d053a351e00488b38e87c6c060083f81475454c8d3d26351e00498b3fe8206c06004889c7e8cc51060089c3498b3fe8626c06004889c7e8a671ffff39c37518498b9eb0000000488d050a351e00488b38be08020000eb8a488d05e1341e00488b38e8236c060083f8150f85140100004c8d3dc9341e00498b3fe8c36b06004889c7e86f51060089c3498b3fe8056c06004889c7e84971ffff39c30f85e3000000488d0598341e00488b38e8bc6b06004889c7be29000000ba01000000e84878040084c0754e488d0573341e00488b38e8976b06004889c7be2a000000ba01000000e82378040084c07529488d054e341e00488b38e8726b06004889c7be2b000000ba01000000e8fe77040084c00f842cffffff'],
+ 'cursor_gate_late': [438174,
+                      83,
+                      '488d05b5331e00488b38e8f76a060083f84d0f8578ffffff488d059d331e00488b38e8c16a06004889c7e80373040083f8250f8458ffffff498b9eb0000000488d058e331e00488b38be3b010000e90bfeffff'],
+ 'confirmation': [438062,
+                  101,
+                  '41f6869f00000001755b41f686a500000001755141f686a6000000017547498b9eb0000000488d0518341e00488b38be82010000e84b660a004889df4889c6ba01000000e83574eeff498bbeb0000000e8d580eeff41c6869f0000000141c6862201000001'],
+ 'accept_and_destination': [432174,
+                            142,
+                            '498bbdb00000004489fe4489f2e88097eeff83f8010f841506000085c00f85fd0e000041f68522010000010f84d200000041c6852201000000488d1dec4a1e00488b3be82e820600488b1b83f830752b488d05cd4a1e00488b38be3a000000e8f642efff4889df4889c6e8957b0600488d051e521e00c60001eb134889dfe8ab8106004889df4889c6e8767b0600'],
+ 'cache_reset_and_state': [432316,
+                           113,
+                           '488d05974a1e00488b08c781a8000000ffffffff488b08c781a0000000ffffffff488b08c781a4000000ffffffff488d0da14b1e00488b00c780ac000000ffffffff488b39e8443deeff488d05954a1e00488d0d92511e00c70101000000488b38be02000000e89bce0d0041c6454000e9'],
+ 'current_station': [858716, 12, '554889e5488b87180200005d'],
+ 'mission_selection': [858108,
+                       150,
+                       '498b8710020000488b40084a8b3ce8e82806f9ff84c00f850bfeffff498b8710020000488b40084a8b3ce8e8d007f9ff89c34c89f7e8dae7ffff39c30f85e5fdffff4181fc950000000f8ec8fdffff418d84246affffff83f817770eb92b788b000fa3c10f82bdfdffff498b8710020000488b40084a8b3ce8e86207f9ff84c00f858dfeffff4183fc0b740a4183fc0d0f857dfeffff'],
+ 'selected_mission': [857871, 27, '498b8710020000488b40084a8b04e849898708020000e968010000'],
+ 'mission_getter': [858820, 12, '554889e5488b87080200005d'],
+ 'mission_completed': [400952, 12, '554889e5837f10ff0f94c05d'],
+ 'refresh_equipment': [858597,
+                       93,
+                       '498bbf00020000e8430cfeff4989c64d85f67427418b0685c0742031db498b4e08488b3cd94885ff740a31f6e8049cf1ff418b0648ffc339c372e241c6876801000000498bbf000200004883c4085b415c415d415e415f5de94a02feff'],
+ 'ship_clone_entry': [733464, 28, '554889e5535089f3e80f00000085db78038958144883c4085b5dc390'],
+ 'ship_clone': [733492,
+                162,
+                '554889e541574156534883ec184989ffbf98000000e82aef0b004989c6498b7f688b470c412b8790000000458b4714418b4f0c418b37418b5704f3410f104718448b0f8b5f048b7f0889442410897c2408891c24f30f5905862e0c004c89f7e8f0e9ffff498b87880000004885c07424833800741f31db488b40088b34984c89f7e83801000048ffc3498b87880000003b1872e34c89f04883c4185b415e415f5dc3'],
+ 'fresh_ship': [727944,
+                240,
+                '554889e541574156415541545350f30f1145d44589ce4889fb8933895304894b0cc74310000000004489431444894308bf10000000e8b0040c00f30f1045d4f30f5e0547440c00448b6d208b4d18448b7d1048894368448930448978048948084489680cf30f114318bf18000000e87d040c004989c4bf08000000e86a040c00498944240841c74424100100000048c7000000000041c70424000000004c8963704501f744037d184501ef4489ff4c89e6e8de9eeaff48c7437800000000c743640000000048c7838800000000000000c78390000000000000004889df4883c4085b415c415d415e415f5de914000000'],
+ 'cargo_used': [730596, 10, '554889e58b47105dc390'],
+ 'world_entry': [334920,
+                 77,
+                 '488d050bc71f00488b38e81d440800bf50030000e8170412004889c34889dfbe03000000e89d2dfaff49899e900000004889dfe84037faffbb6400000084c00f84630800004c89f7e893080000'],
+ 'audio_selector_consumer': [336912,
+                             42,
+                             '488d058fc61f008b3083feff740f488d056dbf1f00488b38e8ef8bf7ff488d0572c61f00c700ffffffff']}

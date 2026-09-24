@@ -1,9 +1,9 @@
 """Source-bound system routes and pending destination guidance."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_free_navigation(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'base_system_navigation',
@@ -42,3 +42,30 @@ LAYOUTS = {'free_navigation_gate_helpers': [735008,
                                      661,
                                      '__text',
                                      '828a3b7e9c015c71b471542042217d7df0990c47c21c49a3314e9f70e12ce9de']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'free_navigation_gate_helpers': [735640,
+                                  198,
+                                  '__text',
+                                  'cc29162820c83932b402ad8b45db33e1e8cd78b87a8578f356790dac30e96776'],
+ 'free_navigation_route_graph': [902214,
+                                 608,
+                                 '__text',
+                                 'b5dbfd8e168182661d5d3684bc9dd7456c60e3dc2371a3d83421b172c9ed3385'],
+ 'free_navigation_route_search': [902822,
+                                  430,
+                                  '__text',
+                                  'bc835be708a2d2c093da3f829bb79e07097a8dde7b071a76f341bc16869a9106'],
+ 'free_navigation_route_predecessors': [903252,
+                                        288,
+                                        '__text',
+                                        'f25ecac8dd7e8d7c029bb2e4d0081a7273bbaf510f6a4a45865d56c7f60b7b0b'],
+ 'free_navigation_queue_removal': [903786,
+                                   98,
+                                   '__text',
+                                   'b812061bca38ffbe01825fc16cf1a7c87efa07b8db5c91da78e9d6a94fbfb7f9'],
+ 'free_navigation_course': [137826, 368, '__text', '81b37149c3c031ea38ba1364cb4a3cb29c3c32f8fc272912cd2221d95d14c49b'],
+ 'free_navigation_story_selection': [857597,
+                                     661,
+                                     '__text',
+                                     'c3727ce85e04d68c724295933ac5cc3716f4cdcf350e18558bfd59ee11ea006c']}

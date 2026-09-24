@@ -1,9 +1,9 @@
 """Original ordinary hangar pricing, transfers and departure capacity boundary. Constant declarations only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_ordinary_shopping(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'ordinary_station_shopping',
@@ -147,6 +147,61 @@ LAYOUTS = {'shopping_hangar_entry': [-172628,
                                '__const',
                                '0d66bd808e9247acb560fe33efaa62ad6f11ee6f85cc4f61bd17673263de04ee'],
  'shopping_special_multiplier': [1573882,
+                                 4,
+                                 '__const',
+                                 '5af2169fc7e6a3268ca6146f2ba18f312fde17563e7dff42572633d9b0b92c7c']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'shopping_hangar_entry': [-173120, 157, '__text', 'd20566f62c40be7e33e6b96b4991a0936f7728769c138497af6e69c1a848188f'],
+ 'shopping_prices': [878036, 892, '__text', 'f89e2e6d9ce6d6013a1c6a0b83c1e063114351bd41b5031ff1f3d33d97fee1f1'],
+ 'shopping_item_constructor': [-85882,
+                               172,
+                               '__text',
+                               '79134de9aa905a016959e217240597a668c203b159e54a83d6263fa171011f9f'],
+ 'shopping_system_x': [735600, 10, '__text', 'fdf5949505972320f2d3bcf9fddf25e254bc63dd4cc89090ddea739cf2855e73'],
+ 'shopping_system_y': [735610, 10, '__text', 'c0748b1656107d8edea7411eb10e4bc6d95d66d67e46c9e944880a7b482078c9'],
+ 'shopping_distance': [-664432, 46, '__text', '034dacfe370a259795834afa8da8082f3e1d69f1a8a2468b3a8f6bfbd15b5850'],
+ 'shopping_root_input': [-192808, 10, '__text', '3d15fc2abcdb6555eaaac57867a9033b075dbf52a60cafab61508d37b8e00579'],
+ 'shopping_root': [1241090, 48, '__text', 'd09924084c0e86d34b21bdd09df1d492403a33c2d2f34e74356ba31103ca5004'],
+ 'shopping_station_match': [853920, 22, '__text', '88fd654fbe9f154dc3b1abf97b31858eb99c0710a7cb258faaef2c2e729145e5'],
+ 'shopping_cargo_list': [730676, 10, '__text', '7dc22ae292921b71218a097733f4c40dfa07570814d0765b4cf6b066faec18b3'],
+ 'shopping_installed_list': [730666, 10, '__text', '9624067a219b5715fb6aabc614cd28310a74739206a88a5fa7b6f65e0a76a0d0'],
+ 'shopping_unit_transfer': [-84322, 104, '__text', '6a49d8936842a624dc9e86c983e56b6f46f8bb4c1d444a041c7685aa6a54221f'],
+ 'shopping_wallet': [872686, 48, '__text', 'cece6e99aa8073131c9b9995c8563da1824339b15ae2f1722aaf5221826435c8'],
+ 'shopping_wallet_commit': [-163580, 33, '__text', '67c12a10b62a7f4ecce407d6a71db9e228061d582978b48371318a075c5929ad'],
+ 'shopping_funds_message': [-164192, 97, '__text', 'b68963506b6218aafe4c819062eb1d81a0adaa63f9d2e9860c2f01153a29b2df'],
+ 'shopping_protected_transfer': [-164542,
+                                 118,
+                                 '__text',
+                                 '4058f0e463d260b7e117029d0222d2aa69796b575baf87afb9c1b32bed42a104'],
+ 'shopping_combine': [-82728, 782, '__text', '339ecd896a89ba8dc45a9ec49dbb0644e5a4bcbf3fcbb50be885b61eccbe58ba'],
+ 'shopping_split': [-83178, 244, '__text', '363e8968f13bf872565805bfc433ceb2518c430cba2283729552339be143bf1f'],
+ 'shopping_list_commit': [-166978, 78, '__text', 'd4c5570f763f95a68c3025959069e29b9f4bb97091661fbd8c15fa80462e0f6d'],
+ 'shopping_cargo_setter': [731558, 112, '__text', 'f76d4d7ff55b56e546388ab231a0ea296c2e2f34eff1c1dbfe47e9e0e30af373'],
+ 'shopping_stock_setter': [852562, 226, '__text', '72e6f1228d72d769b345ae39eb7f992f8a5e7cc868a2c548bd74c34bc5226643'],
+ 'shopping_repeat_quantity': [-167560,
+                              47,
+                              '__text',
+                              '49f13106ad08e00cd36d5bfff6946fed2b989b6efc9a82ca765da35b89244149'],
+ 'shopping_overfilled_departure': [437438,
+                                   85,
+                                   '__text',
+                                   '61dbb232159b1d6d29bf9331eced4f7bec200b49608594b38bb09421d8139596'],
+ 'shopping_reseed': [1120354, 64, '__text', 'c33a8f66a77543b1d2c760bcea9d3dd50a10c387afb7e3bdfbae1b46ba6acee5'],
+ 'shopping_distance_percent_scale': [1531926,
+                                     4,
+                                     '__const',
+                                     '2238f30df488055daf5e8f362cf904e370011a172d20df193c1b7ae8e5db8e01'],
+ 'shopping_ratio_maximum': [1519594, 4, '__const', 'e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c'],
+ 'shopping_variation_fraction': [1557654,
+                                 4,
+                                 '__const',
+                                 '8b35fe1a9b331dc0217e0419be35288af59676e9c57022a334110ab0e4799df4'],
+ 'shopping_percent_fraction': [1531914,
+                               4,
+                               '__const',
+                               '0d66bd808e9247acb560fe33efaa62ad6f11ee6f85cc4f61bd17673263de04ee'],
+ 'shopping_special_multiplier': [1548946,
                                  4,
                                  '__const',
                                  '5af2169fc7e6a3268ca6146f2ba18f312fde17563e7dff42572633d9b0b92c7c']}

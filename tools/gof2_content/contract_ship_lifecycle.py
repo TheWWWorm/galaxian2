@@ -1,10 +1,10 @@
 """Verified Mac contract combat lifecycle, without executable payloads."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 
 def extract_contract_ship_lifecycle(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 
@@ -100,3 +100,61 @@ LAYOUTS = {'ship_lifecycle_normal_hit': [538936,
                                59,
                                '__text',
                                '072bbcdb09a7b02d84710658cd9d364b303670eac247c7de63c4fb4c911f0d54']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'ship_lifecycle_normal_hit': [539472,
+                               1846,
+                               '__text',
+                               '407b208cd78b7b7e70b5bc505bc9509f70781ad9d1af9c2b9a9f80104cd54242'],
+ 'ship_lifecycle_lethal_reputation': [808494,
+                                      184,
+                                      '__text',
+                                      '4776f5a1b8fe49b57a997912089fc31e318347df429100480034401ee0ced2aa'],
+ 'ship_lifecycle_reputation_axis': [808678,
+                                    184,
+                                    '__text',
+                                    '48b146881bbcd041e6fa4b24bc767946e1499bffd52f1a9994b56153fea7ecd4'],
+ 'ship_lifecycle_secondary_faction': [735306,
+                                      76,
+                                      '__text',
+                                      '433abfe7fa1b346202bfe1cb54dae5907afbb6497173385ce1b574fe8cfdde65'],
+ 'ship_lifecycle_faction_response': [113780,
+                                     214,
+                                     '__text',
+                                     'e0a9c7b348d256a49558c1ce2e91fe712a22f67f926ad7fe70a0cf5e448f546b'],
+ 'ship_lifecycle_empty_mission': [400952,
+                                  14,
+                                  '__text',
+                                  '473b6dac3fa00ae8840ff5ff88c0a69943174836e25189a6a3e88532741b13c5'],
+ 'ship_lifecycle_reaction_exclusion': [-77806,
+                                       14,
+                                       '__text',
+                                       '586cc43f0184717f3c2513d92ebab30601b66aa5463ecb6a12441f6a682e6455'],
+ 'ship_lifecycle_base_actor': [-81548,
+                               948,
+                               '__text',
+                               '88437b7848d85fadf366a7bec5c102e8f85b0aa6455fb37d60ea50e6c8ca5d6f'],
+ 'ship_lifecycle_npc_update': [611314,
+                               17180,
+                               '__text',
+                               'e6a3db4e2bdaf51990eddaec2e03514db9eb5bb8a89976338b28605117681d20'],
+ 'ship_lifecycle_world_death': [106510,
+                                1044,
+                                '__text',
+                                'b2b3dd33cbc5f7ce937530800f3e23c5fa9b2e6630f92dd194b7cff902d9baab'],
+ 'ship_lifecycle_nonhostile_death': [107650,
+                                     12,
+                                     '__text',
+                                     '1af7d34d1aa1e74ac404afe1770303291e5a353ea9e56208c80d45e035f47db6'],
+ 'ship_lifecycle_objectives': [481528,
+                               1170,
+                               '__text',
+                               '914d71d12d2a226245b5a792f82d9c60dc7e24ebaa6b913c2d3e476bfbf5a966'],
+ 'ship_lifecycle_cargo_model': [-77266,
+                                246,
+                                '__text',
+                                '19766516b9a3016a5f6ee02277c456563061ba01343c3edf5abc260c5bc9e1f3'],
+ 'ship_lifecycle_radio_gate': [114020,
+                               59,
+                               '__text',
+                               '9606d9f2b4198e55a2dc11d9f787920073bdb7570f39ef2503c6cab9f701077c']}

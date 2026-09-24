@@ -7,9 +7,9 @@ var jobs:=[]
 func _initialize() -> void:call_deferred("run_progression")
 
 func run_progression() -> void:
-	var args:=OS.get_cmdline_user_args()
-	check(args.size()==3,"Expected explicit content, bindings and visuals")
-	if args.size()==3:verify(args)
+	var args:=CaptureSupport.arguments()
+	check(args.size() in [3,4],"Expected explicit content, bindings, visuals and optional captures")
+	if args.size() in [3,4]:verify(args.slice(0,3))
 	if failures==0 and origin!=null:
 		visual=Visuals.new()
 		check(visual.open(args[2],source.manifest),visual.error)
@@ -45,7 +45,14 @@ func complete_retained_jobs(args: PackedStringArray) -> void:
 			if contact>=0:break
 		if contact<0:
 			check(false,"No affordable contact in retained lounge: "+str(app.session.snapshot().contracts.population));return
-		app.lounge_panel.select_contact(contact);app.lounge_panel.confirm();app.lounge_panel.confirm()
+		app.lounge_panel.select_contact(contact)
+		if number==0 and args.size()==4:
+			await capture_lounge(args[3],"lounge-courier-desktop")
+			app.lounge_panel.set_mobile_layout(true);root.size=Vector2i(844,390)
+			await capture_lounge(args[3],"lounge-courier-mobile-landscape")
+			check(app.lounge_panel._yes.custom_minimum_size.y>=44,"Landscape mobile lost its larger touch action")
+			app.lounge_panel.set_mobile_layout(false);root.size=Vector2i(1280,720)
+		app.lounge_panel.confirm();app.lounge_panel.confirm()
 		if app._transition_failed:check(false,app.status.text);return
 		var accepted: Dictionary=app.session.snapshot()
 		var mission: Dictionary=accepted.contracts.mission
@@ -95,13 +102,14 @@ func after_four_successes() -> void:
 	var continued: RefCounted=actual.fork()
 	if not continued.begin_contract_conversation(definitions,catalogue,source):check(false,continued.error);return
 	var opened: Dictionary=continued.snapshot()
-	check(opened.dialogue.text_id==1792 and opened.dialogue.count==2 and opened.campaign_cursor==13,"The earned threshold opened the wrong original dialogue")
+	var first_text:=1806 if catalogue.tables.ships.size()==64 else 1792
+	check(opened.dialogue.text_id==first_text and opened.dialogue.count==2 and opened.campaign_cursor==13,"The earned threshold opened the wrong original dialogue")
 	check(opened.contracts==before.contracts and opened.mission==before.mission,"Opening the story paid or changed the retained job")
 	check(not continued.begin_contract_conversation(definitions,catalogue,source) and continued.snapshot()==opened,"The open conversation restarted or advanced twice")
 	check(continued.prepare_contract_departure(definitions,catalogue).is_empty(),"The unacknowledged story allowed departure")
 	check(continued.acknowledge(),continued.error)
-	check(continued.snapshot().dialogue.text_id==1793 and continued.snapshot().progress==before.progress,"The first line advanced the story early")
-	check(continued.previous() and continued.snapshot().dialogue.text_id==1792,"Previous did not retain the original conversation")
+	check(continued.snapshot().dialogue.text_id==first_text+1 and continued.snapshot().progress==before.progress,"The first line advanced the story early")
+	check(continued.previous() and continued.snapshot().dialogue.text_id==first_text,"Previous did not retain the original conversation")
 	check(continued.acknowledge() and continued.acknowledge(),continued.error)
 	var finished: Dictionary=continued.snapshot()
 	check(finished.campaign_cursor==14 and finished.progress.campaign_cursor==14 and finished.contracts.campaign_cursor==14,"Final acknowledgement split the story and contract career")

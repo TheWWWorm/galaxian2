@@ -1,14 +1,21 @@
 extends RefCounted
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 ## Source-backed declarations for the first Mac station visit only.
 const Values=preload("res://src/content/opening_escape_definitions.gd")
 const Fonts=preload("res://src/content/font_definitions.gd")
 const VALUES := {"scope":"first_station_entry","source_state":5,"campaign_cursor":1,"station_id":78,"system_id":15,"ship_id":0,"item_category_value_index":3,"source_ship_configuration":8,"display_ship_configuration":3,"equipment":[{"item_id":90,"slot":0,"quantity":1},{"item_id":81,"slot":1,"quantity":1}],"source_marked_item_ids":[90,81],"dialogue":{"mode":1,"events":[{"speaker_id":0,"text_id":1678},{"speaker_id":2,"text_id":1679},{"speaker_id":0,"text_id":1680},{"speaker_id":2,"text_id":1681},{"speaker_id":0,"text_id":1682},{"speaker_id":2,"text_id":1683},{"speaker_id":0,"text_id":1684},{"speaker_id":2,"text_id":1685},{"speaker_id":2,"text_id":1686},{"speaker_id":0,"text_id":1687},{"speaker_id":2,"text_id":1688},{"speaker_id":2,"text_id":1689},{"speaker_id":0,"text_id":1690},{"speaker_id":2,"text_id":1691},{"speaker_id":0,"text_id":1692},{"speaker_id":2,"text_id":1693},{"speaker_id":2,"text_id":1694},{"speaker_id":0,"text_id":1695},{"speaker_id":16,"text_id":1696}],"instruction_text_id":1696,"instruction_key_substitution":true,"acknowledgement_required":true,"previous_available":true},"mission":{"kind":11,"reward":0,"bonus":0,"station_id":78,"cursor_after_acknowledgement":2,"next_kind":154,"next_parameter":10}}
 const SPANS := {"state_request":[143511,87],"loadout":[415025,251],"replace_ship":[872102,92],"ship_configuration":[729164,20],"item_mark":[-84714,10],"item_clone":[-81788,32],"item_slot":[732010,151],"item_category":[-84670,10],"story_increment":[859802,58],"story_dispatch":[860092,29],"story_slots":[871406,8],"entry_mission":[860364,70],"mining_mission":[860434,73],"mission_constructor":[399266,317],"mission_parameter":[400562,12],"trigger_call":[446081,55],"trigger_gates":[873523,172],"trigger_station":[875132,33],"trigger_dispatch":[874924,16],"trigger_slot":[875406,4],"mission_kind":[400586,10],"mission_station":[400888,10],"story_flag":[400856,16],"shown_flag":[400498,22],"dialogue_call":[447318,69],"dialogue_constructor":[-694662,109],"dialogue_reset":[-693644,164],"dialogue_offsets":[-694496,97],"speaker_read":[-692286,186],"text_read":[-691916,87],"instruction_substitution":[-691739,53],"dialogue_count":[-686416,82],"dialogue_next":[-686464,48],"dialogue_previous":[-686208,30],"manual_next":[-685001,56],"manual_completion":[427938,56],"story_completion_gate":[428261,39],"story_completion_dispatch":[428382,498],"story_completion":[428880,54],"story_advance":[429803,57],"after_advance_dispatch":[429850,1652],"reward_and_retirement":[431502,209],"reward_getter":[400774,10],"bonus_getter":[400814,10],"dialogue_sizes":[1555258,8],"dialogue_records":[1546362,152]}
 
+const MAC_ALTERNATE := {"state_request":[143511,87],"loadout":[415443,251],"replace_ship":[872734,92],"ship_configuration":[729788,20],"item_mark":[-84714,10],"item_clone":[-81788,32],"item_slot":[732642,151],"item_category":[-84670,10],"story_increment":[860434,58],"story_dispatch":[860724,29],"story_slots":[872038,8],"entry_mission":[860996,70],"mining_mission":[861066,73],"mission_constructor":[399782,317],"mission_parameter":[401078,12],"trigger_call":[446607,55],"trigger_gates":[874155,172],"trigger_station":[875764,33],"trigger_dispatch":[875556,16],"trigger_slot":[876038,4],"mission_kind":[401102,10],"mission_station":[401404,10],"story_flag":[401372,16],"shown_flag":[401014,22],"dialogue_call":[447844,69],"dialogue_constructor":[-700558,109],"dialogue_reset":[-699540,164],"dialogue_offsets":[-700392,97],"speaker_read":[-698182,186],"text_read":[-697805,87],"instruction_substitution":[-697628,53],"dialogue_count":[-692304,82],"dialogue_next":[-692352,48],"dialogue_previous":[-692096,30],"manual_next":[-690889,56],"manual_completion":[428366,56],"story_completion_gate":[428689,39],"story_completion_dispatch":[428810,498],"story_completion":[429308,54],"story_advance":[430231,57],"after_advance_dispatch":[430278,1652],"reward_and_retirement":[431930,209],"reward_getter":[401290,10],"bonus_getter":[401330,10],"dialogue_sizes":[1530242,8],"dialogue_records":[1521346,152]}
+const MAC_VALUES := {"scope":"first_station_entry","source_state":5,"campaign_cursor":1,"station_id":78,"system_id":15,"ship_id":0,"item_category_value_index":3,"source_ship_configuration":8,"display_ship_configuration":3,"equipment":[{"item_id":90,"slot":0,"quantity":1},{"item_id":81,"slot":1,"quantity":1}],"source_marked_item_ids":[90,81],"dialogue":{"mode":1,"events":[{"speaker_id":0,"text_id":1689},{"speaker_id":2,"text_id":1690},{"speaker_id":0,"text_id":1691},{"speaker_id":2,"text_id":1692},{"speaker_id":0,"text_id":1693},{"speaker_id":2,"text_id":1694},{"speaker_id":0,"text_id":1695},{"speaker_id":2,"text_id":1696},{"speaker_id":2,"text_id":1697},{"speaker_id":0,"text_id":1698},{"speaker_id":2,"text_id":1699},{"speaker_id":2,"text_id":1700},{"speaker_id":0,"text_id":1701},{"speaker_id":2,"text_id":1702},{"speaker_id":0,"text_id":1703},{"speaker_id":2,"text_id":1704},{"speaker_id":2,"text_id":1705},{"speaker_id":0,"text_id":1706},{"speaker_id":16,"text_id":1707}],"instruction_text_id":1707,"instruction_key_substitution":true,"acknowledgement_required":true,"previous_available":true},"mission":{"kind":11,"reward":0,"bonus":0,"station_id":78,"cursor_after_acknowledgement":2,"next_kind":154,"next_parameter":10}}
+
 static func parameters(data: Variant) -> bool:
-	if not data is Dictionary or data.size()!=VALUES.size()+1 or not data.get("provenance") is Dictionary:return false
-	for key in VALUES:
-		if not Values.equal_value(data.get(key),VALUES[key]):return false
+	return _parameters(data,VALUES) or _parameters(data,MAC_VALUES)
+
+static func _parameters(data: Variant,expected: Dictionary) -> bool:
+	if not data is Dictionary or data.size()!=expected.size()+1 or not data.get("provenance") is Dictionary:return false
+	for key in expected:
+		if not Values.equal_value(data.get(key),expected[key]):return false
 	return true
 
 static func validate(data: Variant, source_bytes: int, arch: String, arrival: Dictionary, session: Dictionary) -> String:
@@ -19,7 +26,7 @@ static func validate(data: Variant, source_bytes: int, arch: String, arrival: Di
 	var origin: Variant=arrival.get("provenance",{}).get("actor")
 	if not Fonts.extent(origin,"offset","bytes",[315],source_bytes):return "First station lacks its source anchor"
 	if data.provenance.size()!=SPANS.size():return "Invalid first-station provenance"
-	for key in SPANS:
-		var span: Variant=data.provenance.get(key);var rule: Array=SPANS[key]
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],source_bytes) or int(span.offset)!=int(origin.offset)+int(rule[0]):return "Invalid first-station extent: "+key
-	return ""
+	var layouts: Array=[]
+	if _parameters(data,VALUES):layouts.append(SPANS)
+	if _parameters(data,MAC_VALUES):layouts.append(MAC_ALTERNATE)
+	return "" if Layouts.matches(data.provenance,int(origin.offset),source_bytes,layouts) else "Invalid first-station extent"

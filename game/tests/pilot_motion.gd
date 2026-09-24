@@ -89,9 +89,33 @@ func check_motion(bindings: RefCounted) -> void:
 	check(motion.set_response_factor(6.3) and motion.angular_units == before, "Vehicle change reset established angular state")
 	for i in 100: second = motion.advance(second, Vector2.ZERO, 1, 0.1)
 	check(motion.angular_units == Vector2.ZERO and motion.error.is_empty(), "Released controls did not settle")
+	check_lateral(bindings)
 	check(not motion.configure(bindings, "c".repeat(64), 12.6, 0.5) and motion.angular_units == Vector2.ZERO and motion.binding_id.is_empty(), "Failed configuration retained pilot state")
 	check(motion.advance(second, Vector2.ONE, 1, 1) == second and not motion.error.is_empty(), "Failed configuration retained usable flight")
 	motion.clear()
+
+func check_lateral(bindings: RefCounted) -> void:
+	var motion := Motion.new()
+	check(motion.configure(bindings, bindings.base_content_id, 12.6, 0.5), motion.error)
+	var pose := Transform3D.IDENTITY
+	var left := motion.advance(pose, Vector2.ZERO, 0, 0.1, -1.0)
+	check(left.origin.distance_to(Vector3(7.56, 0, 0)) < 0.0001, "Source response factor and initial lateral gain changed")
+	check(absf(motion.lateral_units_per_millisecond - 0.05292) < 0.00001, "Source lateral retention changed")
+	var held := motion.advance(left, Vector2.ZERO, 0, 0.1, -1.0)
+	check(held.origin.distance_to(Vector3(18.9, 0, 0)) < 0.0001, "Held lateral gain failed to ramp by source factor")
+	var fork := motion.fork_for_frame()
+	var released := motion.advance(held, Vector2.ZERO, 0, 0.1)
+	check(released.origin.distance_to(Vector3(26.838, 0, 0)) < 0.0001, "Released lateral rate failed to coast")
+	check(fork.advance(held, Vector2.ZERO, 0, 0.1).origin.distance_to(released.origin) < 0.0001, "Fork lost pending lateral motion")
+	var retained := motion.lateral_units_per_millisecond
+	check(motion.advance(released, Vector2.ZERO, 0, 0, 1.0) == released and motion.lateral_units_per_millisecond == retained, "Paused lateral input moved or consumed state")
+	for invalid in [0.5, 1.01, NAN, INF]:
+		check(motion.advance(released, Vector2.ZERO, 0, 0.1, invalid) == released and not motion.error.is_empty() and motion.lateral_units_per_millisecond == retained, "Invalid lateral command consumed state")
+	var right := Motion.new()
+	check(right.configure(bindings, bindings.base_content_id, 12.6, 0.5), right.error)
+	check(right.advance(pose, Vector2.ZERO, 0, 0.1, 1.0).origin.distance_to(Vector3(-7.56, 0, 0)) < 0.0001, "Right strafe sign changed")
+	check(motion.set_response_factor(6.3), motion.error)
+	check(motion.advance(released, Vector2.ZERO, 0, 0.1, -1.0).origin.x > released.origin.x, "Response change broke lateral control")
 
 func near(actual: Vector2, expected: Vector2, message: String) -> void:
 	check(actual.distance_to(expected) < 0.0001, message + ": " + str(actual))

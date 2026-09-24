@@ -104,9 +104,8 @@ func verify_definitions(pack: String, library: RefCounted, bindings: RefCounted)
 			"no_arrival":changed.arrival_staging={}
 			"empty","departure_without_context":
 				changed.opening_actors.player_initialization.flight_cache={}
-				# Remove the complete dependent progression branch. Retaining new
-				# mining or combat declarations would make this an inconsistent
-				# pack instead of an explicitly unsupported-cache fixture.
+				# Remove the early progression branch. Later travel declarations
+				# still require its station/training context and must be rejected.
 				var departure: Dictionary=changed.get("station_departure",{}).duplicate(true)
 				for key in changed:
 					if key in ["opening_handoff","arrival_session","arrival_environment","arrival_actor_motion","arrival_actor_construction","arrival_world_initialization","player_destruction","game_over_presentation","flight_notices"] or str(key).begins_with("station_") or str(key).begins_with("first_flight") or str(key).begins_with("mining_") or str(key).begins_with("full_hold_") or str(key).begins_with("combat_training"):
@@ -120,7 +119,7 @@ func verify_definitions(pack: String, library: RefCounted, bindings: RefCounted)
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		var reader:=Bindings.new();check(reader.open(pack,library.manifest),reader.error)
 		var accepted:=reader.open(directory,library.manifest)
-		if scenario=="empty":check(accepted and reader.opening_actors.player_initialization.flight_cache.is_empty(),"Explicit unsupported cache rejected: "+reader.error)
+		if scenario=="empty" and changed.get("mido_travel",{}).is_empty():check(accepted and reader.opening_actors.player_initialization.flight_cache.is_empty(),"Explicit unsupported cache rejected: "+reader.error)
 		else:check(not accepted and reader.opening_actors.is_empty() and reader.arrival_staging.is_empty(),"Failed pack retained cache: "+scenario)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)
 

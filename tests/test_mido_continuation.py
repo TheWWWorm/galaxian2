@@ -1,5 +1,6 @@
 """The next local visit remains gated by its additional source declarations."""
 import copy
+from contextlib import ExitStack
 from pathlib import Path
 import sys
 import unittest
@@ -45,3 +46,26 @@ class MidoContinuationTests(unittest.TestCase):
         mach,arrival,layouts=declaration_fixture({**reader.CONTINUATION_LAYOUTS,**reader.RETURN_LAYOUTS})
         with patch.object(reader,'LAYOUTS',{}),patch.object(reader,'CONTINUATION_LAYOUTS',layouts),patch.object(reader,'RETURN_LAYOUTS',{}):
             self.assertFalse(reader.extract_mido_travel(mach,arrival,{},{}))
+
+    def test_each_layout_keeps_its_authored_events_and_optional_entry_modal(self):
+        for alternate in [False,True]:
+            groups = (['MAC_ALTERNATE','MAC_CONTINUATION_LAYOUTS','MAC_RETURN_LAYOUTS','MAC_ARRIVAL_BRIEFING_LAYOUTS']
+                      if alternate else ['LAYOUTS','CONTINUATION_LAYOUTS','RETURN_LAYOUTS','ARRIVAL_BRIEFING_LAYOUTS'])
+            combined = {key:row for group in groups for key,row in getattr(reader,group).items()}
+            mach,arrival,layouts = declaration_fixture(combined,0x700000)
+            with ExitStack() as stack:
+                for group in groups:
+                    stack.enter_context(patch.object(reader,group,{key:layouts[key] for key in getattr(reader,group)}))
+                result = self.extract(mach,arrival)
+                self.assertEqual(result['conversations'],(reader.MAC_VALUES if alternate else reader.VALUES)['conversations'])
+                self.assertEqual(result['arrival_briefing']['events'],[{'speaker_id':0,'text_id':1784 if alternate else 1770,'voice_event_id':163}])
+                self.assertEqual(result['arrival_briefing']['station_id'],76)
+                self.assertEqual(result['continuation']['briefing_events'],[])
+                # Losing the optional mode0 count must not erase a verified trip
+                # or invent a timed-radio replacement for the missing modal.
+                bad=copy.copy(mach);raw=bytearray(mach.data)
+                count=result['provenance']['yrdal_briefing_yrdal_entry_count']
+                raw[count['offset']-mach.slice_offset]^=255;bad.data=bytes(raw)
+                remaining=self.extract(bad,arrival)
+                self.assertNotIn('arrival_briefing',remaining)
+                self.assertEqual(remaining['continuation'],result['continuation'])

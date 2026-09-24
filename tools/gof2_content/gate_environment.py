@@ -1,9 +1,9 @@
 """Original gate constants and geometry selectors, without executable payloads."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_gate_environment(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'ordinary_gate_environment',
@@ -135,3 +135,29 @@ LAYOUTS = {'gate_zero_origin': [-46492,
                     16,
                     '__const',
                     '4eb650239b5a74686b5d5b32a2befc76c53626d7a949e883e545c10bd01e18b4']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'gate_zero_origin': [-46492, 30, '__text', 'bd72ae245269edfcd339d580974c492e0bcb40853ef663c2bc983b42352f2269'],
+ 'gate_seed': [-39500, 139, '__text', 'b9d331ac03b5802bdeceece25380a9b61df3d7624d56a5c7d6b39ba48febd7d4'],
+ 'gate_slots': [-39048, 98, '__text', 'e4fbcf1952623d39b2ef530b6777f6394030a02f76239818f6de37fb86d0750f'],
+ 'gate_placement': [-38940, 351, '__text', 'c1c6f3fbd7b949e4af5979f603a9b69981daa24822725b31a453bee7ede8bb79'],
+ 'gate_resources': [-38589, 332, '__text', 'd22abf331475566e07b6d2ec2e4d1b3d98dc514fa8a4a2be073f0751f09d55ab'],
+ 'gate_children_lod': [-39361, 313, '__text', '57ea0bfff6506a25dcbb1c8518b79a2ce8d0b031dd62eedaeadf1d7e32a220a3'],
+ 'gate_constructor': [639880, 329, '__text', '56bc6860d89b0b6ce0501b83a5bd5c856bbcc7b46ada1ae3e39e41e455ca6c28'],
+ 'gate_system_loader': [-679366, 1100, '__text', 'ed1307f3b2249adbc99fa87dc54bce34c7de097c2f229dcf0e922fe9303416cd'],
+ 'gate_system_constructor': [734764, 236, '__text', '56690428c5f202baadd8567bab29de3f0e3bfe37f40c3fbf3102a3acdaee2a31'],
+ 'gate_station_predicate': [735732, 44, '__text', 'a528135c0e06eaded1ceeadf70c4f9db0af71a1fd6b96c5eb26298d31a7dd4f6'],
+ 'gate_type_getter': [735296, 10, '__text', '89fcfb1a4e11c14ec174b815f4ca804bac72b0fb13c54f03598369d97cbb108e'],
+ 'gate_rotation': [1235426, 480, '__text', '73db149f4843fca28703e226404845ce3ee8c89e68ebb2d32a0c056d06741eb2'],
+ 'gate_vector_transform': [1234546, 240, '__text', '7e6e0f80b9264d47acb63fbefbad5b51b2fef2308103017c335bb02aa88911f7'],
+ 'gate_arrival_selection': [-43078, 561, '__text', '8417ecc4052fb1dacc04240950dc3d0321e6286a8d3b4947c8c2799036744178'],
+ 'gate_position_getter': [641808, 58, '__text', 'c9c441eb67406897c6dfbafea46642a0979d6b5c5abce3df4e00afe132616c37'],
+ 'gate_model_lod': [-727538, 310, '__text', '8a43d82f56a91d71e303dfa7fed35280f4b2dac48d53d61ff2db0efadfdc90b9'],
+ 'gate_child_lod': [-728226, 282, '__text', '2e9e2552ef66255cdfd574679323cb24afc32692132c7c0c8c37255c34c71c0a'],
+ 'gate_radial_slope': [1531910, 4, '__const', 'ea2845900b5856c9bf354b1aa9761b5aa6888e5ed61738fe9579ca42bc0f6054'],
+ 'gate_radial_bases': [1557330, 8, '__const', '6d8cea56e18655001bdc94e3c754cf08ce52a0f7aff73a85f42d0d0ef434f212'],
+ 'gate_angle_fraction': [1550078, 4, '__const', '54e347282ecf0fd46f002970fa012534725e0bf3b2ad2f4ca0efc0134d7e1d28'],
+ 'gate_angle_tau': [1550122, 4, '__const', '12d85026b5109a3119231704608d5991a63d8d397d2867a9fc522305810ddb76'],
+ 'gate_model_yaw': [1521054, 4, '__const', '3a1d8964b4fe305b5d25d90b8ba168d95e559961da4a9b22df4558cc257e7e11'],
+ 'gate_resource_table': [1551410, 32, '__const', '46906dfc9b3c08757d68f41e502838788fc1b27edb224f7446594abde9fedcdc'],
+ 'gate_lod_table': [1551442, 16, '__const', '4eb650239b5a74686b5d5b32a2befc76c53626d7a949e883e545c10bd01e18b4']}

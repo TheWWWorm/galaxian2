@@ -1,19 +1,16 @@
 """Source first-mining session declarations; original code is never a runtime."""
 import copy
 from .ship_models import section_bytes
+from .declaration_layouts import recognize
 
 def extract_mining_session(mach, arrival, approach, drill):
     if mach.architecture!='x86_64' or approach.get('scope')!='first_mining_approach' or drill.get('scope')!='ordinary_mining_drill':return {}
     try:
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,pattern) in LAYOUTS.items():
-            found=section_bytes(mach,anchor+delta,size,b'__text')
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof
+        proof=recognize(mach,origin['offset'],[LAYOUTS,MAC_ALTERNATE])
+        if not proof:return {}
+        result=copy.deepcopy(MAC_VALUES if proof["failure_instruction_gate"]["bytes"]==170 else VALUES);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
@@ -51,3 +48,115 @@ LAYOUTS = {'ongoing_drill': [588551,
  'failure_text': [-115464, 20, '488d059bfe2600488b38be10020000e9ef0b0000'],
  'notification_dispatch': [-116996, 29, '418d46ff83f82e0f8706120000488d0db6130000486304814801c8ffe0'],
  'failure_jump_entry': [-111902, 4, '32f2ffff']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'ongoing_drill': [589098,
+                   179,
+                   '418bb42484010000e8e509fdff84c0754c498bbc2470020000e85609fdff84c0751b498bbc2470020000e85309fdff85c07e0a4c89e7e809320000eb74498bbc2470020000e82a09fdff88c1b00184c9746141c684244304000001eb26498bbc2440020000e86ed2f5ff84c07515498bbc2440020000e84dd2f5ff88c130c084c97430488d05a6e51b00488b00c78084010000000000004c89e7e8a53100004c89f7be080000004c89e231c9e86137f5ffb001'],
+ 'finish_release': [602696,
+                    84,
+                    '49c7877002000000000000498b57284c89ff31f6e869c3ffff488d1d2ab71b00488b3bbe01000000e8719eecff488b3bbe03000000e8649eecff418b7738488b3b4883c4185b415c415d415e415f5de9d2a5ecff'],
+ 'stop_dispatch': [344571,
+                   48,
+                   '498b7d60e8984603003c010f8596010000488d0547a11f00488b08c7818401000000000000488b38e87cd8070083f802'],
+ 'stop_finish': [344887, 9, '498b7d60e82eec0300'],
+ 'active_drill': [559260, 17, '554889e54883bf70020000000f95c05dc3'],
+ 'player_frame_dispatch': [365997,
+                           86,
+                           '498d454c4183bdbc01000000490f4ec48b304d8b8d980000004d8b85a8000000498b8d88000000498b95a0000000498b7d60458b951c010000410fb65d6b418b45208944241083e301895c240844891424e831230300'],
+ 'frame_delta': [362878,
+                 72,
+                 '498b7d10e84be80e003d960000007f12498b7d10e83be80e004889c131c085c97822498b7d10e829e80e004889c1b89600000081f9960000007f09498b7d10e810e80e0041894548'],
+ 'hud_drill_input': [379393,
+                     448,
+                     '498bbd88000000e89bd7f8ff0f57c90f2ec8764c498d454c4183bdbc01000000490f4ec4448b30498b5d60498bbd88000000e870d7f8fff30f118580fcffff498bbd88000000e85cd7f8fff30f598580fcffff4889df4489f6e897500300eb5f498bbd88000000e83bd7f8ff0f2e05f2981100764a498d454c4183bdbc01000000490f4ec4448b30498b5d60498bbd88000000e80fd7f8fff30f118580fcffff498bbd88000000e8fbd6f8fff30f598580fcffff4889df4489f6e87e4d0300488d05f7181f008a5810498bbd88000000e8f8d6f8ff0f57c9f6c3010f84b70000000f2ec87650498d454c4183bdbc010000004c0f4fe0458b3424498b5d60498bbd88000000e8c3d6f8fff30f118580fcffff498bbd88000000e8afd6f8fff30f598580fcffff4889df4489f6e87c520300e98a000000498bbd88000000e88bd6f8ff0f2e051c9811007675498d454c4183bdbc010000004c0f4fe0458b3424498b5d60498bbd88000000e85ed6f8fff30f118580fcffff498bbd88000000e84ad6f8fff30f598580fcffff4889df4489f6e8cf550300eb280f2ec877ae498bbd88000000e824d6f8ff0f2e05b59711000f8730ffffffeb084c89efe8e55dffff'],
+ 'failure_text': [-115884, 20, '488d0517a82600488b38be10020000e9ef0b0000'],
+ 'notification_dispatch': [-117416, 29, '418d46ff83f82e0f8706120000488d0db6130000486304814801c8ffe0'],
+ 'failure_jump_entry': [-112322, 4, '32f2ffff']}
+
+LAYOUTS.update({'failed_getter': [602252, 14, '554889e58a874304000024015dc3'],
+ 'failure_instruction_gate': [371951,
+                              146,
+                              '488d05508f1f00f64037010f8581000000498b7d60e8838303003c01757441c64569014c89efe82687ffff498b9dc80000004885db751cbf78000000e8fcd411004889c34889dfe8b185efff49899dc8000000488d05518e1f00488b38be5e020000e8746a0b004889df4889c6e85787efff41c6851201000001488d05d68e1f0041c6855901000001c6403701e9661e0000'],
+ 'instruction_ack_dispatch': [350484, 34, '89d8458ab42438020000498bbc24c800000089c64489fae898edefff41f6c6017466'],
+ 'instruction_ack_gate': [348379,
+                          42,
+                          '41f6442469010f846a02000041f6842412010000010f84ca08000041f6842413010000010f8438040000'],
+ 'instruction_acknowledgement': [350620,
+                                 36,
+                                 '85c00f85adf9ffff41c68424120100000041c6442469004c89e7e8e9daffffe991f9ffff'],
+ 'instruction_button': [-702776,
+                        152,
+                        '554889e541574156535089d34189f64989ff41f64771017457498b7f104885ff74124489f689dae89ebb180088c131c084c97559498b7f184885ff74154489f689dae883bb180088c1b80100000084c9753b498b7f204885ff74154489f689dae865bb180088c1b80200000084c9751d498b7f28b8ffffffff4885ff740f4489f689dae8a0d11500b8ffffffff4883c4085b415e415f5dc3'],
+ 'instruction_pause': [341056,
+                       99,
+                       '554889e54156534889fb8a436924018883fa010000488d054e0d2000488b38e850bcf0ff488b7b60e801470300488bbb90000000e86f69fcff4989c64d85f6741d41833e00741731db498b4608488b3cd8e86c9cf9ff48ffc3413b1e72eb5b415e5dc3'],
+ 'instruction_reset_owner': [588314,
+                             211,
+                             'f3410f108424640200000f2e0583400f00762531c0412b842484010000d1f8f30f2ac8f30f58c1f3410f1184246402000030c0e968010000498bbc24700200004885ff0f85a400000041c68424430400000041c684249103000000bfe8000000e8ad870e004989c7498bbc2440020000e8e55effff498b8c24400200008b91740100004c89ff89c64c89f1e8a804fdff4d89bc2470020000498b842440020000488b4008c7404400000000488d1dde461c00488b3bbe0100000031d231c90f57c0e870e9ecff418b742438488b3be851f4ecff'],
+ 'instruction_resume': [341156,
+                        88,
+                        '554889e54156534889fb488d05f50c2000488b38e865bbf0ff488b7b60e8b6460300488bbb90000000e81669fcff4989c64d85f6741d41833e00741731db498b4608488b3cd8e85b9cf9ff48ffc3413b1e72eb5b415e5dc3'],
+ 'instruction_title': [-707400,
+                       54,
+                       '554889e54156534989f64889fb488d05ce063000488b38be7b010000e8f1e21b004889df4889c64c89f231c95b415e5de90100000090'],
+ 'instruction_update': [377251, 31, '41f68512010000017415418b7548498bbdc8000000e86180efffe9250a0000']})
+MAC_ALTERNATE.update({'failed_getter': [602800, 14, '554889e58a874304000024015dc3'],
+ 'failure_instruction_gate': [372439,
+                              170,
+                              '488d057c341f00488b38e8be6b070083f8020f8592000000488d052c351f00f64037010f8581000000498b7d60e8a78303003c01757441c64569014c89efe80884ffff498b9dc80000004885db751cbf78000000e8487111004889c34889dfe8a96cefff49899dc8000000488d0529341f00488b38be5e020000e85c660b004889df4889c6e84f6eefff41c6851201000001488d05b2341f0041c6855901000001c6403701e9661e0000'],
+ 'instruction_ack_dispatch': [350198, 34, '89d8458ab42438020000498bbc24c800000089c64489fae8aed7efff41f6c6017466'],
+ 'instruction_ack_gate': [348093,
+                          42,
+                          '41f6442469010f846a02000041f6842412010000010f84ca08000041f6842413010000010f8438040000'],
+ 'instruction_acknowledgement': [350334,
+                                 36,
+                                 '85c00f85adf9ffff41c68424120100000041c6442469004c89e7e8e9daffffe991f9ffff'],
+ 'instruction_button': [-708672,
+                        152,
+                        '554889e541574156535089d34189f64989ff41f64771017457498b7f104885ff74124489f689dae87ad5180088c131c084c97559498b7f184885ff74154489f689dae85fd5180088c1b80100000084c9753b498b7f204885ff74154489f689dae841d5180088c1b80200000084c9751d498b7f28b8ffffffff4885ff740f4489f689dae818eb1500b8ffffffff4883c4085b415e415f5dc3'],
+ 'instruction_pause': [340770,
+                       99,
+                       '554889e54156534889fb8a436924018883fa010000488d0554b61f00488b38e86ea6f0ff488b7b60e8374a0300488bbb90000000e88d6afcff4989c64d85f6741d41833e00741731db498b4608488b3cd8e88a9df9ff48ffc3413b1e72eb5b415e5dc3'],
+ 'instruction_reset_owner': [588850,
+                             222,
+                             'f3410f108424640200000f2e0503dd0e00762531c0412b842484010000d1f8f30f2ac8f30f58c1f3410f1184246402000030c0e973010000498bbc24700200004885ff0f85af00000041c68424430400000041c684249103000000488d058ee71b00c6403700bfe8000000e8d6230e004989c7498bbc2440020000e8da5effff498b8c24400200008b91740100004c89ff89c64c89f1e88904fdff4d89bc2470020000498b842440020000488b4008c7404400000000488d1da3ec1b00488b3bbe0100000031d231c90f57c0e84dd0ecff418b742438488b3be82edbecff'],
+ 'instruction_resume': [340870,
+                        88,
+                        '554889e54156534889fb488d05fbb51f00488b38e883a5f0ff488b7b60e8ec490300488bbb90000000e8346afcff4989c64d85f6741d41833e00741731db498b4608488b3cd8e8799df9ff48ffc3413b1e72eb5b415e5dc3'],
+ 'instruction_title': [-713296,
+                       54,
+                       '554889e54156534989f64889fb488d05aec52f00488b38be7b010000e8e1f71b004889df4889c64c89f231c95b415e5de90100000090'],
+ 'instruction_update': [377763, 31, '41f68512010000017415418b7548498bbdc8000000e85967efffe9250a0000']})
+VALUES = {'automatic_finish_resumes_motion': True,
+ 'campaign_cursor': 2,
+ 'cancelled_target_grants_ore': False,
+ 'commands_after_update': True,
+ 'creation_frame_advances_drill': False,
+ 'failure_instruction': {'acknowledgement_advances_story': False,
+                         'campaign_cursor': -1,
+                         'opens_before_mission_poll': True,
+                         'repeat_each_drill': False,
+                         'text_id': 606,
+                         'title_text_id': 379},
+ 'failure_notification': 8,
+ 'failure_text_id': 528,
+ 'max_frame_ms': 150,
+ 'scope': 'first_mining_session',
+ 'stop_audio_events': [1, 3]}
+MAC_VALUES = {'automatic_finish_resumes_motion': True,
+ 'campaign_cursor': 2,
+ 'cancelled_target_grants_ore': False,
+ 'commands_after_update': True,
+ 'creation_frame_advances_drill': False,
+ 'failure_instruction': {'acknowledgement_advances_story': False,
+                         'campaign_cursor': 2,
+                         'opens_before_mission_poll': True,
+                         'repeat_each_drill': True,
+                         'text_id': 606,
+                         'title_text_id': 379},
+ 'failure_notification': 8,
+ 'failure_text_id': 528,
+ 'max_frame_ms': 150,
+ 'scope': 'first_mining_session',
+ 'stop_audio_events': [1, 3]}

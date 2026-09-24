@@ -1,4 +1,6 @@
 extends RefCounted
+const Frames=preload("res://src/simulation/frame_clock.gd")
+const Readonly=preload("res://src/simulation/readonly_state.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 ## Native freighter breakup and retained wreck. Flight resolves the lethal pose;
 ## the encounter separately owns accounting, player salvage and world effects.
@@ -49,6 +51,10 @@ func configure_alioth_attack(bindings: RefCounted,resources: RefCounted,construc
 	if not motion.configure_alioth_attack(bindings,construction,actor_id):return reject(motion.error)
 	return _configure_population(bindings,resources,construction,actor_id,Definitions.for_alioth(bindings))
 
+func _configure_story(bindings: RefCounted,resources: RefCounted,construction: RefCounted,actor_id: int,data: Dictionary) -> bool:
+	clear()
+	return _configure_population(bindings,resources,construction,actor_id,data.freighter_death)
+
 func _configure_population(bindings: RefCounted,resources: RefCounted,construction: RefCounted,actor_id: int,rules: Dictionary) -> bool:
 	if rules.is_empty():return reject("Unsupported large-ship lifecycle context")
 	var population: Dictionary=construction.snapshot()
@@ -65,10 +71,10 @@ func _configure_population(bindings: RefCounted,resources: RefCounted,constructi
 	if model.is_empty() or effect.is_empty():return reject("Invalid freighter animation or explosion clocks")
 	_rules=rules.duplicate(true);_construction_rules=shared.duplicate(true);_resources=pack
 	if _rules.is_empty():return reject("Unsupported freighter lifecycle context")
-	_max_ms=int(bindings.frame_clock.max_frame_milliseconds)
+	_max_ms=Frames.simulation_limit(bindings)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"campaign_cursor":int(_rules.campaign_cursor),
 		"actor_id":int(actor_id),"population_group":row.population_group,"model_scale":float(rules.get("model_scale",1.0)),"actor_kind":int(_rules.actor_kind),"hull_catalogue_id":int(_rules.hull_catalogue_id),"subtype":int(_rules.subtype),
-		"phase":"ready","mode":0,"pose":row.body_pose,"statistics_pose":row.statistics_pose,"active":true,
+		"phase":"ready","mode":0,"pose":row.body_pose,"statistics_pose":row.statistics_pose,"active":true,"retire_on_transfer":true,
 		"world_movement_enabled":true,"interaction_blocked":true,"animation":model,"wreck_elapsed_ms":0,"cleanup_elapsed_ms":0,
 		"material_id":int(_rules.initial_material_id),"wreck_shape_origin":Vector3.ZERO,"wreck_shapes":pack.wreck_shapes.duplicate(true),
 		"fragments":[],"effect":effect,"effect_scale":float(_rules.initial_effect_scale),
@@ -102,6 +108,7 @@ func advance(delta_ms: Variant,random_state: Variant,lethal_actor: Dictionary={}
 	# starts a fresh explosion; no excess time leaks into the wreck timers.
 	Explosion.advance(next.effect,int(delta_ms))
 	if next.phase=="animation":
+		next.retire_on_transfer=false
 		Playback.advance([next.animation],int(delta_ms))
 		if not next.animation.playing:
 			next.phase="wreck";next.mode=int(_rules.wreck_mode);breakup=true
@@ -118,7 +125,7 @@ func advance(delta_ms: Variant,random_state: Variant,lethal_actor: Dictionary={}
 			next.cargo.rotation_radians=Vectors.added(next.cargo.rotation_radians,Vector3.ONE*angle)
 			next.cargo.pose.basis=Vectors.local_xyz(next.cargo.rotation_radians)
 		if (cargo_present and next.cleanup_elapsed_ms>int(_rules.cleanup_after_ms)) or (not cargo_present and not next.effect.active):
-			next.interaction_blocked=true
+			next.interaction_blocked=true;next.retire_on_transfer=true
 			if next.cleanup_elapsed_ms>int(_rules.cleanup_after_ms):cleaned=next.active;next.active=false
 		if next.wreck_elapsed_ms>=int(_rules.wreck_change_at_ms) and next.material_id==int(_rules.initial_material_id):
 			next.material_id=int(_rules.wreck_material_id);next.wreck_shape_origin=next.pose.origin
@@ -150,12 +157,25 @@ static func valid_cargo(entries: Variant) -> bool:
 		if not entry is Dictionary or entry.size()!=2 or not Vitals.integer(entry.get("item_id")) or entry.item_id>=233 or not Vitals.integer(entry.get("quantity")) or entry.quantity<1:return false
 	return true
 
+## The encounter commits a native recovery frame on this detached lifecycle.
+## Wreck collision volumes keep their own source-set origin, unlike the body.
+func _retain_recovery_frame(frame: Dictionary) -> void:
+	var changes: Dictionary=frame.actor_changes
+	if changes.has("body_pose"):_state.pose=changes.body_pose
+	if changes.has("statistics_pose"):_state.statistics_pose=changes.statistics_pose
+	if changes.has("cargo_pose"):_state.cargo.pose=changes.cargo_pose
+	if changes.has("cargo_model_exists"):_state.cargo.model_exists=changes.cargo_model_exists
+	if changes.has("cargo_eligible"):_state.cargo.eligible=changes.cargo_eligible
+	if changes.has("cargo_entries"):_state.cargo.entries=changes.cargo_entries.duplicate(true)
+	if changes.has("active"):_state.active=changes.active
+
 func snapshot() -> Dictionary:return _state.duplicate(true)
 func presentation_identity() -> RefCounted:return _identity
 func fork_for_frame() -> RefCounted:
+	# Configuration is fixed after preparation; detach live state only.
 	var copy: RefCounted=get_script().new()
-	copy._state=_state.duplicate(true);copy._rules=_rules.duplicate(true);copy._resources=_resources.duplicate(true)
-	copy._construction_rules=_construction_rules.duplicate(true);copy._max_ms=_max_ms;copy._identity=_identity
+	copy._state=_state.duplicate(true);copy._rules=Readonly.freeze(_rules);copy._resources=Readonly.freeze(_resources)
+	copy._construction_rules=Readonly.freeze(_construction_rules);copy._max_ms=_max_ms;copy._identity=_identity
 	return copy
 func clear() -> void:error="";_state={};_rules={};_resources={};_construction_rules={};_max_ms=0;_identity=null
 func reject(message: String) -> bool:error=message;return false

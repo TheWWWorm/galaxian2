@@ -7,6 +7,8 @@ const Return=preload("res://src/content/alioth_return_definitions.gd")
 const VALUES = {"scope":"base_system_navigation","gate_station_field":6,"gate_environment_object_index":1,"route_available_neighbors_only":true,"route_order":"fewest_links_catalogue_order","same_station_clears_course":true,"pending_story_requires_station_match":true}
 const SPANS = {"free_navigation_gate_helpers":[735008,198],"free_navigation_route_graph":[901582,608],"free_navigation_route_search":[902190,430],"free_navigation_route_predecessors":[902620,288],"free_navigation_queue_removal":[903154,98],"free_navigation_course":[137826,368],"free_navigation_story_selection":[856965,661]}
 
+const MAC_SPANS = {"free_navigation_gate_helpers":[735640,198],"free_navigation_route_graph":[902214,608],"free_navigation_route_search":[902822,430],"free_navigation_route_predecessors":[903252,288],"free_navigation_queue_removal":[903786,98],"free_navigation_course":[137826,368],"free_navigation_story_selection":[857597,661]}
+
 static func parameters(data: Variant) -> bool:
 	return Equal.equal_value(data,VALUES)
 
@@ -16,4 +18,7 @@ static func available(bindings: RefCounted) -> bool:
 static func ordinary_departure_at(bindings: RefCounted,cursor: int,story: Dictionary,station_id: int) -> bool:
 	if not available(bindings):return false
 	var expected:=Campaign.mission(bindings.mido_travel,cursor)
-	return not expected.is_empty() and story==expected and station_id>=0 and station_id<int(bindings.early_contracts.base_navigation.global_station_bound) and (station_id!=int(expected.station_id) or Campaign.visit_at(bindings.mido_travel,cursor,station_id))
+	return not expected.is_empty() and story==expected and station_id>=0 and station_id<int(bindings.early_contracts.base_navigation.global_station_bound) and (station_id!=int(expected.station_id) or Campaign.ordinary_story_at(bindings.mido_travel,cursor,station_id))
+
+static func destination_supported(bindings: RefCounted,cursor: int,story: Dictionary,station_id: int) -> bool:
+	return ordinary_departure_at(bindings,cursor,story,station_id) or (available(bindings) and story==Campaign.mission(bindings.mido_travel,cursor) and (Campaign.rescue_at(bindings.mido_travel,cursor,station_id) or Campaign.sahi_at(bindings.mido_travel,cursor,station_id)))

@@ -9,14 +9,20 @@ const FullHoldParticles=preload("res://src/content/full_hold_particle_definition
 const PlayerDestruction=preload("res://src/content/player_destruction_definitions.gd")
 const CombatTrainingVisuals=preload("res://src/content/combat_training_visual_definitions.gd")
 const CombatTrainingStory=preload("res://src/content/combat_training_story_definitions.gd")
+const FastForward=preload("res://src/content/fast_forward_definitions.gd")
+const OrdinaryMusic=preload("res://src/content/ordinary_music_definitions.gd")
+const PhysicalContacts=preload("res://src/content/physical_scenery_contact_definitions.gd")
 const MidoTravel=preload("res://src/content/mido_travel_definitions.gd")
 const EarlyContracts=preload("res://src/content/early_contract_definitions.gd")
 const EngineParticles=preload("res://src/content/engine_particle_definitions.gd")
+const EngineParticleOwners=preload("res://src/content/engine_particle_owner_definitions.gd")
+const DeepScienceStock=preload("res://src/content/deep_science_stock_definitions.gd")
+const PersistentContacts=preload("res://src/content/persistent_contact_definitions.gd")
 const AmbientPopulation=preload("res://src/content/ambient_population_definitions.gd")
 const AmbientCombat=preload("res://src/content/ambient_combat_definitions.gd")
 const FreighterDestruction=preload("res://src/content/freighter_destruction_definitions.gd")
 const AmbientLifecycle=preload("res://src/content/ambient_lifecycle_definitions.gd")
-const MAX_READER_VERSION:=172
+const MAX_READER_VERSION:=197
 const CombatTrainingDestruction=preload("res://src/content/combat_training_destruction_definitions.gd")
 const CombatTrainingWeapons=preload("res://src/content/combat_training_weapon_definitions.gd")
 const CombatTrainingControl=preload("res://src/content/combat_training_control_definitions.gd")
@@ -116,9 +122,15 @@ var player_destruction := {}
 var station_equipment := {}
 var combat_training_visuals := {}
 var combat_training_story := {}
+var fast_forward := {}
+var ordinary_music := {}
+var physical_scenery_contacts := {}
 var mido_travel := {}
 var early_contracts := {}
+var deep_science_stock := {}
+var persistent_contacts := {}
 var engine_particles := {}
+var engine_particle_owners := {}
 var ambient_population := {}
 var ambient_combat := {}
 var freighter_destruction := {}
@@ -214,9 +226,15 @@ func open(directory: String, base: Dictionary) -> bool:
 	station_equipment = {}
 	combat_training_visuals = {}
 	combat_training_story = {}
+	fast_forward = {}
+	ordinary_music = {}
+	physical_scenery_contacts = {}
 	mido_travel = {}
 	early_contracts = {}
+	deep_science_stock = {}
+	persistent_contacts = {}
 	engine_particles = {}
+	engine_particle_owners = {}
 	ambient_population = {}
 	ambient_combat = {}
 	freighter_destruction = {}
@@ -291,6 +309,9 @@ func open(directory: String, base: Dictionary) -> bool:
 			or header.get("base_content_id") != base.content_id:
 		return fail("These resource bindings belong to a different base content identity")
 	var architecture := "armv7" if base.get("profile", {}).get("edition") == "ios-hd" else "x86_64"
+	var layout := Library.catalogue_layout(base)
+	if layout.is_empty():
+		return fail("Resource bindings require a supported ship and language catalogue layout")
 	if header.get("architecture") != architecture:
 		return fail("Resource binding architecture does not match the base edition")
 	for key in ["source_executable_sha256", "records_sha256", "binding_id"]:
@@ -377,7 +398,7 @@ func open(directory: String, base: Dictionary) -> bool:
 			return fail("Invalid ship model table")
 		staged_ship_models = body.ship_models
 		if not staged_ship_models.is_empty():
-			var count := 64 if architecture == "armv7" else 61
+			var count := int(layout.ships)
 			if not staged_ship_models.get("resource_ids") is Array or staged_ship_models.resource_ids.size() != count:
 				return fail("Ship model table does not match this edition's catalogue")
 			for id in staged_ship_models.resource_ids:
@@ -441,13 +462,13 @@ func open(directory: String, base: Dictionary) -> bool:
 		staged_hangars = body.hangars
 	var staged_placement := {}
 	if version>=5:
-		var placement_error := Hangars.validate_ship_placement(body.get("ship_placement"), int(header.source_executable_bytes), architecture)
+		var placement_error := Hangars.validate_ship_placement(body.get("ship_placement"), int(header.source_executable_bytes), architecture, int(layout.ships))
 		if not placement_error.is_empty():
 			return fail(placement_error)
 		staged_placement = body.ship_placement
 	var staged_lights := {}
 	if version>=6:
-		var light_error := Hangars.validate_ship_lights(body.get("ship_lights"), int(header.source_executable_bytes), architecture)
+		var light_error := Hangars.validate_ship_lights(body.get("ship_lights"), int(header.source_executable_bytes), architecture, int(layout.ships))
 		if not light_error.is_empty():
 			return fail(light_error)
 		staged_lights = body.ship_lights
@@ -459,7 +480,7 @@ func open(directory: String, base: Dictionary) -> bool:
 		staged_cruise = body.cruise
 	var staged_rotation := {}
 	if version>=8:
-		var rotation_error := Motion.validate_manual_rotation(body.get("manual_rotation"), int(header.source_executable_bytes), architecture)
+		var rotation_error := Motion.validate_manual_rotation(body.get("manual_rotation"), int(header.source_executable_bytes), architecture, version)
 		if not rotation_error.is_empty(): return fail(rotation_error)
 		staged_rotation = body.manual_rotation
 	var staged_response := {}
@@ -587,7 +608,7 @@ func open(directory: String, base: Dictionary) -> bool:
 		staged_opening_clock = body.opening_clock
 	var staged_lod := {}
 	if version>=27:
-		var lod_error := ShipLOD.validate(body.get("ship_lod"), int(header.source_executable_bytes), architecture)
+		var lod_error := ShipLOD.validate(body.get("ship_lod"), int(header.source_executable_bytes), architecture, int(layout.ships))
 		if not lod_error.is_empty(): return fail(lod_error)
 		staged_lod = body.ship_lod
 	var staged_refresh := {}
@@ -982,7 +1003,7 @@ func open(directory: String, base: Dictionary) -> bool:
 		if version>=124 and not staged_combat_training_story.is_empty() and not staged_combat_training_story.has("navigation"):return fail("This reader omitted training navigation")
 	var staged_mido_travel:={}
 	if version>=125:
-		var travel_error:=MidoTravel.validate(body.get("mido_travel"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_station_entry,staged_combat_training)
+		var travel_error:=MidoTravel.validate(body.get("mido_travel"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_station_entry,staged_combat_training,staged_scenery,staged_scenery_resources)
 		if not travel_error.is_empty():return fail(travel_error)
 		staged_mido_travel=body.mido_travel
 		if version>=133 and not staged_mido_travel.is_empty() and not staged_mido_travel.has("return_visit"):return fail("This reader omitted the Kernstal return declarations")
@@ -992,11 +1013,26 @@ func open(directory: String, base: Dictionary) -> bool:
 		var terms_error:=EarlyContracts.validate(body.get("early_contracts"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_mido_travel)
 		if not terms_error.is_empty():return fail(terms_error)
 		staged_early_contracts=body.early_contracts
+	var staged_deep_science_stock:={}
+	if version>=189:
+		var stock_error:=DeepScienceStock.validate(body.get("deep_science_stock"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_early_contracts.get("base_station_stock",{}))
+		if not stock_error.is_empty():return fail(stock_error)
+		staged_deep_science_stock=body.deep_science_stock
+	var staged_persistent_contacts:={}
+	if version>=190:
+		var contacts_error:=PersistentContacts.validate(body.get("persistent_contacts"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_early_contracts.get("ordinary_generation",{}))
+		if not contacts_error.is_empty():return fail(contacts_error)
+		staged_persistent_contacts=body.persistent_contacts
 	var staged_engine_particles:={}
 	if version>=126:
 		var exhaust_error:=EngineParticles.validate(body.get("engine_particles"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_particles)
 		if not exhaust_error.is_empty():return fail(exhaust_error)
 		staged_engine_particles=body.engine_particles
+	var staged_engine_particle_owners:={}
+	if version>=189:
+		var owner_error:=EngineParticleOwners.validate(body.get("engine_particle_owners"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_engine_particles)
+		if not owner_error.is_empty():return fail(owner_error)
+		staged_engine_particle_owners=body.engine_particle_owners
 	var staged_ambient_population:={}
 	if version>=127:
 		var population_error:=AmbientPopulation.validate(body.get("ambient_population"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_mido_travel)
@@ -1019,7 +1055,24 @@ func open(directory: String, base: Dictionary) -> bool:
 		staged_ambient_lifecycle=body.ambient_lifecycle
 		if version>=131 and not staged_ambient_lifecycle.is_empty() and not AmbientLifecycle.recycling_parameters(staged_ambient_lifecycle):return fail("This reader omitted traffic recycling declarations")
 
+	var staged_fast_forward:={}
+	if version>=177:
+		var fast_error:=FastForward.validate(body.get("fast_forward"),int(header.source_executable_bytes),architecture,staged_arrival_staging)
+		if not fast_error.is_empty():return fail(fast_error)
+		staged_fast_forward=body.fast_forward
+	var staged_ordinary_music:={}
+	var staged_physical_contacts:={}
+	if version>=197:
+		var music_error:=OrdinaryMusic.validate(body.get("ordinary_music"),int(header.source_executable_bytes),architecture,staged_fast_forward,staged_audio)
+		if not music_error.is_empty():return fail(music_error)
+		var contact_error:=PhysicalContacts.validate(body.get("physical_scenery_contacts"),int(header.source_executable_bytes),architecture,staged_arrival_staging,staged_scenery_resources,staged_station_exterior,staged_staging)
+		if not contact_error.is_empty():return fail(contact_error)
+		staged_ordinary_music=body.ordinary_music;staged_physical_contacts=body.physical_scenery_contacts
+
 	source_architecture=architecture
+	fast_forward=staged_fast_forward
+	ordinary_music=staged_ordinary_music
+	physical_scenery_contacts=staged_physical_contacts
 	audio=staged_audio
 	scenery_effects=staged_scenery_effects
 	scenery_resources=staged_scenery_resources
@@ -1068,7 +1121,10 @@ func open(directory: String, base: Dictionary) -> bool:
 	combat_training_story = staged_combat_training_story
 	mido_travel = staged_mido_travel
 	early_contracts = staged_early_contracts
+	deep_science_stock = staged_deep_science_stock
+	persistent_contacts = staged_persistent_contacts
 	engine_particles = staged_engine_particles
+	engine_particle_owners = staged_engine_particle_owners
 	ambient_population = staged_ambient_population
 	ambient_combat = staged_ambient_combat
 	freighter_destruction = staged_freighter_destruction

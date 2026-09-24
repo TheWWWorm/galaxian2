@@ -1,9 +1,11 @@
 extends RefCounted
 ## Verified player-engine selection and source control indices.
 const Numbers=preload("res://src/content/audio_definitions.gd")
-const Fonts=preload("res://src/content/font_definitions.gd")
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 const VALUES={"selection_input":"handling_before_equipment","event_ids":[42,43,44,45],"ship_overrides":[[42,1104],[43,1106],[40,1107]],"steering_parameter":0,"horizontal_parameter":1,"steering_rule":"max_absolute_source_commands","horizontal_input":"source_yaw_command","horizontal_offset":0.5,"update_order":"before_manual_motion"}
 const SPANS={"x86_64":{"handling_setup":[0,13],"selection":[13,229],"ship_getter":[177230,8],"equipment_after_selection":[242,79],"control_owner":[12602,25],"controls":[12627,175],"rotation_anchor":[12859,24],"instance_getter":[-7270,12],"parameter_wrapper":[-1212274,72],"threshold_high":[1035820,4],"threshold_middle":[1035824,4],"threshold_low":[1030588,4],"horizontal_scale":[993628,4],"horizontal_offset":[992632,4]},"armv7":{"handling_setup":[0,8],"selection":[8,170],"ship_getter":[152118,4],"equipment_after_selection":[178,56],"control_owner":[10616,24],"controls":[10640,148],"rotation_anchor":[10920,90],"instance_getter":[-5806,6],"parameter_wrapper":[-1513694,66],"threshold_high":[542,4],"threshold_middle":[546,4],"threshold_low":[550,4],"horizontal_scale":[11554,4]}}
+
+const MAC_ALTERNATE := {"handling_setup":[0,13],"selection":[13,229],"ship_getter":[177318,8],"equipment_after_selection":[242,79],"control_owner":[12602,25],"controls":[12627,175],"rotation_anchor":[12859,24],"instance_getter":[-7270,12],"parameter_wrapper":[-1218698,72],"threshold_high":[1010348,4],"threshold_middle":[1010352,4],"threshold_low":[1005116,4],"horizontal_scale":[968076,4],"horizontal_offset":[967080,4]}
 
 static func parameters(data: Variant) -> bool:
 	if not data is Dictionary or data.size()!=VALUES.size()+3 or not data.get("provenance") is Dictionary:return false
@@ -36,10 +38,9 @@ static func validate(data: Variant, executable_bytes: int, architecture: String,
 	var source_rotation: Variant=rotation.get("provenance")
 	if not source_rotation is Array or source_rotation.is_empty() or source_rotation[0]!=data.provenance.get("rotation_anchor"):return "Engine controls belong to another manual motion owner"
 	if data.provenance.size()!=SPANS[architecture].size():return "Invalid engine audio provenance"
-	for key in SPANS[architecture]:
-		var rule: Array=SPANS[architecture][key]
-		var row: Variant=data.provenance.get(key)
-		if not Fonts.extent(row,"offset","bytes",[rule[1]],executable_bytes) or int(row.offset)!=int(anchor.offset)+int(rule[0]):return "Disconnected engine audio source extent"
+	var layouts: Array=[SPANS[architecture]]
+	if architecture=="x86_64":layouts.append(MAC_ALTERNATE)
+	if not Layouts.matches(data.provenance,int(anchor.offset),executable_bytes,layouts):return "Disconnected engine audio source extent"
 	var events: Variant=audio.get("events")
 	if not events is Array:return "Engine selection lacks the source event catalogue"
 	var ids: Array=data.event_ids.duplicate()

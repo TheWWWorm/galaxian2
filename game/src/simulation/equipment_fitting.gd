@@ -9,10 +9,15 @@ const Projectiles=preload("res://src/simulation/ordinary_projectiles.gd")
 const Hits=preload("res://src/simulation/ordinary_weapon_hit.gd")
 const Audio=preload("res://src/simulation/weapon_audio.gd")
 const Recharge=preload("res://src/simulation/shield_recharge.gd")
+const Secondaries=preload("res://src/simulation/secondary_weapons.gd")
+const BurstResources=preload("res://src/content/emp_detonation_resources.gd")
+const Tracks=preload("res://src/content/animation_tracks.gd")
+const Materials=preload("res://src/presentation/material_library.gd")
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const AEM=preload("res://src/content/aem.gd")
 const Sampler=preload("res://src/presentation/scenery_animation.gd")
 const Surface=preload("res://src/presentation/animated_additive_model.gd")
+const Tractor=preload("res://src/simulation/tractor_recovery.gd")
 var error:=""
 
 func prepare_assets(bindings: RefCounted,cat: RefCounted,library: RefCounted) -> Dictionary:
@@ -35,6 +40,30 @@ func prepare_assets(bindings: RefCounted,cat: RefCounted,library: RefCounted) ->
 				supported=supported and bindings.material_for_mesh(path,"high").get("render_type")==2
 				resources[model]="" if supported else "This weapon's animated model is not yet supported"
 			if not resources[model].is_empty():items[id]=resources[model]
+	if Secondaries.Definitions.available(bindings):
+		# Stock presence is not a capability. Verify the same original static
+		# body and animated burst used by the actual equipped flight renderer.
+		var bursts:=BurstResources.new()
+		if not bursts.configure(library,bindings):return fail(bursts.error)
+		var models: Array=Secondaries.Bomb.Definitions.VALUES.model_ids
+		var ids: Array=Secondaries.Definitions.VALUES.item_ids
+		for index in ids.size():
+			var model:=int(models[index])
+			if not resources.has(model):
+				var path: String=bindings.resolve(model,"mesh");var reader:=AEM.new()
+				var decoded:=reader.decode(library.read_resource(path,AEM.MAX_BYTES))
+				if decoded.is_empty():return fail("An original EMP body could not be read: "+path)
+				var supported: bool=model==14684 and path.ends_with("/misc/bomb_emp_a.aem") and Tracks.has_identity_tracks(decoded.surfaces) and Materials.supports(bindings.material_for_mesh(path,"high"))
+				resources[model]="" if supported else "This EMP body's visual behavior is not yet supported"
+			items[int(ids[index])]=resources[model]
+	if Tractor.Definitions.available(bindings):
+		var rules: Dictionary=bindings.mido_travel.tractor_recovery
+		for item in cat.tables.items:
+			if item.arrays[2][3]!=3 or item.arrays[2][5]!=int(rules.equipment.category) or item.properties.get(int(rules.equipment.mode_property))!=0:continue
+			var tractor:=Tractor.new()
+			var loadout:={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
+				"ship_id":int(rules.pull.supported_player_hulls[0]),"equipment_ids":[int(item.id)]}
+			items[int(item.id)]="" if tractor.configure(bindings,cat,loadout,library) else "This tractor's beam is not yet supported"
 	return {"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"items":items}
 
 func inspect(bindings: RefCounted,cat: RefCounted,loadout: Dictionary,assets: Dictionary) -> Dictionary:
@@ -49,10 +78,16 @@ func inspect(bindings: RefCounted,cat: RefCounted,loadout: Dictionary,assets: Di
 	var support:={}
 	for item in cat.tables.items:
 		var id:=int(item.id)
-		support[id]=_item_reason(bindings,cat,weapon,id,ids)
-		if support[id].is_empty() and item.arrays[2][3]==0:support[id]=assets.items.get(id,"This weapon's model is unavailable")
+		support[id]=_item_reason(bindings,cat,weapon,id,ids,int(ship))
+		if support[id].is_empty() and item.arrays[2][3] in [0,1]:support[id]=assets.items.get(id,"This weapon's model is unavailable")
+		if support[id].is_empty() and item.arrays[2][3]==3 and item.arrays[2][5]==13:support[id]=assets.items.get(id,"This tractor's beam is unavailable")
 	for id in ids:
 		if not support.has(id) or not support[id].is_empty():return fail("Installed equipment is unavailable: "+str(support.get(id,"unknown item")))
+	var slots: Variant=loadout.get("slots")
+	var secondary_slots: bool=slots is Array and slots.any(func(slot):return slot is Dictionary and slot.get("category")==1)
+	if secondary_slots or ids.any(func(id):return cat.tables.items[id].arrays[2][3]==1):
+		var secondaries:=Secondaries.new()
+		if not secondaries.configure(bindings,cat,loadout):return fail(secondaries.error)
 	var pools:=Stats.resolve_capacities(cat.tables.items,ids,bindings.opening_actors.player_initialization)
 	var repair: Dictionary=bindings.opening_actors.player_initialization.repair
 	var hull:=Stats.resolve_ship_hull(cat.tables.ships[ship].fields[int(repair.base_hull_field)],repair.initial_upgrades,repair)
@@ -67,7 +102,7 @@ func inspect(bindings: RefCounted,cat: RefCounted,loadout: Dictionary,assets: Di
 		"cargo_capacity":capacity,"passenger_capacity":passengers,"repair_mode":device.mode,
 		"response_factor":handling.response_factor,"handling_bonus_percent":handling.equipment_percent}}
 
-func _item_reason(bindings: RefCounted,cat: RefCounted,resolver: RefCounted,id: int,ids: Array) -> String:
+func _item_reason(bindings: RefCounted,cat: RefCounted,resolver: RefCounted,id: int,ids: Array,ship: int) -> String:
 	var item: Dictionary=cat.tables.items[id]
 	var category: int=item.arrays[2][3];var subtype: int=item.arrays[2][5]
 	var properties: Dictionary=item.properties
@@ -81,6 +116,10 @@ func _item_reason(bindings: RefCounted,cat: RefCounted,resolver: RefCounted,id: 
 		if Rules.model(bindings,weapon,false).is_empty() or Rules.model(bindings,weapon,true).is_empty():return "This primary weapon's visual behavior is not yet supported"
 		if Audio.player_entries(bindings.weapon_parameters.audio,cat.tables.items,[weapon]).size()!=1:return "This weapon's audio is not yet supported"
 		return ""
+	if category==1:
+		if not Secondaries.Definitions.available(bindings) or id not in Secondaries.Definitions.VALUES.item_ids:return "This secondary weapon's flight behavior is not yet supported"
+		var bomb:=Secondaries.Bomb.new()
+		return "" if bomb.configure(bindings,cat,id,ids) else "This EMP bomb's firing behavior is not yet supported"
 	if category!=3:return "Fitting this equipment is not yet supported"
 	var rule: Dictionary=bindings.opening_actors.player_initialization
 	match subtype:
@@ -95,6 +134,11 @@ func _item_reason(bindings: RefCounted,cat: RefCounted,resolver: RefCounted,id: 
 		12,20:
 			var property:=int(Rules.VALUES.cargo_property if subtype==12 else Rules.VALUES.passenger_property)
 			if not Numbers.integer(properties.get(property),0,2147483647):return "The equipment has no supported capacity"
+		13:
+			if not Tractor.Definitions.available(bindings):return "Tractor recovery is not yet supported by this content pack"
+			var tractor: Dictionary=bindings.mido_travel.tractor_recovery
+			if not tractor.pull.supported_player_hulls.any(func(hull):return int(hull)==ship):return "Tractor recovery is not yet supported for this ship"
+			if properties.get(int(tractor.equipment.mode_property))!=0:return "Automatic tractor recovery is not yet supported"
 		15:
 			if Stats.resolve_repair_device(cat.tables.items,[id],rule.repair).is_empty():return "The repair device is unavailable"
 		16:

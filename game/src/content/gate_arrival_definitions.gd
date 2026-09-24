@@ -7,6 +7,8 @@ const SPANS = {"gate_arrival_initial_counter":[880642,120],"gate_arrival_counter
 # Native composition.
 const Worlds=preload("res://src/content/ordinary_world_definitions.gd")
 
+const MAC_SPANS = {"gate_arrival_initial_counter":[881274,120],"gate_arrival_counter_set":[876054,12],"gate_arrival_counter_increment":[876066,12],"gate_arrival_counter_get":[876078,12],"gate_arrival_counter_label":[894143,39],"gate_arrival_load_counter":[-658429,12],"gate_arrival_commit":[383150,269],"gate_arrival_player_permission":[359602,31],"gate_arrival_damage_setter":[538162,14],"gate_arrival_damage_guard":[538306,90],"gate_arrival_shield_guard":[538422,112],"gate_arrival_player_reset":[359973,41],"gate_arrival_collision_setter":[560162,14],"gate_arrival_speed_reset":[559382,102],"gate_arrival_primary_reset":[601294,16],"gate_arrival_primary_category":[542626,82],"gate_arrival_confirmation_reset":[350451,32],"gate_arrival_map_accept":[350819,31],"gate_arrival_map_cleanup":[351157,46]}
+
 static func parameters(data: Variant) -> bool:return Equal.equal_value(data,VALUES)
 
 static func available(bindings: RefCounted) -> bool:

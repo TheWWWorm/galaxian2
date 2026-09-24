@@ -5,6 +5,28 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 
+def literal_fixture(architecture, layouts, shift=0, constants=()):
+    """Build bounded text/constant sections from complete literal proof layouts."""
+    low=min(value[0] for value in layouts.values())-32
+    high=max(value[0]+value[1] for value in layouts.values())+32
+    offset=128;bias=4096;base=0x400000+shift-low
+    data=bytearray(offset+high-low);groups={b'__text':[],b'__const':[]}
+    for key,(delta,size,raw) in layouts.items():
+        value=bytes.fromhex(raw)
+        if len(value)!=size:raise ValueError('Literal proof size does not match its bytes')
+        data[offset+delta-low:offset+delta-low+size]=value
+        groups[b'__const' if key in constants else b'__text'].append((delta,size))
+    sections=[]
+    for name,spans in groups.items():
+        if not spans:continue
+        lo=min(v[0] for v in spans)-16;hi=max(v[0]+v[1] for v in spans)+16
+        sections.append({'segment':b'__TEXT','name':name,'address':base+lo,
+                         'offset':offset+lo-low,'length':hi-lo})
+    mach=SimpleNamespace(architecture=architecture,slice_offset=bias,data=bytes(data),
+                         text=sections[0],sections=sections)
+    return mach,bias+offset-low,offset,low
+
+
 def declaration_fixture(layouts, shift=0, hash_prefix=''):
     low=min(0,min(value[0] for value in layouts.values()))-16
     high=max(value[0]+value[1] for value in layouts.values())+16

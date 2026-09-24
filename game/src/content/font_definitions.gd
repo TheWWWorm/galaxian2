@@ -68,8 +68,8 @@ static func validate(data: Variant, executable_bytes: int, architecture: String,
 	for row in data.languages.rows:
 		if not extent(row, "source_offset", "source_bytes", [18, 21] if mac else [22], executable_bytes) or not extent(row, "string_offset", "string_bytes", [row.file.length() + 1], executable_bytes): return "Invalid font language extent"
 	var provenance: Variant = data.languages.get("provenance")
-	if not provenance is Dictionary or provenance.size() != 2 or not extent(provenance.get("dispatch"), "offset", "bytes", [46] if mac else [20], executable_bytes) or not extent(provenance.get("table"), "offset", "bytes", [64] if mac else [32], executable_bytes): return "Invalid font language dispatch"
-	if not extent(data.selection, "source_offset", "source_bytes", [578] if mac else [544], executable_bytes): return "Invalid font selection extent"
+	if not provenance is Dictionary or provenance.size() != 2 or not extent(provenance.get("dispatch"), "offset", "bytes", [45, 46] if mac else [20], executable_bytes) or not extent(provenance.get("table"), "offset", "bytes", [64] if mac else [32], executable_bytes): return "Invalid font language dispatch"
+	if not extent(data.selection, "source_offset", "source_bytes", [576, 578] if mac else [544], executable_bytes): return "Invalid font selection extent"
 	provenance = data.textures.get("provenance")
 	if not provenance is Dictionary or provenance.size() != 2 or not extent(provenance.get("medium"), "offset", "bytes", [16] if mac else [20], executable_bytes) or not extent(provenance.get("large"), "offset", "bytes", [31] if mac else [38], executable_bytes): return "Invalid font atlas branch extent"
 	for row in data.textures.rows:

@@ -2,9 +2,12 @@ extends RefCounted
 ## Fresh opening NPC maximum hull and source integer health percentages.
 const Numbers = preload("res://src/content/opening_definitions.gd")
 const Fonts = preload("res://src/content/font_definitions.gd")
+const Layouts = preload("res://src/content/declaration_layouts.gd")
 const VALUES := {"scope":"fresh_opening","rank":0,"campaign_cursor":0,"factory_subtype":0,"hull_catalogue_ids":[2,23,2],"base_hull":20,"difficulty_offset":-0.5,"percentage_scale":100.0,"override_raises_maximum":true}
 const SPANS := {"x86_64":{"factory_arguments":[17,38],"rank_base":[166,46],"cursor_and_hull_modifiers":[224,129],"subtype":[399,43],"difficulty":[442,73],"stats_argument":[558,27],"stats_wrapper":[456210,10],"initial_capacity":[456393,12],"hull_setter":[459070,30],"percentage":[457204,42],"rank_getter":[798406,12],"rank_reset":[802796,11],"cursor_getter":[780212,12],"cursor_predicate":[780196,16],"difficulty_constant":[1495834,4],"percentage_constant":[1478982,4],"entry_rank":[257276,48],"rank_calculation":[798084,136],"score_reset_a":[802734,22],"score_reset_b":[802818,11],"score_reset_c":[803231,22],"score_reset_d":[803684,11],"rank_thresholds_constant":[1513666,84]},"armv7":{"factory_arguments":[28,28],"rank_base":[226,64],"cursor_and_hull_modifiers":[290,116],"subtype":[446,36],"difficulty":[482,92],"stats_argument":[626,8],"stats_wrapper":[418096,30],"initial_capacity":[417296,14],"hull_setter":[419896,18],"percentage":[417944,36],"rank_getter":[744032,6],"rank_reset":[748506,40],"cursor_getter":[725104,6],"cursor_predicate":[725088,14],"percentage_literal":[418080,4],"entry_rank":[270940,44],"rank_calculation":[743808,120],"score_reset_a":[748498,56],"score_reset_c":[748854,8],"score_reset_d":[749156,8],"rank_thresholds_constant":[2402916,84]}}
 const LEGACY_SPANS := {"x86_64":{"factory_arguments":[17,38],"rank_base":[166,46],"cursor_and_hull_modifiers":[224,129],"subtype":[399,43],"difficulty":[442,73],"stats_argument":[558,27],"stats_wrapper":[456210,10],"initial_capacity":[456393,12],"hull_setter":[459070,30],"percentage":[457204,42],"rank_getter":[798406,12],"rank_reset":[802796,11],"cursor_getter":[780212,12],"cursor_predicate":[780196,16],"difficulty_constant":[1495834,4],"percentage_constant":[1478982,4]},"armv7":{"factory_arguments":[28,28],"rank_base":[226,64],"cursor_and_hull_modifiers":[290,116],"subtype":[446,36],"difficulty":[482,92],"stats_argument":[626,8],"stats_wrapper":[418096,30],"initial_capacity":[417296,14],"hull_setter":[419896,18],"percentage":[417944,36],"rank_getter":[744032,6],"rank_reset":[748506,40],"cursor_getter":[725104,6],"cursor_predicate":[725088,14],"percentage_literal":[418080,4]}}
+
+const MAC_ALTERNATE := {"factory_arguments":[17,38],"rank_base":[166,46],"cursor_and_hull_modifiers":[224,129],"subtype":[399,43],"difficulty":[442,73],"stats_argument":[558,27],"stats_wrapper":[456746,10],"initial_capacity":[456929,12],"hull_setter":[459606,30],"percentage":[457740,42],"rank_getter":[799038,12],"rank_reset":[803428,11],"cursor_getter":[780844,12],"cursor_predicate":[780828,16],"difficulty_constant":[1470898,4],"percentage_constant":[1453982,4],"entry_rank":[256976,48],"rank_calculation":[798716,136],"score_reset_a":[803366,22],"score_reset_b":[803450,11],"score_reset_c":[803863,22],"score_reset_d":[804316,11],"rank_thresholds_constant":[1488762,84]}
 
 static func parameters(data: Variant) -> bool:
 	return _parameters(data,VALUES)
@@ -40,8 +43,6 @@ static func validate(data: Variant, executable_bytes: int, architecture: String,
 	if not Fonts.extent(initial,"offset","bytes",[4],executable_bytes): return "NPC hull lacks its factory anchor"
 	var spans: Dictionary=LEGACY_SPANS[architecture] if legacy else SPANS[architecture]
 	if data.provenance.size()!=spans.size(): return "Invalid NPC hull provenance"
-	for key in spans:
-		var rule: Array=spans[key]
-		var span: Variant=data.provenance.get(key)
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],executable_bytes) or int(span.offset)!=int(initial.offset)+int(rule[0]): return "Disconnected NPC hull declaration"
-	return ""
+	var layouts: Array = [spans]
+	if architecture=="x86_64" and not legacy:layouts.append(MAC_ALTERNATE)
+	return "" if Layouts.matches(data.provenance,int(initial.offset),executable_bytes,layouts) else "Disconnected NPC hull declaration"

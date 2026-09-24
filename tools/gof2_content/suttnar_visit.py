@@ -1,10 +1,10 @@
 """Original Suttnar flight conversation and acknowledged next objective. Constant declarations only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_suttnar_visit(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
-    return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
+    return (copy.deepcopy((VALUES, MAC_VALUES)[variant]), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'suttnar_flight_visit',
  'campaign_cursor': 18,
@@ -123,3 +123,64 @@ LAYOUTS = {'suttnar_factory_dispatch': [871474,
                               231,
                               '__text',
                               'eadf27ec76612e1066aae8fe7d9a43bb2696f9da403e2ca195d20d111ff81d0e']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'suttnar_factory_dispatch': [872106, 8, '__text', '27a43dea4883fe67ef196f6b3464a07e40699e44b528b8ae6f9a9ef771cb4472'],
+ 'suttnar_initial_factory': [862189, 52, '__text', '83abe98780d6a59b7b8887bf80894aa81aea72c8eb1ccfb03173c0780353973c'],
+ 'suttnar_next_factory': [862246, 43, '__text', '453f5c92477d48adb5321096501d95a0e7424ccd557c2780dc7ff5e2cf45b21d'],
+ 'suttnar_predicate_dispatch': [875572,
+                                27,
+                                '__text',
+                                'a9856497a189c0fb1bb550d4237db29f92b346e3076f0cc7717df9a1eec68477'],
+ 'suttnar_predicate_case': [875890, 4, '__text', '44e6db8ff5fe147ec1b9d6ad94ad30417d6aa276f450cdb9be3d1d16baec00eb'],
+ 'suttnar_predicate': [875694, 58, '__text', '315604d861b159fa32799e473a88e5dc0fc79c178f7ffaaa68e10dcfa3d0c945'],
+ 'suttnar_destination_getter': [401404,
+                                10,
+                                '__text',
+                                'db16203d59cb6d9c92d5a1f8bd7fe7fe0ac50cf45a3e14baa275c4bb0175592a'],
+ 'suttnar_station_getter': [851984, 10, '__text', 'eba6838af910ef1073f4aee9812ff89c920b16bd09dfcad38577c3aa80965a9c'],
+ 'suttnar_flight_poll': [386369, 89, '__text', '9f58c38a24e94d4978086798377abb945330111ebaf82970178a0f6210a25705'],
+ 'suttnar_dialogue_poll': [387495, 88, '__text', '396a948abc657b0c2dca882faa2442ec9f4a38d8576bc4d1209b7ff9e4d26f3b'],
+ 'suttnar_result_widget': [387781, 72, '__text', '142081caa953abd8738a87261500b6c8585090cbe1dd74767c1edd7f7320c3ed'],
+ 'suttnar_result_counts': [1530242, 76, '__const', 'b662011e2e4f74401d912cb865d6d1a2d2bf249f3a9caefb96c355efd2b53bdc'],
+ 'suttnar_count_predicate': [-698394, 34, '__text', '33a184749d6d99b819095769c34dec981b1d9b255698041fafb80f893f65ac13'],
+ 'suttnar_dialogue_offsets': [-700355,
+                              60,
+                              '__text',
+                              'dcd8b0cc466ec7b88327a898d1a0f3539901a78d2991cd86308309b909e3d03f'],
+ 'suttnar_dialogue_speaker': [-698084,
+                              33,
+                              '__text',
+                              '16bd44b4a32e64a3639b3a3e3fc4cb9937f17f78097ddc823d8b7f0fefe402cb'],
+ 'suttnar_dialogue_text': [-697805, 45, '__text', 'd989a236b54084d2c0dfdf15d514882ccfe7fa908cc6a80a9d8593f8f80e0e20'],
+ 'suttnar_dialogue_pairs': [1522362, 64, '__const', '7c904e808e6d009c8d038f9d4c8dedcbb959980ee992e594230e55ab309fa0a2'],
+ 'suttnar_voice_lookup': [-216154, 41, '__text', 'c8588a27771d9871d08808c944d7b12ef4e39362e2c5435d235ebbd5df471781'],
+ 'suttnar_voices': [1535946, 64, '__const', '8b60ae0c1fea447e96d23b369f23ca3319831534ae7fd5429ccf7b7600231467'],
+ 'suttnar_dialogue_next': [-692352, 48, '__text', 'b9a1b8228cb9a70e64fbb7ead7f9f0304ed1bf07e0352334ced00a762bb3c509'],
+ 'suttnar_dialogue_count': [-692304, 162, '__text', '92cb5631299cd6440e88852b51bc8f6669d5c441e3b28f6d9ff47676c2985371'],
+ 'suttnar_dialogue_click': [-690889, 56, '__text', '6bb93fc4e1421b6ee8ad31b1a4d6e9104210bb6300e9246c033ed09684f1e15f'],
+ 'suttnar_flight_ack': [351203, 52, '__text', '918e678c972feae7942bd3523faebe9f5763b759c85680b0aac3eac72175add7'],
+ 'suttnar_completed_result': [351894,
+                              231,
+                              '__text',
+                              '36b12f7294634f33c95218b918c8b17f87c41a514e7f9a29df6f89304dc8e1d6']}
+MAC_VALUES = {'scope': 'suttnar_flight_visit',
+ 'campaign_cursor': 18,
+ 'system_id': 11,
+ 'mission': {'kind': 156, 'station_id': 56, 'reward': 0, 'bonus': 0, 'source_parameter': 0},
+ 'world_elapsed_after_ms': 10000,
+ 'world_elapsed_strict': True,
+ 'hud_poll_minimum_ms': 5001,
+ 'flight_only': True,
+ 'acknowledgement_required': True,
+ 'events': [{'speaker_id': 0, 'text_id': 1852, 'voice_event_id': 254},
+            {'speaker_id': 13, 'text_id': 1853, 'voice_event_id': 255},
+            {'speaker_id': 0, 'text_id': 1854, 'voice_event_id': 256},
+            {'speaker_id': 13, 'text_id': 1855, 'voice_event_id': 257},
+            {'speaker_id': 0, 'text_id': 1856, 'voice_event_id': 258},
+            {'speaker_id': 1, 'text_id': 1857, 'voice_event_id': 259},
+            {'speaker_id': 0, 'text_id': 1858, 'voice_event_id': 260},
+            {'speaker_id': 1, 'text_id': 1859, 'voice_event_id': 261}],
+ 'next_cursor': 19,
+ 'next_mission': {'kind': 156, 'station_id': 55, 'reward': 0, 'bonus': 0, 'source_parameter': 0},
+ 'reward_credits': 0}

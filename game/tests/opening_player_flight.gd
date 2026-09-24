@@ -11,12 +11,14 @@ const BodyResources = preload("res://src/content/scenery_body_resources.gd")
 const EffectResources = preload("res://src/content/scenery_effect_resources.gd")
 const DeathResources = preload("res://src/content/npc_destruction_resources.gd")
 const Flight = preload("res://src/simulation/flight_motion.gd")
+const PlayerFlight = preload("res://src/simulation/opening_player_flight.gd")
 var failures := 0
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
-	check(not args.is_empty() and args.size()%3==0,"Expected content/binding/visual triples")
-	for i in range(0,args.size()-2,3): verify_profile(args[i],args[i+1])
+	var stride:=2 if args.size()==2 else 3
+	check(not args.is_empty() and args.size()%stride==0,"Pass a content/bindings pair or content/bindings/visuals triples")
+	for i in range(0,args.size()-stride+1,stride): verify_profile(args[i],args[i+1])
 	print("Opening player flight checks: %d failures" % failures)
 	quit(1 if failures else 0)
 
@@ -35,13 +37,16 @@ func verify_profile(content: String, pack: String) -> void:
 		check(false,owner.error+timeline.error);return
 	var configured := owner.snapshot()
 	if not bindings.opening_actors.npc_initialization.get("hull",{}).is_empty():
+		# Fresh flight recalculates rank to zero; difficulty 0.5 retains base 20.
+		# The authored opening override still raises the current/maximum hull to 150.
 		for actor in timeline.snapshot().combat.actors:
-			check(actor.factory_hull==34 and actor.max_hull==150 and actor.hull_percent==100,"World initialization lost verified NPC capacity")
+			check(actor.factory_hull==20 and actor.max_hull==150 and actor.hull_percent==100,"World initialization lost verified NPC capacity")
 	if bindings.opening_staging.get("player_flight",{}).is_empty():
 		check(not owner.configure_player_flight(bindings,catalogues,library,scenery,1.0) and owner.snapshot()==configured,"Legacy pack acquired ordinary player flight")
 		return
 	check(not owner.configure_player_flight(bindings,catalogues,library,scenery,NAN) and owner.snapshot()==configured,"Invalid input configuration changed the world")
 	if not owner.configure_player_flight(bindings,catalogues,library,scenery,1.0): check(false,owner.error);return
+	check_playable_controls(bindings,catalogues)
 	check(not owner.configure_player_flight(bindings,catalogues,library,scenery,1.0),"Player weapons could reset mid-session")
 	if not bindings.opening_staging.get("player_aim",{}).is_empty():
 		check(owner.configure_player_aim(bindings),owner.error)
@@ -88,6 +93,26 @@ func verify_profile(content: String, pack: String) -> void:
 	check_player_death_boundary(state)
 	check_primary_kills(state)
 	print(library.manifest.profile.edition,": cinematic release, next-frame steering, primary clocks, contacts, death credit and postcombat boundary verified")
+
+func check_playable_controls(bindings: RefCounted, catalogues: RefCounted) -> void:
+	var phase: int=int(bindings.opening_staging.player_flight.ordinary_phase)
+	var scene: Dictionary={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"player_pose":Transform3D.IDENTITY}
+	var flight := PlayerFlight.new()
+	check(flight.configure(bindings,catalogues,1.0),flight.error)
+	var braked: Dictionary=flight.motion(scene,phase,100,0.0,true)
+	check(not braked.is_empty() and braked.pose.origin==Vector3.ZERO and flight.snapshot().throttle==0.0,"Opening S brake failed to stop source forward travel or publish effective throttle")
+	check(flight.sample_commands(Vector2(0,1),100) and flight.snapshot().angular_units.y>0,"Opening late command did not prepare next-frame heading")
+	var prepared: Dictionary=flight.motion(scene,phase,100,0.0,true)
+	check(prepared.pose.basis.z.x>0 and prepared.pose.origin==Vector3.ZERO,"Opening brake lost preceding angular movement ordering")
+	var sideways := PlayerFlight.new()
+	check(sideways.configure(bindings,catalogues,1.0),sideways.error)
+	var right: Dictionary=sideways.motion(scene,phase,100,1.0,true)
+	check(not right.is_empty() and right.pose.origin.x<0 and right.pose.origin.z==0,"Opening D failed to strafe without forward thrust")
+	var fork: RefCounted=sideways.fork_for_frame()
+	var held: Dictionary=sideways.motion(scene,phase,100,1.0,true)
+	check(held.pose.origin.x<right.pose.origin.x and fork.motion(scene,phase,100,1.0,true).pose.is_equal_approx(held.pose),"Opening held lateral ramp or frame fork lost state")
+	var stopped: Dictionary=sideways.motion(scene,phase,100,0.0,true)
+	check(stopped.pose.origin.x<0 and sideways.snapshot().lateral_units_per_millisecond<0,"Opening lateral release failed to coast")
 
 func check_contact_feedback(state: Dictionary) -> void:
 	for target in ["npc","scenery"]:
@@ -138,7 +163,7 @@ func check_primary_kills(state: Dictionary) -> void:
 	for actor in result.timeline.snapshot().combat.actors:
 		check(actor.vitals.hull==0,"Primary contact did not reach its target before the actor pass")
 		if actor.has("max_hull"):
-			check(actor.factory_hull==34 and actor.max_hull==150 and actor.hull_percent==0,"Committed death lost source NPC capacity")
+			check(actor.factory_hull==20 and actor.max_hull==150 and actor.hull_percent==0,"Committed death lost source NPC capacity")
 	if frame._aim!=null:check(result.world_frame.snapshot().player_aim.contact_flash,"Real player NPC contacts did not reach reticle feedback")
 	var accounting: Dictionary=result.world_frame.snapshot().controller.death_accounting
 	check(accounting.counter_deltas.player_kills==3 and accounting.events.size()==3,"Player primary kills failed to enter one-time accounting")

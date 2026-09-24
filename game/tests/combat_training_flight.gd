@@ -26,8 +26,11 @@ const PreparedAudio=preload("res://src/presentation/opening_audio.gd")
 var training_scene: Node3D
 var training_sound: Node3D
 
+func training_arguments() -> PackedStringArray:
+	return preload("res://tests/fixtures/model_capture.gd").arguments()
+
 func run():
-	var args:=OS.get_cmdline_user_args()
+	var args:=training_arguments()
 	check(args.size() in [3,4],"Expected content, bindings, visuals and optional captures")
 	if args.size() in [3,4]:
 		verify(args.slice(0,3))
@@ -81,19 +84,25 @@ func verify_training_destruction(args: PackedStringArray, equipment: RefCounted)
 	verify_training_player_death(cat,flight,packet)
 	verify_training_particles(cat,flight,packet)
 	verify_training_frame(cat,flight,packet)
-	var briefing:=TrainingBriefing.new();check(briefing.configure(bindings,lib,flight,"Space"),briefing.error)
+	var briefing:=TrainingBriefing.new();check(briefing.configure(bindings,lib,flight,"Space","Tab"),briefing.error)
 	if briefing.snapshot().is_empty():return
 	for i in 46:check(briefing.advance(150),briefing.error)
 	check(briefing.advance(100) and not briefing.snapshot().entry_released,"Training entry released at 7000ms")
 	check(briefing.advance(1) and briefing.snapshot().entry_released and not briefing.snapshot().dialogue.visible,"Entry release also displayed the modal")
 	for i in 32:check(briefing.advance(150),briefing.error)
 	check(briefing.advance(50) and not briefing.snapshot().dialogue.visible,"Training briefing opened at 5000ms HUD time")
-	check(briefing.advance(1) and briefing.snapshot().dialogue.visible and briefing.snapshot().dialogue.text_id==1726,"Training briefing did not wait for entry release and its HUD poll")
+	check(briefing.advance(1) and briefing.snapshot().dialogue.visible and briefing.snapshot().dialogue.text_id==int(bindings.combat_training_story.briefing_events[0].text_id),"Training briefing did not wait for entry release and its HUD poll")
 	var held:=briefing.snapshot()
 	check(briefing.advance(150) and briefing.simulation_delta_ms()==0 and briefing.snapshot()==held,"Training modal instructions auto-dismissed or advanced the flight")
-	check(briefing.navigate("next") and briefing.snapshot().dialogue.text_id==1727,"Training marker explanation was skipped")
-	check(briefing.navigate("next") and briefing.snapshot().dialogue.text_id==1728 and briefing.snapshot().dialogue.desktop_text_id==1729,"Training fire controls were substituted twice")
-	check(briefing.navigate("previous") and briefing.navigate("next") and briefing.navigate("next"),briefing.error)
+	check(briefing.navigate("next") and briefing.snapshot().dialogue.text_id==int(bindings.combat_training_story.briefing_events[1].text_id),"Training marker explanation was skipped")
+	check(briefing.navigate("next") and briefing.snapshot().dialogue.text_id==int(bindings.combat_training_story.briefing_events[2].text_id) and briefing.snapshot().dialogue.desktop_text_id==bindings.desktop_text_id(int(bindings.combat_training_story.briefing_events[2].text_id)),"Training fire controls were substituted twice")
+	check(briefing.navigate("previous") and briefing.navigate("next"),briefing.error)
+	if bindings.combat_training_story.briefing_events.size()==4:
+		check(briefing.navigate("next") and briefing.snapshot().dialogue.text_id==1742 and briefing.snapshot().dialogue.desktop_text_id==1743,"Training omitted or remapped the fourth instruction twice")
+		check(briefing.snapshot().dialogue.desktop_text.contains("Tab") and not briefing.snapshot().dialogue.desktop_text.contains("#KEY_"),"Fast Forward instruction lost its supplied key label")
+		held=briefing.snapshot()
+		check(briefing.advance(150) and briefing.snapshot()==held and briefing.simulation_delta_ms()==0,"Fourth training instruction did not retain its modal hold")
+	check(briefing.navigate("next"),briefing.error)
 	check(briefing.snapshot().acknowledged and not briefing.snapshot().dialogue.visible and briefing.snapshot().mission==packet.mission and briefing.snapshot().progress==packet.progress,"Briefing acknowledgement completed the combat mission")
 	check(TrainingSession.supported(bindings,7)==not StoryRules.station_return(bindings).is_empty(),"Training availability omitted its complete return requirement")
 
@@ -215,7 +224,7 @@ func verify_training_particles(cat: RefCounted, flight: RefCounted, packet: Dict
 
 func verify_training_frame(cat: RefCounted, flight: RefCounted, packet: Dictionary):
 	var world:=PreparedFrame.new()
-	check(world.configure(bindings,cat,lib,flight,"E",.5),world.error)
+	check(world.configure(bindings,cat,lib,flight,"F",.5),world.error)
 	if world.snapshot().is_empty():return
 	var initial:=world.snapshot()
 	check(initial.actors.size()==4 and initial.ship_detail.selections.size()==5 and initial.radio.started==[false,false],"Training frame omitted an actor, LOD owner or radio")
@@ -235,19 +244,20 @@ func verify_training_frame(cat: RefCounted, flight: RefCounted, packet: Dictiona
 	while not world.dialogue_visible():
 		world=training_frame_step(world,150)
 		if world==null:return
-	check(world.snapshot().dialogue.text_id==1726,"Shared training frame omitted the briefing")
+	check(world.snapshot().dialogue.text_id==int(bindings.combat_training_story.briefing_events[0].text_id),"Shared training frame omitted the briefing")
 	var before:=world.snapshot()
 	var modal: RefCounted=world.evaluate(150,Vector2.ONE,1,false,Vector2i.ZERO,Vector2.ZERO,true)
 	check(modal!=null,world.error)
 	if modal==null:return
 	check(modal.snapshot().random_state==before.random_state and modal.snapshot().player_pose==before.player_pose and modal.snapshot().encounter.elapsed_ms==before.encounter.elapsed_ms and modal.snapshot().encounter.primary_fire.is_empty(),"Modal training frame moved, fired or consumed world time")
-	for i in 3:
+	for i in bindings.combat_training_story.briefing_events.size():
 		var next: RefCounted=world.navigate("next");check(next!=null,world.error)
 		if next==null:return
 		world=next
 		if not accept_training_presentation(world):return
 	check(world.snapshot().campaign_cursor==7 and not world.dialogue_visible() and not world.snapshot().combat_objective_acknowledged,"Briefing completed training")
 	verify_training_route_frame(world)
+	verify_fast_forward_frame(world)
 	# Disclosed close-placement fixture, preserving all source NPC construction,
 	# loadout and normal activation. This is not an unmodified playthrough.
 	world._pose=Transform3D(Basis.IDENTITY,Vector3(10000,7000,160000));world._statistics_pose=world._pose
@@ -274,7 +284,7 @@ func verify_training_frame(cat: RefCounted, flight: RefCounted, packet: Dictiona
 		world=training_frame_step(world,150);frames+=1
 		if world==null:return
 	var completion:=world.snapshot()
-	check(completion.dialogue.visible and completion.dialogue.text_id==1733 and completion.combat_objective_satisfied and completion.campaign_cursor==7,"Training did not offer its five completion lines after the three explosions")
+	check(completion.dialogue.visible and completion.dialogue.text_id==int(bindings.combat_training_story.completion_events[0].text_id) and completion.combat_objective_satisfied and completion.campaign_cursor==7,"Training did not offer its five completion lines after the three explosions")
 	check(completion.progress.player_kills==packet.progress.player_kills+3 and completion.progress.pirate_kills==packet.progress.pirate_kills+3,"Training lost earned pirate kill attribution")
 	check(not completion.equipment.get("training_inventory_released",false),"Showing completion dialogue released protected inventory")
 	if not completion.dialogue.visible:return
@@ -328,7 +338,7 @@ func verify_training_station_return(cat: RefCounted, world: RefCounted):
 	var reload:=preload("res://src/simulation/station_entry.gd").new()
 	check(not reload.configure_reload(bindings,cat,lib,station),"Station reloaded before the return was acknowledged")
 	for i in 9:
-		check(station.snapshot().dialogue.text_id==1738+i and station.snapshot().campaign_cursor==8,"Training station conversation skipped a line or advanced early")
+		check(station.snapshot().dialogue.text_id==int(bindings.combat_training_story.station_return.events[i].text_id) and station.snapshot().campaign_cursor==8,"Training station conversation skipped a line or advanced early")
 		check(station.acknowledge(),station.error)
 	var accepted: Dictionary=station.snapshot()
 	check(accepted.phase=="station_reload_required" and accepted.campaign_cursor==9 and accepted.cargo==before.cargo and accepted.equipment==before.equipment and accepted.reward_credits==0,"Station acknowledgement lost cargo, changed equipment or skipped the reload")
@@ -399,6 +409,8 @@ func verify_training_application(args: PackedStringArray):
 	now_us=0
 	if not station._build_scene(lib,bindings,visuals,cat,now_us,42) or not host.station_panel.configure(lib,bindings,visuals) or not station.activate():check(false,station.error+host.station_panel.error);return
 	station._dialogue_started=true
+	await restore_test_focus()
+	station.rebase_time(now_us)
 	if bindings.early_contracts.has("station_generation"):
 		# The equipment fixture skips intervening same-location mining sessions.
 		# They do not regenerate the first Var Hastra population.
@@ -419,16 +431,18 @@ func verify_training_application(args: PackedStringArray):
 	for i in 140:
 		if host.session.snapshot().dialogue.visible:break
 		if not training_app_step():return
-	check(host.session.snapshot().dialogue.text_id==1726 and host.session.briefing_audio.snapshot().history.back().source_id==189,"Training session omitted its source briefing and voice")
+	check(host.session.snapshot().dialogue.text_id==int(bindings.combat_training_story.briefing_events[0].text_id) and host.session.briefing_audio.snapshot().history.back().source_id==189,"Training session omitted its source briefing and voice")
 	if args.size()==4:
 		await capture(args[3],"training-app-briefing")
 		await capture_phone(args[3],"training-app-briefing-phone")
-	for i in 3:
+	for i in bindings.combat_training_story.briefing_events.size():
+		if args.size()==4 and i==3:await capture(args[3],"training-app-fast-forward-instruction")
 		key(KEY_ENTER)
 		check(host.session.error.is_empty(),host.session.error)
 		if not host.session.error.is_empty():return
 	check(host.session.can_control() and host.session.snapshot().campaign_cursor==7,"Training briefing failed to release the actual controls")
 	if not host.session.can_control():return
+	await verify_fast_forward_input(args)
 	key_down(KEY_SPACE)
 	check(host._controls.snapshot().held.fire and host.session.snapshot().mining_approach.phase=="idle","Primary input was consumed as a mining action")
 	if not training_app_step():return
@@ -452,6 +466,9 @@ func verify_training_application(args: PackedStringArray):
 	# Allow the source follow camera to settle after this disclosed placement.
 	for i in 20:
 		if not training_app_step():return
+	if not bindings.ordinary_music.is_empty():
+		var music: Dictionary=host.session.flight_audio.snapshot()
+		check(bindings.ordinary_music.battle_event_ids.any(func(id):return int(id)==music.music_id) and music.active.has(music.music_id),"Accepted training battle did not play a source combat cue")
 	if args.size()==4:
 		await capture(args[3],"training-app-encounter")
 		await capture_phone(args[3],"training-app-encounter-phone")
@@ -461,29 +478,31 @@ func verify_training_application(args: PackedStringArray):
 	for i in 100:
 		if host.session.snapshot().dialogue.visible:break
 		if not training_app_step():return
-	check(host.session.snapshot().dialogue.text_id==1733 and host.session.snapshot().campaign_cursor==7,"Training session did not wait for native deaths and completion instructions")
+	check(host.session.snapshot().dialogue.text_id==int(bindings.combat_training_story.completion_events[0].text_id) and host.session.snapshot().campaign_cursor==7,"Training session did not wait for native deaths and completion instructions")
 	if not host.session.snapshot().dialogue.visible:return
 	for i in 5:
 		check(host.session.objective_audio.snapshot().history.back().source_id==439+i,"Training completion used the wrong acknowledged voice")
 		key(KEY_ENTER)
 	check(host.session.snapshot().campaign_cursor==8 and host.session.snapshot().equipment.training_inventory_released,"Application completion did not release the earned inventory")
-	# Mining remains available on the return trip. The ordinary drill earns
-	# ore into the same equipped hold without repricing retained inventory.
-	var prices: Dictionary=host.session.snapshot().equipment.prices.duplicate(true)
-	if not start_second_drill():return
-	for i in 500:
-		var drill: Dictionary=host.session.snapshot().mining_session.drill
-		if drill.is_empty():break
-		var desired: Vector2=-(drill.point+(drill.input+drill.drift)*5.0)*.2-drill.drift
-		var command:=Vector2.ZERO
-		for axis in 2:command[axis]=signf(desired[axis])*sqrt(minf(1,absf(desired[axis])/3.0))
-		if not step(command):return
-	var mined: Dictionary=host.session.snapshot()
-	check(mined.cargo.used==25 and mined.cargo.entries[0]=={"item_id":0,"quantity":1} and mined.equipment.cargo==mined.cargo and mined.scenery.mined_count==1,"Post-training mining lost the spare weapon or desynchronized equipment cargo")
-	check(mined.equipment.prices.installed==prices.installed and mined.equipment.prices.cargo[0]==prices.cargo[0],"Post-training mining repeated the inventory price reset")
+	if mine_on_training_return():
+		# Mining remains available on the return trip. The ordinary drill earns
+		# ore into the same equipped hold without repricing retained inventory.
+		var prices: Dictionary=host.session.snapshot().equipment.prices.duplicate(true)
+		if not start_second_drill():return
+		for i in 500:
+			var drill: Dictionary=host.session.snapshot().mining_session.drill
+			if drill.is_empty():break
+			var desired: Vector2=-(drill.point+(drill.input+drill.drift)*5.0)*.2-drill.drift
+			var command:=Vector2.ZERO
+			for axis in 2:command[axis]=signf(desired[axis])*sqrt(minf(1,absf(desired[axis])/3.0))
+			if not step(command):return
+		var mined: Dictionary=host.session.snapshot()
+		check(mined.cargo.used==25 and mined.cargo.entries[0]=={"item_id":0,"quantity":1} and mined.equipment.cargo==mined.cargo and mined.scenery.mined_count==1,"Post-training mining lost the spare weapon or desynchronized equipment cargo")
+		check(mined.equipment.prices.installed==prices.installed and mined.equipment.prices.cargo[0]==prices.cargo[0],"Post-training mining repeated the inventory price reset")
 	flight=host.session.flight_owner();flight._pose=Transform3D(Basis.IDENTITY,Vector3(0,0,10000));flight._statistics_pose=flight._pose
 	check(host.session._commit(flight,false),host.session.error)
 	button(JOY_BUTTON_Y)
+	check(choose_open_keyboard_flight_action("station_autopilot"),"Controller destination menu did not select station guidance")
 	if not training_app_step():return
 	check(host.session.status=="station_transition_required","Training application did not accept the normal station contact gate")
 	if host.session.status!="station_transition_required":return
@@ -500,7 +519,7 @@ func verify_training_application(args: PackedStringArray):
 		await capture(args[3],"training-app-return")
 		await capture_phone(args[3],"training-app-return-phone")
 	for i in 9:
-		check(host.session.snapshot().dialogue.text_id==1738+i and host.session.audio.snapshot().history.back().source_id==444+i,"Training return lost its dialogue or original voice")
+		check(host.session.snapshot().dialogue.text_id==int(bindings.combat_training_story.station_return.events[i].text_id) and host.session.audio.snapshot().history.back().source_id==444+i,"Training return lost its dialogue or original voice")
 		key(KEY_ENTER)
 	check(host.session.status=="station_reload_required" and host.session.snapshot().campaign_cursor==9,"Final return acknowledgement skipped source station reload")
 	var reloading: Node=host.session;var retained: Dictionary=reloading.snapshot()
@@ -517,6 +536,116 @@ func verify_training_application(args: PackedStringArray):
 	await after_training_application_reload(args)
 	await verify_training_game_over(args,packet,owner.equipment_owner())
 
+func verify_fast_forward_frame(world: RefCounted) -> void:
+	if not world.fast_forward_available():return
+	var original: Dictionary=world.snapshot()
+	var branch: RefCounted=world.press_fast_forward()
+	check(branch!=null and branch.snapshot().fast_forward.held and not branch.snapshot().fast_forward.active,"Training waypoint alone enabled Fast Forward")
+	if branch==null:return
+	branch=branch.release_flight_action(true)
+	# This detached flight follows normal manual movement away from the station;
+	# it neither changes the accepted training position nor earns progress.
+	for tick in 160:
+		if branch.snapshot().player_pose.origin.length()>35000:break
+		var next: RefCounted=branch.evaluate(150)
+		check(next!=null,branch.error)
+		if next==null:return
+		branch=next
+	check(branch.snapshot().player_pose.origin.length()>35000,"Fast Forward fixture never reached open space")
+	branch=branch.start_station_autopilot()
+	if branch==null:check(false,"Cannot start the existing station guidance");return
+	branch=branch.press_fast_forward()
+	if branch==null:check(false,"Cannot deliver Time to released flight");return
+	check(branch.snapshot().fast_forward.active,"Eligible station guidance refused held Time")
+	var before: Dictionary=branch.snapshot()
+	var expected_guide: RefCounted=branch._autopilot.fork_for_frame()
+	check(expected_guide.advance(750,branch._pilot.angular_units.x,1.0),expected_guide.error)
+	var advanced: RefCounted=branch.evaluate(150)
+	check(advanced!=null,branch.error)
+	if advanced==null:return
+	var state: Dictionary=advanced.snapshot()
+	check(state.player_pose==expected_guide.snapshot().player_pose,"Fast Forward did not perform one 750ms player update")
+	check(state.world_phase_elapsed_ms-before.world_phase_elapsed_ms==750 and state.encounter.elapsed_ms-before.encounter.elapsed_ms==750,"Fast Forward capped or duplicated a world/weapon pass")
+	check(state.world_elapsed_ms-before.world_elapsed_ms==150 and state.hud_elapsed_ms-before.hud_elapsed_ms==150,"Fast Forward scaled mission or HUD elapsed time")
+	check(state.flight_audio.serial==before.flight_audio.serial+1 and state.fast_forward.camera_ms==150 and state.fast_forward.camera_passes==5,"Fast Forward duplicated a complete frame or lost its camera schedule")
+	var camera: RefCounted=branch._camera.fork_for_frame()
+	for i in 5:check(camera.update(150,advanced._shot,{"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"player_pose":state.player_pose}),camera.error)
+	check(state.camera_view==camera.snapshot(),"Connected camera differs from five divided-time follow updates")
+	check(branch.snapshot()==before and world.snapshot()==original,"Prospective Fast Forward advanced its accepted parent")
+	var released: RefCounted=advanced.release_flight_action(false)
+	check(released!=null and released.snapshot().fast_forward.held and not released.snapshot().fast_forward.active,"Another action release cleared Time hold or kept acceleration")
+	if released==null:return
+	var repeated: RefCounted=released.press_fast_forward()
+	check(repeated!=null and not repeated.snapshot().fast_forward.active,"Held input restarted acceleration after another control's release")
+	var invalid: RefCounted=branch.fork_for_frame();invalid._targeting._field_identity=RefCounted.new()
+	var invalid_before: Dictionary=invalid.snapshot()
+	check(invalid.evaluate(150)==null and invalid.snapshot()==invalid_before,"Rejected scaled frame changed its parent timing/input state")
+	# Move through actual guidance until the published near flag cancels on the
+	# following frame. Do not precompute a fresh threshold before the player pass.
+	var approaching: RefCounted=advanced
+	var near_seen:=false
+	for tick in 80:
+		var prior: Dictionary=approaching.snapshot()
+		var next: RefCounted=approaching.evaluate(150)
+		check(next!=null,approaching.error)
+		if next==null:return
+		var now: Dictionary=next.snapshot()
+		if prior.fast_forward.near_target:
+			check(not now.fast_forward.active and now.fast_forward.held and now.world_phase_elapsed_ms-prior.world_phase_elapsed_ms==150,"Near-target cancellation used the new position or cleared Time hold")
+			near_seen=true;break
+		approaching=next
+	check(near_seen,"Guided Fast Forward never reached its verified near boundary")
+
+func verify_fast_forward_input(args: PackedStringArray) -> void:
+	if not host.session.fast_forward_available():return
+	host.set_touch_controls(false)
+	check(not host._time_button.is_visible_in_tree(),"Desktop Time button ignored hidden touch controls")
+	key_down(KEY_TAB)
+	check(host.session.snapshot().fast_forward.held and not host.session.snapshot().fast_forward.active,"Keyboard Time steered a training waypoint")
+	key_up(KEY_TAB)
+	check(choose_keyboard_flight_action(KEY_Q,"station_autopilot"),"Q menu did not select station guidance")
+	key_down(KEY_TAB)
+	check(host.session.snapshot().fast_forward.active,"Keyboard Time did not accelerate existing guidance")
+	key_up(KEY_UP)
+	check(host.session.snapshot().fast_forward.active,"A steering release was treated as an action-button release")
+	key(KEY_SLASH)
+	check(host.session.snapshot().fast_forward.held and not host.session.snapshot().fast_forward.active,"Action release did not cancel keyboard acceleration")
+	key_up(KEY_TAB);key_down(KEY_TAB)
+	check(host.session.snapshot().fast_forward.active,"Fresh keyboard press could not rearm acceleration")
+	key(KEY_ESCAPE)
+	check(not host.session.snapshot().fast_forward.held and not host.session.snapshot().fast_forward.active,"Pause retained Fast Forward input")
+	key(KEY_ESCAPE)
+	TouchInput.set_preference(host,true);host.present_session()
+	check(host._time_button.is_visible_in_tree() and not host._time_button.disabled,"Enabled touch Time button is unavailable")
+	if args.size()==4:
+		await capture(args[3],"training-app-time-touch")
+		await capture_phone(args[3],"training-app-time-phone")
+		TouchInput.set_preference(host,true);host.present_session()
+	host._time_button.button_down.emit()
+	check(host.session.snapshot().fast_forward.active,"Touch Time down did not reach the session")
+	host.set_touch_controls(false)
+	host.handle_action_events(host._controls.take_events())
+	check(not host.session.snapshot().fast_forward.held and not host.session.snapshot().fast_forward.active,"Hiding touch controls retained accelerated flight")
+	key(KEY_BRACKETRIGHT)
+	check(choose_keyboard_flight_action(KEY_Q,"cancel_autopilot"),"Q menu did not cancel station guidance")
+	check(not host.session.snapshot().station_autopilot.active,"Input fixture left autopilot enabled")
+
+func choose_keyboard_flight_action(opener: int, action: String) -> bool:
+	key(opener)
+	return choose_open_keyboard_flight_action(action)
+
+func choose_open_keyboard_flight_action(action: String) -> bool:
+	if not host.flight_menu.visible:return false
+	var rows: Array=host.flight_menu.snapshot().rows
+	for index in rows.size():
+		if rows[index].action!=action:continue
+		key(KEY_1+index)
+		return not host.flight_menu.visible
+	host.close_flight_menu();return false
+
+func mine_on_training_return() -> bool:
+	return true
+
 func after_training_application_reload(_args: PackedStringArray):
 	pass
 
@@ -530,7 +659,7 @@ func verify_training_game_over(args: PackedStringArray, packet: Dictionary, equi
 	for i in 140:
 		if session.snapshot().dialogue.visible:break
 		if not training_app_step():return
-	for i in 3:key(KEY_ENTER)
+	for i in bindings.combat_training_story.briefing_events.size():key(KEY_ENTER)
 	var world: RefCounted=session.flight_owner()
 	world._pose=Transform3D(Basis.IDENTITY,Vector3(10000,7000,160000));world._statistics_pose=world._pose
 	check(session._commit(world,false),session.error)

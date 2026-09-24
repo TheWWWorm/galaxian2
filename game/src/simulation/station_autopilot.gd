@@ -1,4 +1,7 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
+const Frames=preload("res://src/simulation/frame_clock.gd")
+var _max_ms:=0
 ## Shared guidance to a supported station or local planet. The caller supplies the
 ## preceding manual response sample and each frame's pitch response, owns
 ## frame/input ordering and checks arrival.
@@ -29,16 +32,19 @@ var _gate_target: Variant
 
 func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCounted, station: RefCounted) -> bool:
 	error=""
-	if bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or station==null or station.get_script()!=Station or not Definitions.parameters(bindings.station_autopilot):return reject("This flight has no supported station autopilot")
-	var entry: Dictionary=construction.snapshot();var target: Dictionary=station.snapshot()
-	for data in [entry,target]:
+	if bindings==null or catalogues==null or construction==null or construction.get_script()!=Construction or not Definitions.parameters(bindings.station_autopilot):return reject("This flight has no supported station autopilot")
+	var entry: Dictionary=construction.snapshot()
+	var void_world: bool=entry.get("campaign_cursor") in [25,29] and OrdinaryFlight.Authored.prepared_entry(bindings,entry) and construction.void_environment_owner()!=null
+	if not void_world and (station==null or station.get_script()!=Station):return reject("This flight requires its actual station exterior")
+	var target: Dictionary={} if void_world else station.snapshot()
+	for data in ([entry] if void_world else [entry,target]):
 		if data.get("base_content_id")!=bindings.base_content_id or data.get("binding_id")!=bindings.binding_id:return reject("Station autopilot belongs to another flight identity")
 	var rules: Dictionary=bindings.station_autopilot
-	if entry.get("campaign_cursor") in [10,11,12,13,14,16,18,19] and not OrdinaryFlight.for_departure(bindings,entry).is_empty():
+	if entry.get("campaign_cursor") in (FlightStages.LOCAL+FlightStages.POST_SAHI) and not OrdinaryFlight.for_departure(bindings,entry).is_empty():
 		rules=rules.duplicate(true);rules.station_id=int(entry.location.station_id);rules.system_id=int(entry.location.system_id)
-	if OrdinaryFlight.for_departure(bindings,entry).is_empty() or entry.get("location",{}).get("station_id")!=int(rules.station_id) or entry.location.get("system_id")!=int(rules.system_id) or target.get("station_id")!=int(rules.station_id) or target.get("system_id")!=int(rules.system_id):return reject("Station autopilot requires the supported mining location")
-	var destination:=Vector3(rules.target_position[0],rules.target_position[1],rules.target_position[2])
-	if not target.get("pose") is Transform3D or target.pose.origin!=destination:return reject("Station autopilot target differs from its authored position")
+	if OrdinaryFlight.for_departure(bindings,entry).is_empty() or entry.get("location",{}).get("station_id")!=int(rules.station_id) or entry.location.get("system_id")!=int(rules.system_id) or (not void_world and (target.get("station_id")!=int(rules.station_id) or target.get("system_id")!=int(rules.system_id))):return reject("Station autopilot requires the supported mining location")
+	var destination:=Vector3.ZERO if void_world else Vector3(rules.target_position[0],rules.target_position[1],rules.target_position[2])
+	if not void_world and (not target.get("pose") is Transform3D or target.pose.origin!=destination):return reject("Station autopilot target differs from its authored position")
 	var vehicle:=Vehicle.new()
 	if not vehicle.configure(bindings,catalogues,bindings.base_content_id):return reject(vehicle.error)
 	var loadout: Dictionary=entry.departure.loadout
@@ -50,6 +56,7 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	var speed: Variant=bindings.cruise.get("speed_units_per_millisecond")
 	if not is_finite(limit) or limit<=0 or limit>2147483647.0 or not (speed is int or speed is float) or not is_finite(speed) or speed<=0:return reject("Station autopilot response exceeds supported coordinates")
 	_rules=rules.duplicate(true);_identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id}
+	_max_ms=Frames.simulation_limit(bindings,int(_rules.max_frame_ms))
 	_gain=gain;_response=factor;_limit=limit;_speed=float(speed)
 	_history.resize(int(rules.bank_samples));_history.fill(0.0);_cursor=0;_wrapped=false;_manual_sample=false
 	_planet_station_ids=[]
@@ -60,12 +67,22 @@ func configure(bindings: RefCounted, catalogues: RefCounted, construction: RefCo
 	var contract_navigation: bool=LocalTravel.navigation_available(bindings.mido_travel,entry.campaign_cursor) and entry.scenery.world_initialization.has("contract_context")
 	var ordinary_navigation: bool=LocalTravel.free_local_navigation(bindings.mido_travel,entry.campaign_cursor) and entry.departure.has("free_context")
 	if contract_navigation or ordinary_navigation:
-		_planet_station_ids=LocalTravel.navigation_stations(bindings.mido_travel,entry.campaign_cursor,int(entry.location.station_id)).filter(func(id):return id!=int(entry.location.station_id))
+		if not refresh_local_navigation(bindings,entry.campaign_cursor):return false
 	if entry.campaign_cursor in [10,11,12] and not LocalTravel.journey(bindings.mido_travel,entry.campaign_cursor).is_empty() and entry.location.station_id==int(LocalTravel.journey(bindings.mido_travel,entry.campaign_cursor).from_station_id):
 		_planet_station_ids.append(int(LocalTravel.journey(bindings.mido_travel,entry.campaign_cursor).station_id))
 	_state={"active":false,"station_id":int(rules.station_id),"target_kind":"station","target_position":destination,"player_pose":entry.player_pose,
 		"model_basis":Basis.IDENTITY,"angular_units":Vector2.ZERO,"bank":0.0,"target_bank":0.0,"signed_turn":0.0,
 		"throttle":float(rules.start_throttle),"near_target":false,"elapsed_ms":0,"events":[]}
+	return true
+
+func refresh_local_navigation(bindings: RefCounted, campaign_cursor: int) -> bool:
+	error=""
+	if _rules.is_empty() or bindings==null or bindings.base_content_id!=_identity.base_content_id or bindings.binding_id!=_identity.binding_id:return reject("Local guidance belongs to another configured flight")
+	var destinations: Array=LocalTravel.navigation_stations(bindings.mido_travel,campaign_cursor,int(_rules.station_id))
+	if destinations.is_empty():return reject("This campaign has no supported local guidance")
+	# Result acknowledgement can release navigation in the same physical world.
+	# Preserve its current target, preceding response and shared turn history.
+	_planet_station_ids=destinations.filter(func(id):return id!=int(_rules.station_id))
 	return true
 
 func observe_manual(pose: Transform3D, angular_units: Vector2) -> bool:
@@ -80,13 +97,22 @@ func observe_manual(pose: Transform3D, angular_units: Vector2) -> bool:
 
 func start(pose: Variant=null) -> bool:
 	error=""
-	if _state.is_empty() or _state.active or not _manual_sample:return reject("Station guidance requires the preceding manual sample")
+	if _state.is_empty() or int(_rules.station_id)<0 or _state.active or not _manual_sample:return reject("Station guidance requires an available station and the preceding manual sample")
 	if pose!=null and (not pose is Transform3D or not proper_pose(pose)):return reject("Invalid current station guidance pose")
 	_state=_state.duplicate(true);_state.active=true;_state.throttle=float(_rules.start_throttle)
 	_state.target_kind="station";_state.station_id=int(_rules.station_id)
 	_state.target_position=Vector3(_rules.target_position[0],_rules.target_position[1],_rules.target_position[2])
 	if pose!=null:_state.player_pose=pose
 	_state.events=[{"kind":"notification","source_id":int(_rules.start_notice)}]
+	return true
+
+## The source asteroid-field menu selects the field-center proxy, not a body.
+func start_field(position: Vector3, pose: Transform3D) -> bool:
+	error=""
+	if _state.is_empty() or not _manual_sample or not position.is_finite() or not proper_pose(pose):return reject("Asteroid guidance requires the generated field and current pose")
+	_state=_state.duplicate(true)
+	_state.merge({"active":true,"target_kind":"field","target_position":position,
+		"player_pose":pose,"throttle":float(_rules.start_throttle),"events":[]},true)
 	return true
 
 func start_planet(station_id: int, position: Vector3, pose: Transform3D) -> bool:
@@ -142,7 +168,7 @@ func observe_mining_guidance(before: Transform3D, after: Transform3D) -> bool:
 
 func advance(milliseconds: Variant, pitch_units: float, throttle:=1.0, paused:=false) -> bool:
 	error=""
-	if _state.is_empty() or not _state.active or not Numbers.integer(milliseconds,0,int(_rules.max_frame_ms)) or not is_finite(pitch_units) or absf(pitch_units)>2147483647.0 or not is_finite(throttle) or throttle<0 or throttle>1:return reject("Station guidance requires an active bounded frame and throttle")
+	if _state.is_empty() or not _state.active or not Numbers.integer(milliseconds,0,_max_ms) or not is_finite(pitch_units) or absf(pitch_units)>2147483647.0 or not is_finite(throttle) or throttle<0 or throttle>1:return reject("Station guidance requires an active bounded frame and throttle")
 	if paused:return true
 	if int(_state.elapsed_ms)>2147483647-int(milliseconds):return reject("Station guidance time exceeds the source range")
 	var before: Transform3D=_state.player_pose
@@ -210,9 +236,10 @@ func fork_for_frame() -> RefCounted:
 	copy._history=_history.duplicate();copy._cursor=_cursor;copy._wrapped=_wrapped;copy._manual_sample=_manual_sample
 	copy._planet_station_ids=_planet_station_ids
 	copy._gate_target=_gate_target
-	return copy
+	copy._max_ms=_max_ms;return copy
 
 func clear() -> void:
+	_max_ms=0
 	error="";_rules={};_identity={};_state={};_gain=0;_response=0;_limit=0;_speed=0
 	_history=[];_cursor=0;_wrapped=false;_manual_sample=false
 	_planet_station_ids=[]

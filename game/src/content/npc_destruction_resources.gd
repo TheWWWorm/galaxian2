@@ -134,6 +134,10 @@ func configure_free(library: RefCounted,bindings: RefCounted,construction: RefCo
 	if not construction is Construction:return reject("Ordinary destruction requires its generated population")
 	return _configure_population_models(library,bindings,construction,FreeLife.population(bindings,construction.snapshot()),"free_context")
 
+func _configure_story(library: RefCounted,bindings: RefCounted,construction: RefCounted,data: Dictionary) -> bool:
+	clear()
+	return _configure_population_models(library,bindings,construction,data,data.context_key)
+
 func _configure_population_models(library: RefCounted,bindings: RefCounted,construction: RefCounted,data: Dictionary,context_key: String) -> bool:
 	if data.is_empty():return reject("Unsupported population destruction resources")
 	var prepared: RefCounted=get_script().new()

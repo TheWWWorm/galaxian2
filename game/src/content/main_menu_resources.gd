@@ -15,8 +15,10 @@ const ACTIONS=[
 	{"action":"info","source_action":4,"text_id":43},
 ]
 const EXIT_TEXT_ID=33
+const TITLE_PROMPT_TEXT_ID=188
 var error:=""
 var logo: AtlasTexture
+var title_prompt: String
 var actions: Array=[]
 var identity:={}
 
@@ -35,8 +37,8 @@ func configure(library: RefCounted,bindings: RefCounted,visuals: RefCounted) -> 
 	for item in ACTIONS:
 		if item.text_id>=library.strings.size() or library.strings[item.text_id].is_empty():return reject("The imported menu text is incomplete")
 		var row: Dictionary=item.duplicate();row.text=library.strings[item.text_id];rows.append(row)
-	if EXIT_TEXT_ID>=library.strings.size():return reject("The menu exit text is unavailable")
-	logo=prepared;actions=rows
+	if EXIT_TEXT_ID>=library.strings.size() or TITLE_PROMPT_TEXT_ID>=library.strings.size() or library.strings[TITLE_PROMPT_TEXT_ID].is_empty():return reject("The menu title text is unavailable")
+	logo=prepared;actions=rows;title_prompt=library.strings[TITLE_PROMPT_TEXT_ID]
 	identity={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,"language":library.active_language}
 	return true
 

@@ -1,6 +1,7 @@
 extends RefCounted
 const FreeLife=preload("res://src/content/free_lifecycle_definitions.gd")
 const Kappa=preload("res://src/content/kappa_population_definitions.gd")
+const NPCSystems=preload("res://src/content/npc_systems_definitions.gd")
 const Alioth=preload("res://src/content/alioth_population_definitions.gd")
 ## Requested player damage and faction reactions in verified ordinary Mido
 ## populations. Hull pools, career reputation and radio presentation have owners.
@@ -29,6 +30,12 @@ func configure_ambient(bindings: RefCounted,catalogues: RefCounted,construction:
 	var data:=FreeLife.population(bindings,packet) if packet.has("free_context") else AmbientCombat.population(bindings,packet,rank,difficulty)
 	if not _configure_population(bindings,catalogues,data,equipment,reputation):return false
 	if data.has("free_lifecycle"):_set_factions(data,int(data.mission_kind))
+	if NPCSystems.available(bindings):
+		_rules.systems=bindings.mido_travel.kappa_lifecycle.systems.duplicate(true)
+		_rules.systems_primary=int(catalogues.tables.systems[int(data.system_id)].fields[int(bindings.mido_travel.kappa_lifecycle.system_faction_field)])
+		_state.actor_kinds=packet.actors.map(func(actor):return int(actor.actor_kind))
+		_state.permanent_hostile=[];_state.permanent_hostile.resize(data.actor_count);_state.permanent_hostile.fill(false)
+		_state.systems_requested_damage=[];_state.systems_requested_damage.resize(data.actor_count);_state.systems_requested_damage.fill(0)
 	return true
 
 func configure_contract(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,equipment: RefCounted) -> bool:
@@ -58,6 +65,17 @@ func configure_alioth_attack(bindings: RefCounted,catalogues: RefCounted,constru
 	_set_factions(data,int(data.mission_kind))
 	return true
 
+func _configure_story(bindings: RefCounted,catalogues: RefCounted,data: Dictionary,equipment: RefCounted,reputation: Dictionary) -> bool:
+	error="";_rules={};_state={}
+	if not _configure_population(bindings,catalogues,data,equipment,reputation):return false
+	_set_factions(data,int(data.mission_kind))
+	if NPCSystems.available(bindings):
+		_rules.systems=bindings.mido_travel.kappa_lifecycle.systems.duplicate(true)
+		_rules.systems_primary=int(data.lifecycle.reactions.primary_faction)
+		_state.permanent_hostile=[];_state.permanent_hostile.resize(data.actor_count);_state.permanent_hostile.fill(false)
+		_state.systems_requested_damage=[];_state.systems_requested_damage.resize(data.actor_count);_state.systems_requested_damage.fill(0)
+	return true
+
 func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construction: RefCounted,reputation: Dictionary) -> bool:
 	error="";_rules={};_state={}
 	if not construction is Construction or catalogues==null or catalogues.content_id!=bindings.base_content_id or not Reputation.valid_state(reputation):return reject("Kappa reactions require their generated population and current standing")
@@ -72,6 +90,7 @@ func configure_kappa_rescue(bindings: RefCounted,catalogues: RefCounted,construc
 	if not _initialize_population(bindings,data,rules,reputation):return false
 	_set_factions(data,int(data.mission_kind))
 	_rules.kappa_lifecycle=source.duplicate(true)
+	_rules.systems=source.systems.duplicate(true);_rules.systems_primary=int(source.primary_faction)
 	_state.permanent_hostile=packet.actors.map(func(actor):return actor.script_hostile)
 	_state.forced_hostile=_state.permanent_hostile.duplicate()
 	_state.systems_requested_damage=[];_state.systems_requested_damage.resize(data.actor_count)
@@ -122,7 +141,7 @@ func evaluate(actor: Dictionary, amount: Variant, nonplayer: Variant, random_sta
 	if not random.restore(random_state):return fail(random.error)
 	var next:=fork_for_frame();var events:=[]
 	var faction_eligible: bool=not _rules.has("contract") or _rules.contract.eligible_factions.any(func(value):return int(value)==expected_kind)
-	if _rules.has("kappa_lifecycle") and actor.script_hostile:faction_eligible=false
+	if _state.has("permanent_hostile") and actor.script_hostile:faction_eligible=false
 	if faction_eligible and actor.active and actor.damage_allowed and actor.vitals.hull>0 and not nonplayer and (not actor.hostile or actor.forced_hostile):
 		# Accumulation counts requested damage, including absorbed shield/armor
 		# damage. Match signed 32-bit storage before the binary32 comparisons.
@@ -161,7 +180,7 @@ func _validate_actor(actor: Dictionary) -> bool:
 
 func evaluate_systems(actor: Dictionary,amount: Variant,nonplayer: Variant,random_state: Dictionary,display_available: bool) -> Dictionary:
 	error=""
-	if not _rules.has("kappa_lifecycle") or not Vitals.integer(amount) or not nonplayer is bool or not _validate_actor(actor):return fail("Systems reactions require a matching Kappa actor and valid damage attribution: "+error)
+	if not _rules.has("systems") or not Vitals.integer(amount) or not nonplayer is bool or not _validate_actor(actor):return fail("Systems reactions require a matching actor and valid damage attribution: "+error)
 	var pools: Variant=actor.get("systems")
 	if not pools is Dictionary or not Vitals.integer(pools.get("integrity")) or not Vitals.integer(pools.get("capacity")) or pools.capacity<1 or not pools.get("disabled") is bool:return fail("Systems reactions require current systems pools")
 	var random:=Random.new()
@@ -170,13 +189,13 @@ func evaluate_systems(actor: Dictionary,amount: Variant,nonplayer: Variant,rando
 	var id: int=actor.actor_id;var kind: int=actor.actor_kind
 	var accepted: bool=actor.active and actor.damage_allowed and actor.vitals.hull>0 and pools.integrity>0
 	var depleted: bool=accepted and amount>=pools.integrity
-	if accepted and not nonplayer and not actor.script_hostile and kind==int(_rules.kappa_lifecycle.primary_faction):
+	if accepted and not nonplayer and not actor.script_hostile and kind==_rules.systems_primary:
 		# Systems and ordinary damage accumulate in different source counters.
 		var total: int=(next._state.systems_requested_damage[id]+amount)&0xffffffff
 		if total>=0x80000000:total-=0x100000000
 		next._state.systems_requested_damage[id]=total
 		@warning_ignore("integer_division")
-		var threshold: int=int(pools.capacity)/int(_rules.kappa_lifecycle.systems.warning_divisor)
+		var threshold: int=int(pools.capacity)/int(_rules.systems.warning_divisor)
 		if total>threshold:
 			next._state.forced_hostile[id]=true
 			if not next._state.warning_issued:
@@ -216,9 +235,11 @@ func retire_contract() -> bool:
 func reset_actor_damage(actor_id: int) -> bool:
 	error=""
 	if _state.is_empty() or actor_id<0 or actor_id>=_state.requested_damage.size():return reject("Traffic reset requires its configured actor")
-	# Statistics reinitialization clears requested damage. The separate actor
-	# force flag and the world's once-only warnings remain retained.
+	# The small-ship wrapper retains individual retaliation around the statistics
+	# reset. Both damage counters clear; faction hostility and world warnings stay.
 	_state.requested_damage[actor_id]=0
+	if _state.has("systems_requested_damage"):
+		_state.systems_requested_damage[actor_id]=0
 	return true
 
 func fork_for_frame() -> RefCounted:

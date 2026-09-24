@@ -26,7 +26,7 @@ func verify(args: PackedStringArray) -> void:
 	check(gates.packet(bindings,cat,request).is_empty(),"A single gate jump skipped Weymire on the original Union route")
 	request.from_station_id=70
 	check(not gates.packet(bindings,cat,request).is_empty(),"The original Magnetar–Union link is unavailable")
-	for cursor in [17,20,18.5]:check(not Campaign.supported(bindings.mido_travel,cursor),"An unsupported campaign stage was enabled")
+	for cursor in [17,25 if Campaign.chapter_available(bindings.mido_travel) else 20,18.5]:check(not Campaign.supported(bindings.mido_travel,cursor),"An unsupported campaign stage was enabled")
 	for seconds in [0,999,1789100000]:
 		for seed in [1,98765,2147483647]:
 			var population:=Population.new()

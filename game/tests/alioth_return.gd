@@ -38,7 +38,7 @@ func after_alioth_flight(live: Node3D,frame: RefCounted,station: RefCounted) -> 
 	for event in definitions.mido_travel.alioth_return.events:
 		var state: Dictionary=app.session.snapshot()
 		check(state.campaign_cursor==17 and state.dialogue.visible and state.dialogue.text_id==int(event.text_id),"Alioth return skipped an original acknowledged line")
-		if int(event.text_id) in [1821,1837]:await capture_return_view("alioth-return-%d"%int(event.text_id))
+		if int(event.text_id) in [int(definitions.mido_travel.alioth_return.events.front().text_id),int(definitions.mido_travel.alioth_return.events.back().text_id)]:await capture_return_view("alioth-return-%d"%int(event.text_id))
 		app.station_navigation("next")
 		if app._transition_failed:check(false,app.status.text);return
 	var final: Dictionary=app.session.snapshot()
@@ -59,6 +59,7 @@ func after_alioth_flight(live: Node3D,frame: RefCounted,station: RefCounted) -> 
 
 func capture_return_view(label: String) -> void:
 	var directory:=OS.get_environment("GOF2_ALIOTH_CAPTURE_DIR")
+	if directory.is_empty():directory=OS.get_environment("GOF2_CAPTURE_DIR")
 	if directory.is_empty() or DisplayServer.get_name()=="headless":return
 	if not AliothCheckpoint.private_path(directory+"/capture.png"):check(false,"Keep Alioth captures outside engine source");return
 	DirAccess.make_dir_recursive_absolute(directory)
@@ -67,7 +68,7 @@ func capture_return_view(label: String) -> void:
 	await process_frame
 	resume_application_focus();RenderingServer.force_draw(false);await RenderingServer.frame_post_draw
 	check(root.get_texture().get_image().save_png(directory.path_join(label+".png"))==OK,"Cannot capture the Alioth station return")
-	root.size=Vector2i(960,540);app.set_mobile_layout(true);app.set_touch_controls(true)
+	root.size=Vector2i(960,540);app.set_mobile_layout(true);TouchInput.set_preference(app,true)
 	app.present_session()
 	await process_frame
 	resume_application_focus();RenderingServer.force_draw(false);await RenderingServer.frame_post_draw

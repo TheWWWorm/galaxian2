@@ -1,5 +1,6 @@
 """Recover bounded live station flight parameters; emit no executable payload."""
 import copy
+from .declaration_layouts import recognize
 from .station_exterior import declaration_bytes
 
 def extract_station_flight(mach, arrival, flight):
@@ -7,13 +8,11 @@ def extract_station_flight(mach, arrival, flight):
     try:
         origin=arrival['provenance']['actor']
         if origin['bytes']!=315:return {}
-        anchor=mach.text['address']+origin['offset']-mach.slice_offset-mach.text['offset']
-        proof={}
-        for key,(delta,size,section,pattern) in LAYOUTS.items():
-            found=declaration_bytes(mach,anchor+delta,size,section.encode())
-            if found is None or found[0]!=bytes.fromhex(pattern):return {}
-            proof[key]={'offset':found[1],'bytes':size}
-        result=copy.deepcopy(VALUES);result['provenance']=proof
+        layouts=[{k:[v[2],v[0],v[1],v[3]] for k,v in rows.items()} for rows in [LAYOUTS,MAC_ALTERNATE]]
+        proof=recognize(mach,origin['offset'],layouts,reader=declaration_bytes)
+        if not proof:return {}
+        values=VALUES
+        result=copy.deepcopy(values);result['provenance']=proof
         return result
     except (KeyError,TypeError,ValueError,IndexError,OverflowError):return {}
 
@@ -87,3 +86,52 @@ LAYOUTS = {'mining_guidance_history': [587316,
  'separators': [1682229, 5, '__cstring', '3a20002000'],
  'notice_10_entry': [-111894, 4, '__text', 'e2f4ffff'],
  'notice_21_entry': [-111850, 4, '__text', '62f9ffff']}
+
+# Complete independently verified alternate Mac layout.
+MAC_ALTERNATE = {'mining_guidance_history': [587852, 29, '__text', '4c89e7660f6f8570fefffff30f108d8cfeffffbe01000000e805b5ffff'],
+ 'mining_visual_gate': [579707,
+                        40,
+                        '__text',
+                        '41f6864802000001f30f109560fbffff0f85ed030000418b864c020000ffc883f8020f82db030000'],
+ 'manual_response_sample': [565591, 32, '__text', '488d7da0f3410f10842418030000f3410f1184241c0300004c89f6e8eb250a00'],
+ 'manual_command_clear': [566438,
+                          48,
+                          '__text',
+                          '41c78424f80200000000000041c78424f40200000000000041c78424540100000000000041c784245001000000000000'],
+ 'visual_neutral_return': [580200,
+                           534,
+                           '__text',
+                           'f3410f108618030000488d05ea0a1c00833800448ba55cfbffff0f57c974710f2ec14c8bad60fbffff762c4183be54010000007522f30f590569850e00f3410f1186180300000f57c90f2ec80f87c1000000e9c70000000f2ec80f86be0000004183be54010000000f85b0000000f30f590530850e00f3410f1186180300000f57c90f2ec10f8788000000e98e0000000f2ec14c8bad60fbffff763a4183be540100000075300f57c9f3410f2accf3410f598ea4010000f30f5e0d17fe0e000f57d2f30f58c1f3410f1186180300000f2ed0773feb480f2ec876434183be540100000075390f57c9f3410f2accf3410f598ea4010000f30f5e0dd4fd0e000f57d2f30f58c1f3410f1186180300000f2ec2760b41c7861803000000000000f3410f1086140300000f57c90f2ec1763a4183be500100000075300f57c9f3410f2accf3410f598ea4010000f30f5e0d84fd0e000f57d2f30f58c1f3410f1186140300000f2ed0773feb480f2ec876434183be500100000075390f57c9f3410f2accf3410f598ea4010000f30f5e0d41fd0e000f57d2f30f58c1f3410f1186140300000f2ec2760b41c78614030000000000004983be00020000007419498bbeb8000000f30f100584570e00be46000000e8f206050041c786f80200000000000041c786f40200000000000041c786540100000000000041c786500100000000000041c7860c0300000000000041c7860403000000000000'],
+ 'yaw_negative_gate': [596161,
+                       45,
+                       '__text',
+                       'f683a8010000010f8587010000f683f203000001740d83bb4c020000010f8571010000c78354010000ffffffff'],
+ 'yaw_positive_gate': [596857,
+                       45,
+                       '__text',
+                       'f683a8010000010f8580010000f683f203000001740d83bb4c020000010f856a010000c7835401000001000000'],
+ 'pitch_negative_gate': [597974,
+                         45,
+                         '__text',
+                         'f683a8010000010f8575010000f683f203000001740d83bb4c020000010f855f010000c78350010000ffffffff'],
+ 'pitch_positive_gate': [598933,
+                         45,
+                         '__text',
+                         'f683a8010000010f8571010000f683f203000001740d83bb4c020000010f855b010000c7835001000001000000'],
+ 'neutral_divisors': [1562938, 8, '__const', '0000fc420000fcc2'],
+ 'station_menu': [357980,
+                  73,
+                  '__text',
+                  'a9000080007442498b5c2460498bbc2490000000e88127fcff488b4008488b304889dfe89c200300498b542460498bbc2488000000be0a00000031c9e89fbef8ff418b842440010000'],
+ 'notice_dispatch': [-117416, 29, '__text', '418d46ff83f82e0f8706120000488d0db6130000486304814801c8ffe0'],
+ 'target_message': [-115196,
+                    324,
+                    '__text',
+                    '488d0567a52600488b38be17020000e89ad712004889c34c8dbde8fdffff488d35b40b1b004c89ff31d2e80f761600488dbdf8fdffff4889de4c89fae87d8d1600488d050ea52600488b38e808dc0e00488dbdc8fdffff4889c6e893c10e00488dbdd8fdffff488db5c8fdffff31d2e89a781600488dbd08feffff488db5f8fdffff488d95d8fdffffe8308d1600488d05c1a42600488b38e8bbdb0e004889c7e867c10e004d8dbd4002000083f8657524488dbdb8fdffff488d350b1a1d0031d2e878751600b3014530e4eb4e4989c6e957010000488dbda8fdffff488d35f90a1b0031d2e854751600488d057da42600488b3830dbbe87000000e8aed6120041b40130db488dbdb8fdffff488db5a8fdffff4889c2e8a38c1600488dbd18feffff488db508feffff488d95b8fdffffe8898c1600488db518feffff4c89ffe8ea7b1600'],
+ 'restricted_message': [-114044, 20, '__text', '488d05e7a02600488b38be02020000e9bf040000'],
+ 'current_station': [858716, 14, '__text', '554889e5488b87180200005dc390'],
+ 'station_name': [851958, 26, '__text', '554889e553504889fb31d2e80cb707004889d84883c4085b5dc3'],
+ 'station_id': [851984, 10, '__text', '554889e58b47105dc390'],
+ 'separators': [1657309, 5, '__cstring', '3a20002000'],
+ 'notice_10_entry': [-112314, 4, '__text', 'e2f4ffff'],
+ 'notice_21_entry': [-112270, 4, '__text', '62f9ffff']}

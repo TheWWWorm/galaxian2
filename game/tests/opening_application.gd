@@ -1,8 +1,10 @@
 extends SceneTree
-const App = preload("res://src/main.gd")
+## Development launcher integration; player menu entry has its own fixture.
+const App = preload("res://src/presentation/development_launcher.gd")
 const Session = preload("res://src/presentation/opening_session.gd")
 const ArrivalSession = preload("res://src/presentation/arrival_session.gd")
 const StationSession = preload("res://src/presentation/station_session.gd")
+const TouchInput = preload("res://tests/fixtures/touch_input.gd")
 var failures := 0
 
 func _initialize() -> void:
@@ -139,7 +141,7 @@ func check_playable(preview: Control, edition: String) -> void:
 		check(audio_state(session)==unchanged_audio,"Late application presentation failure played or consumed a sound")
 		session._projection._settings=settings
 		check(session.present(),session.error)
-	key_event(KEY_W,true);key_event(KEY_SPACE,true)
+	key_event(KEY_UP,true);key_event(KEY_SPACE,true)
 	var input: Dictionary=preview._controls.snapshot()
 	check(input.command.x==-1 and input.held.fire,"Keyboard flight commands did not reach the opening")
 	check(session.rebase_time(Time.get_ticks_usec()-100000),session.error)
@@ -160,7 +162,7 @@ func check_playable(preview: Control, edition: String) -> void:
 	if session.snapshot().world_frame.has("player_engine"):
 		var engine: Dictionary=session.snapshot().world_frame.player_engine
 		check(engine.initial_source_id==45 and engine.source_id==45 and engine.source_commands==Vector2(-1,0),"Opening loadout or keyboard input selected the wrong engine or command")
-	key_event(KEY_W,false);key_event(KEY_SPACE,false)
+	key_event(KEY_UP,false);key_event(KEY_SPACE,false)
 	var prior: Transform3D=session.snapshot().scene.player_pose
 	now+=100000;check(session.step(now),session.error)
 	check(session.snapshot().scene.player_pose.basis!=prior.basis,"Retained application steering did not turn the ship")
@@ -174,7 +176,7 @@ func check_playable(preview: Control, edition: String) -> void:
 	preview._controller_connection(42,false)
 	input=preview._controls.snapshot();check(input.command==Vector2.ZERO and not input.held.fire,"Controller disconnect left held flight input")
 	preview._touch_toggle.grab_focus()
-	preview.set_touch_controls(true);preview.refresh_render_mode()
+	TouchInput.set_preference(preview,true);preview.refresh_render_mode()
 	check(preview._touch_toggle.button_pressed and not preview._touch_toggle.has_focus(),"Touch preference or keyboard focus disagrees with flight controls")
 	await process_frame
 	resume_fixture_focus(preview,now)
@@ -198,19 +200,19 @@ func check_playable(preview: Control, edition: String) -> void:
 	touch_event(4,Vector2.ZERO,false)
 	check(not preview._controls.snapshot().held.fire,"Old touch release reactivated fire")
 	check(session.rebase_time(now),session.error)
-	key_event(KEY_D,true);key_event(KEY_SPACE,true)
+	key_event(KEY_RIGHT,true);key_event(KEY_SPACE,true)
 	preview._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
 	check(session.is_paused() and preview._controls.snapshot().command==Vector2.ZERO and not preview._controls.snapshot().held.fire,"Focus loss retained flight input")
 	preview._notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
 	check(not session.is_paused(),"Focus restore retained its interactive pause")
-	key_event(KEY_D,false);key_event(KEY_SPACE,false)
+	key_event(KEY_RIGHT,false);key_event(KEY_SPACE,false)
 	check(session.rebase_time(now),session.error)
-	key_event(KEY_A,true);key_event(KEY_SPACE,true)
+	key_event(KEY_LEFT,true);key_event(KEY_SPACE,true)
 	preview.hide()
 	check(session.is_paused() and preview._controls.snapshot().command==Vector2.ZERO and not preview._controls.snapshot().held.fire,"Hidden opening retained held input")
 	preview.show()
 	check(not session.is_paused(),"Visible opening retained the hidden pause")
-	key_event(KEY_A,false);key_event(KEY_SPACE,false)
+	key_event(KEY_LEFT,false);key_event(KEY_SPACE,false)
 	check(session.rebase_time(now),session.error)
 	preview.refresh_render_mode()
 	if session.snapshot().world_frame.has("player_aim"):
@@ -279,20 +281,8 @@ func check_boundaries(preview: Control, edition: String) -> void:
 	check(session.step(10000000,Vector2.ONE,true) and session.snapshot()==frozen,"Player-death boundary advanced or accepted fire")
 	session._clock=saved.clock;session._timeline=saved.timeline;session._world_frame=saved.world;session._scenery=saved.scenery;session.status="running"
 	check(session.present(),session.error)
-	frame=session._world_frame.fork_for_frame()
-	var timeline: RefCounted=session._timeline.fork_for_frame();var combat: RefCounted=timeline.combat_owner()
-	for actor in combat.snapshot().actors:
-		check(not combat.normal_hit(actor.actor_id,actor.vitals.hull-1).is_empty(),combat.error)
-	check(timeline.adopt_contact_pass(combat),timeline.error)
-	gun=frame._primaries._guns[0].projectiles
-	for shot in gun.snapshot().slots:
-		if shot!=null:check(gun.retire(shot.id),gun.error)
-	for actor in combat.snapshot().actors:
-		gun._elapsed_ms=int(gun.snapshot().weapon.interval_ms)+1
-		check(gun.fire(actor.pose.origin,Vector3.BACK,true).get("fired",false),gun.error)
-	session._world_frame=frame;session._timeline=timeline
-	check(session.rebase_time(0) and session.step(100000),session.error)
-	check(session.snapshot().world_frame.controller.death_accounting.counter_deltas.player_kills==3,"Scene lost controlled primary kill credit")
+	complete_encounter_fixture(session)
+	if failures:return
 	var now:=100000
 	var phases:={};var paused_escape:=false;var radio_during_escape:=false
 	preview.set_touch_controls(true)
@@ -396,6 +386,23 @@ func check_boundaries(preview: Control, edition: String) -> void:
 
 # Flush injected input before reading it; explicit focus/hidden checks above own
 # their interruption points. Render awaits occur outside held-input assertions.
+## Shared controlled-contact fixture; this is not a freshly earned save.
+func complete_encounter_fixture(session: Node3D) -> void:
+	var frame: RefCounted=session._world_frame.fork_for_frame()
+	var timeline: RefCounted=session._timeline.fork_for_frame();var combat: RefCounted=timeline.combat_owner()
+	for actor in combat.snapshot().actors:
+		check(not combat.normal_hit(actor.actor_id,actor.vitals.hull-1).is_empty(),combat.error)
+	check(timeline.adopt_contact_pass(combat),timeline.error)
+	var gun: RefCounted=frame._primaries._guns[0].projectiles
+	for shot in gun.snapshot().slots:
+		if shot!=null:check(gun.retire(shot.id),gun.error)
+	for actor in combat.snapshot().actors:
+		gun._elapsed_ms=int(gun.snapshot().weapon.interval_ms)+1
+		check(gun.fire(actor.pose.origin,Vector3.BACK,true).get("fired",false),gun.error)
+	session._world_frame=frame;session._timeline=timeline
+	check(session.rebase_time(0) and session.step(100000),session.error)
+	check(session.snapshot().world_frame.controller.death_accounting.counter_deltas.player_kills==3,"Scene lost controlled primary kill credit")
+
 func key_event(key: int, pressed: bool) -> void:
 	var event:=InputEventKey.new();event.physical_keycode=key;event.pressed=pressed
 	Input.parse_input_event(event);Input.flush_buffered_events()

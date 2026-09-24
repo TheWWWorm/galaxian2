@@ -1,9 +1,9 @@
 """Original gate entry permissions, retained values and career increment. Constant declarations only."""
 import copy
-from .station_exterior import hashed_declarations
+from .station_exterior import hashed_variants
 
 def extract_gate_arrival(mach, arrival):
-    proof = hashed_declarations(mach, arrival, LAYOUTS)
+    variant, proof = hashed_variants(mach, arrival, [LAYOUTS, MAC_ALTERNATE])
     return (copy.deepcopy(VALUES), proof) if proof else ({}, {})
 
 VALUES = {'scope': 'ordinary_gate_arrival',
@@ -93,3 +93,66 @@ LAYOUTS = {'gate_arrival_initial_counter': [880642,
                               46,
                               '__text',
                               '37d39e8a38987cd67c0892cd613c0e4ca3b2d64c4292a73cd1ac8662a252b193']}
+
+# Complete alternate source declarations; no executable payloads.
+MAC_ALTERNATE = {'gate_arrival_initial_counter': [881274,
+                                  120,
+                                  '__text',
+                                  '696d843e4dd782654ef91b93df1b8f62847e74d55364dd64db9342a2e9bd7aa4'],
+ 'gate_arrival_counter_set': [876054, 12, '__text', 'fd0d4cb3f31536a21c2458ea594c5d810b4325776aa67c298a1318efa04fe750'],
+ 'gate_arrival_counter_increment': [876066,
+                                    12,
+                                    '__text',
+                                    'be2168a5eae8397ff76b8103ba68a9a9383c96e74fb3db8ba7dc59b72641b0f7'],
+ 'gate_arrival_counter_get': [876078, 12, '__text', '70a712902feb1d5270ad4669dd237a8d8cb68293f45bcf3cc61c598ba23bcc46'],
+ 'gate_arrival_counter_label': [894143,
+                                39,
+                                '__text',
+                                '46552f9e1433f6187a8da6afc4cfc952dd14fefd90b2f7c839528ca1b0ab4622'],
+ 'gate_arrival_load_counter': [-658429,
+                               12,
+                               '__text',
+                               '1c6efc267de56110ece6f2d010e0b00b5cf4400ac3405b6f7207f728d470ef45'],
+ 'gate_arrival_commit': [383150, 269, '__text', '145d18113b44c598673d75e80a58ba196012d6a53d69052d045fa35ebc37f2b3'],
+ 'gate_arrival_player_permission': [359602,
+                                    31,
+                                    '__text',
+                                    'a39d3ccd0dc901b08a4dcaebe0df3ec7eba142ed7339709c47219e04afd957a0'],
+ 'gate_arrival_damage_setter': [538162,
+                                14,
+                                '__text',
+                                'c2cc97c084d3d043a845b988c8787fddca64e8c28420f3169c94bcae8b44d1a6'],
+ 'gate_arrival_damage_guard': [538306,
+                               90,
+                               '__text',
+                               '403fa5e8bda57a3390d742949e0e081c032deb25425f54bfb15e8f2e5d951738'],
+ 'gate_arrival_shield_guard': [538422,
+                               112,
+                               '__text',
+                               '28f00f11073cbbad8db4e76ab8f82c0157b21a9262bcb3eaa2dd8df5be5fa6ed'],
+ 'gate_arrival_player_reset': [359973,
+                               41,
+                               '__text',
+                               'ef64b1a394a316908b5cea4b0b14c5192ae2080aec345e629d3d396890ba2c71'],
+ 'gate_arrival_collision_setter': [560162,
+                                   14,
+                                   '__text',
+                                   '72c854ab442e1d26da6d19e240e26911b289aa942d1d28ebd5fa79efb1dc85e2'],
+ 'gate_arrival_speed_reset': [559382,
+                              102,
+                              '__text',
+                              'ba2fb34475e1bcf7be8c2c3a61d5270dcfa7788b95ea0e3d4c3660c5ae13377d'],
+ 'gate_arrival_primary_reset': [601294,
+                                16,
+                                '__text',
+                                '678a3cfae301ff631cc931feb199df13ad20ca3f53abecc111cfc015f9abf87f'],
+ 'gate_arrival_primary_category': [542626,
+                                   82,
+                                   '__text',
+                                   '63ff20c37bb5c6e19f5b06cbe4fae2ebf3e9f68837729232ec500b0d4ae1357b'],
+ 'gate_arrival_confirmation_reset': [350451,
+                                     32,
+                                     '__text',
+                                     '33bfe18122023f44d975a932e2dfd9c76f5ab17f79a925425f343ee355bccb99'],
+ 'gate_arrival_map_accept': [350819, 31, '__text', '0a90d808df7aff5b0ff3dde413e074dc37f501722095285f817550df54412e70'],
+ 'gate_arrival_map_cleanup': [351157, 46, '__text', '55979cd4f69397d1d19c5cd2a0b3641c8c033be2c8c74f41a4f2e5e1d10f75ba']}

@@ -10,6 +10,7 @@ const Numbers=preload("res://src/content/opening_definitions.gd")
 const Reputation=preload("res://src/simulation/faction_reputation.gd")
 const Vitals=preload("res://src/simulation/combat_vitals.gd")
 const Navigation=preload("res://src/simulation/contract_navigation.gd")
+const Persistent=preload("res://src/content/persistent_contact_definitions.gd")
 const MAX_DRAWS=65536
 var error:=""
 var _state:={}
@@ -46,6 +47,8 @@ func prepare(bindings: RefCounted,cat: RefCounted,library: RefCounted,context: V
 	if not candidate._rng.restore(random_state):return reject(candidate._rng.error)
 	candidate._rules=rules.duplicate(true);candidate._history=history.duplicate();candidate._stations=stations.duplicate()
 	candidate._context=context.duplicate(true);candidate._catalogues=cat
+	var contacts:=[]
+	var persistent_rules: Dictionary={}
 	if ordinary:
 		candidate._ordinary=bindings.early_contracts.ordinary_generation.duplicate(true)
 		var persistent: Dictionary=candidate._ordinary.persistent
@@ -53,7 +56,9 @@ func prepare(bindings: RefCounted,cat: RefCounted,library: RefCounted,context: V
 		if data.is_empty():return reject(library.error)
 		var records:=decode_persistent_contacts(data,persistent)
 		if records.is_empty():return reject("Invalid original persistent contact table")
-		if records.any(func(record):return record.fields[int(persistent.station_field)]==context.station_id):return reject("This location requires an unsupported persistent contact")
+		if Persistent.available(bindings):persistent_rules=bindings.persistent_contacts
+		contacts=candidate._authored_contacts(records,system_id,persistent_rules)
+		if not candidate.error.is_empty():return reject(candidate.error)
 	if base or ordinary:
 		candidate._navigation=bindings.early_contracts.base_navigation.duplicate(true)
 		if not range(cat.tables.stations.size()).any(func(id):return Navigation.eligible(candidate._navigation,cat,system_id,context.system_availability,id)):return reject("No source contract destination is available")
@@ -71,16 +76,14 @@ func prepare(bindings: RefCounted,cat: RefCounted,library: RefCounted,context: V
 			"price":prototype_price(int(values[int(rules.merchant.minimum_price_value_index)]),int(values[int(rules.merchant.maximum_price_value_index)]))})
 	if not range(candidate._items.size()).any(func(id):return candidate._merchant_eligible(id)):return reject("There are no eligible source contact trade items")
 	var system_faction:=int(cat.tables.systems[system_id].fields[int(rules.system_faction_field)])
-	var contacts:=[]
-	# Early locations have no persistent contacts. Ordinary supported locations
-	# are checked against the original catalogue before using this zero-count path.
-	for ignored in int(rules.count.preliminary_draws):candidate._draw(int(rules.count.draw_bound))
-	var count: int=int(rules.count.minimum)+candidate._draw(int(rules.count.draw_bound))
+	var authored_count:=contacts.size()
+	var count: int=candidate._population_count(authored_count,persistent_rules)
 	var roster_seen:=false
-	for id in count:
+	for id in range(authored_count,count):
 		var contact: Dictionary=candidate._contact(system_faction)
 		if not candidate.error.is_empty():return reject(candidate.error)
 		contact.contact_id=id;contact.offer={}
+		if authored_count>0:contact.source_contact_id=-1;contact.generated=true
 		if ordinary and contact.role==int(candidate._ordinary.roster.role):
 			if roster_seen:contact.role=int(candidate._ordinary.roster.duplicate_role)
 			roster_seen=true
@@ -95,20 +98,62 @@ func prepare(bindings: RefCounted,cat: RefCounted,library: RefCounted,context: V
 			var amount:=int(Vitals.single(float(roll)+Vitals.single(float(reward)/float(rules.auxiliary_amount.divisor))))
 			contact.source_auxiliary_amount=Offer.quantize_credits(float(amount),int(bindings.early_contracts.reward.credit_step))
 		contacts.append(contact)
-	if candidate._draw(int(rules.hostile_replacement.percentage_bound))<int(rules.hostile_replacement.threshold):
-		for value in rules.hostile_replacement.factions:
-			var faction:=int(value)
-			if not is_hostile(context.reputation,faction,int(rules.hostile_replacement.reputation_threshold)):continue
-			for id in contacts.size():
-				if contacts[id].role==int(rules.hostile_replacement.role):continue
-				contacts[id]={"contact_id":id,"faction":faction,"male":true,"role":int(rules.hostile_replacement.role),
-					"name":candidate._name(faction,true),"portrait":candidate._portrait(faction,true),"offer":{}}
-				break
+	candidate._replace_hostile(contacts)
 	if not candidate.error.is_empty():return reject(candidate.error)
 	_state={"base_content_id":bindings.base_content_id,"binding_id":bindings.binding_id,
 		"context":context.duplicate(true),"initial_random":random_state.duplicate(true),"initial_history":history.duplicate(),
 		"random":candidate._rng.snapshot(),"history":candidate._history.duplicate(),"draw_calls":candidate._draws,"contacts":contacts}
 	return true
+
+func _population_count(authored_count: int,persistent_rules: Dictionary) -> int:
+	if authored_count==0:
+		# Keep the established empty-table stream and saved population schema.
+		for ignored in int(_rules.count.preliminary_draws):_draw(int(_rules.count.draw_bound))
+		return int(_rules.count.minimum)+_draw(int(_rules.count.draw_bound))
+	var rules: Dictionary=persistent_rules.count
+	var minimum:=authored_count+int(rules.minimum)
+	if minimum+_draw(int(rules.draw_bound))>int(rules.probe_maximum):return int(rules.maximum)
+	return minimum+_draw(int(rules.draw_bound))
+
+func _authored_contacts(records: Array,system_id: int,rules: Dictionary) -> Array:
+	var selected:=records.filter(func(record):return record.fields[int(_ordinary.persistent.station_field)]==_context.station_id)
+	if selected.is_empty():return []
+	var supported:=Persistent.contact_ids(rules,int(_context.station_id),system_id)
+	if supported.is_empty():reject("This location requires an unsupported persistent contact");return []
+	if _context.campaign_cursor<int(rules.first_cursor):return []
+	var result:=[]
+	var fields: Dictionary=rules.fields
+	for record in selected:
+		var values: Array=record.fields
+		if not supported.any(func(id):return int(id)==values[int(fields.id)]) or values[int(fields.system)]!=system_id or values[int(fields.role4_parameter)]!=-1 or values[int(fields.role8_parameter)]!=-1:reject("Unsupported authored contact service");return []
+		var item_id: int=values[int(fields.blueprint)]
+		if not Numbers.integer(item_id,0,_catalogues.tables.items.size()-1) or _catalogues.tables.items[item_id].arrays[int(_rules.merchant.blueprint_array)].is_empty() or values[int(fields.price)]<0:reject("Invalid authored blueprint offer");return []
+		if not Numbers.integer(values[int(fields.faction)],0,int(_rules.identity.faction_bound)-1) or values[int(fields.male)] not in [0,1] or not record.name is String or record.name.is_empty():reject("Invalid authored contact identity");return []
+		var portrait: Array=record.portrait
+		if portrait.size()!=int(rules.portrait.part_count)+1 or not Numbers.integer(portrait[int(rules.portrait.family_index)],0,_rules.portraits.counts.size()-1):reject("Unsupported authored contact portrait");return []
+		var family:=int(portrait[int(rules.portrait.family_index)])
+		var parts:=portrait.slice(int(rules.portrait.parts_start))
+		for index in parts.size():
+			if not Numbers.integer(parts[index],-1,int(_rules.portraits.counts[family][index])-1):reject("Invalid authored portrait part");return []
+		result.append({"contact_id":result.size(),"source_contact_id":int(values[int(fields.id)]),"generated":false,
+			"faction":int(values[int(fields.faction)]),"male":values[int(fields.male)]==int(rules.male_value),
+			"role":int(rules.blueprint_role),"name":record.name,"portrait":{"status":"fixed","family":family,"parts":parts},
+			"blueprint":{"item_id":item_id,"price":int(values[int(fields.price)])},"offer":{}})
+	return result
+
+func _replace_hostile(contacts: Array) -> void:
+	var rules: Dictionary=_rules.hostile_replacement
+	if _draw(int(rules.percentage_bound))<int(rules.threshold):
+		for value in rules.factions:
+			var faction:=int(value)
+			if not is_hostile(_context.reputation,faction,int(rules.reputation_threshold)):continue
+			for id in contacts.size():
+				if not contacts[id].get("generated",true) or contacts[id].role==int(rules.role):continue
+				var replacement:={"contact_id":id,"faction":faction,"male":true,"role":int(rules.role),
+					"name":_name(faction,true),"portrait":_portrait(faction,true),"offer":{}}
+				if contacts[id].has("generated"):replacement.source_contact_id=-1;replacement.generated=true
+				contacts[id]=replacement
+				break
 
 static func decode_names(data: PackedByteArray) -> Array:
 	var reader:=Cursor.new(data)

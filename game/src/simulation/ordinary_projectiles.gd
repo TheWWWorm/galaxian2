@@ -1,4 +1,5 @@
 extends RefCounted
+const FlightStages=preload("res://src/content/flight_stages.gd")
 ## Native timing and flight for verified ordinary primary projectiles. The owner
 ## supplies a world muzzle or authored fixed mount, aim and firing permission;
 ## capacity comes from bindings or an explicit fixture input. No collision,
@@ -80,6 +81,9 @@ func reset_fire_interval() -> bool:
 	if _weapon.is_empty():return reject("Configure a weapon before resetting its firing interval")
 	_elapsed_ms=0
 	return true
+
+func discard_flying() -> void:
+	_slots.fill(null)
 
 func fork_state() -> RefCounted:
 	# Native owners stage a multi-weapon operation on private copies before commit.
@@ -166,7 +170,7 @@ func fire_from_mount(mount: Dictionary, ship_transform: Variant, world_direction
 	var up:=scaled(basis.y,1.0)
 	if not up.is_finite():return fail("Weapon up axis exceeds finite world coordinates")
 	var result:=fire(muzzle, world_direction, firing_allowed,random_state)
-	if result.get("fired",false) and _weapon.get("campaign_cursor") in [7,10,11,12,13,14,16,18,19] and not _weapon.get("nonplayer_source",false):
+	if result.get("fired",false) and _weapon.get("campaign_cursor") in FlightStages.EQUIPPED and not _weapon.get("nonplayer_source",false):
 		# The original ordinary launch stores the firing matrix's Y column in
 		# each slot. It survives ship rotation and is reused by the draw root.
 		_slots[result.projectile.slot].up=up

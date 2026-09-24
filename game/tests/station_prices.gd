@@ -50,11 +50,15 @@ func verify_prices(args: PackedStringArray) -> void:
 	for item in cat.tables.items:
 		var low: int=item.properties[7];var high: int=item.properties[8]
 		all.append({"item_id":int(item.id),"unit_price":low+(high-low)/2,"quantity":1})
-	for station in [70,71,72,73,74,95,96,97,98,99]:
+	var supported_stations:=[70,71,72,73,74,95,96,97,98,99]
+	var unsupported_stations:=[-1,58,108,135,95.0]
+	if bindings.mido_travel.has("suttnar_visit"):supported_stations.append_array([55,56,57])
+	else:unsupported_stations.append(56)
+	for station in supported_stations:
 		check(second.prepare(bindings,cat,station,{"cargo":null,"installed":[],"stock":all},initial,[null,100,100]),"An original item or supported station lost its price fields: "+second.error)
 		if failures:return
 		check(second.snapshot().lists.stock.size()==cat.tables.items.size(),"Repricing dropped original catalogue rows")
-	for destination in [-1,56,108,135,95.0]:
+	for destination in unsupported_stations:
 		check(not owner.prepare(bindings,cat,destination,lists,initial,[100,101,102]) and owner.snapshot()==accepted,"Unsupported location changed accepted prices")
 	for bad_time in [[null,101,102],[100,101],[100,-1,102],[100,101.0,102]]:
 		check(not owner.prepare(bindings,cat,95,lists,initial,bad_time) and owner.snapshot()==accepted,"Malformed time samples changed accepted prices")
@@ -71,3 +75,8 @@ func verify_prices(args: PackedStringArray) -> void:
 	for key in Shopping.SPANS:
 		var bad:=bindings.mido_travel.duplicate(true);bad.provenance.erase(key)
 		check(not Travel.validate(bad,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Missing shopping proof was accepted: "+key)
+	var mixed:=bindings.mido_travel.duplicate(true)
+	var alternate: bool=Travel._alternate(mixed)
+	var other: Dictionary=Shopping.SPANS if alternate else Shopping.MAC_SPANS
+	mixed.provenance.shopping_overfilled_departure.offset=int(bindings.arrival_staging.provenance.actor.offset)+int(other.shopping_overfilled_departure[0])
+	check(not Travel.validate(mixed,int(header.source_executable_bytes),"x86_64",bindings.arrival_staging,bindings.station_entry,bindings.combat_training).is_empty(),"Another source supplied the paid departure proof")

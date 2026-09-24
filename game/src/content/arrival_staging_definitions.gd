@@ -2,6 +2,7 @@ extends RefCounted
 ## Source-bound cinematic cues. Rescue-world and station support are separate.
 const Numbers=preload("res://src/content/opening_definitions.gd")
 const Fonts=preload("res://src/content/font_definitions.gd")
+const Layouts=preload("res://src/content/declaration_layouts.gd")
 const Declarations=preload("res://src/content/opening_escape_definitions.gd")
 const Dialogue=preload("res://src/content/dialogue_definitions.gd")
 const VALUES := {"scope":"rescue_choreography","campaign_cursor":1,"actor_count":1,"actor_kind":3,"actor_hull_id":30,"actor_factory_subtype":0,"actor_initial_position":[300.0,50.0,-6000.0],"actor_route_points":[[0,0,-5000],[0,0,0]],"actor_model_draw_enabled":true,"actor_initial_cruise":0.0,"actor_script_mode":5,"player_initial_position":[0.0,0.0,0.0],"player_model_rotation":[0.4620000123977661,0.4620000123977661,1.5339000225067139],"player_cruise":0.0,"stop_player_engine":true,"stop_actor_engine":true,"hud_visible":false,"scripted_player":true,"player_update_enabled":false,"camera_position":[1500.0,1600.0,-3000.0],"camera_fixed_eye":true,"camera_target":"player_body","rotation_time_multiplier":2,"rotation_time_mask":-16,"rotation_fraction":1.52587890625e-05,"rotation_radians":6.2831854820251465,"actor_speed_per_ms":0.20000000298023224,"actor_distance_divisor":-5000.0,"actor_distance_upper":1.0,"camera_x_per_ms":0.1,"fade_duration_ms":5000,"fade_color_argument":255,"initial_fade_direction":0,"exit_fade_direction":1,"exit_after_event_finished":2,"station_application_state":5,"actor_engine_draw_enabled":false,"actor_engine_resource_id":18030}
@@ -9,6 +10,8 @@ const SPANS := {"x86_64":{"initial":[446,307],"constant_16490b":[1460491,4],"con
 
 const LEGACY_VALUES := {"scope":"rescue_choreography","campaign_cursor":1,"actor_count":1,"actor_kind":3,"actor_hull_id":30,"actor_factory_subtype":0,"actor_initial_position":[300.0,50.0,-6000.0],"actor_route_points":[[0,0,-5000],[0,0,0]],"actor_model_draw_enabled":false,"actor_initial_cruise":0.0,"actor_script_mode":5,"player_initial_position":[0.0,0.0,0.0],"player_model_rotation":[0.4620000123977661,0.4620000123977661,1.5339000225067139],"player_cruise":0.0,"stop_player_engine":true,"stop_actor_engine":true,"hud_visible":false,"scripted_player":true,"player_update_enabled":false,"camera_position":[1500.0,1600.0,-3000.0],"camera_fixed_eye":true,"camera_target":"player_body","rotation_time_multiplier":2,"rotation_time_mask":-16,"rotation_fraction":1.52587890625e-05,"rotation_radians":6.2831854820251465,"actor_speed_per_ms":0.20000000298023224,"actor_distance_divisor":-5000.0,"actor_distance_upper":1.0,"camera_x_per_ms":0.1,"fade_duration_ms":5000,"fade_color_argument":255,"initial_fade_direction":0,"exit_fade_direction":1,"exit_after_event_finished":2,"station_application_state":5}
 const LEGACY_SPANS := {"x86_64":{"initial":[446,307],"constant_16490b":[1460491,4],"constant_16490f":[1460495,4],"constant_1648f7":[1460471,4],"constant_164913":[1460499,4],"constant_162c8b":[1453195,4],"update":[21236,383],"constant_162bbb":[1452987,4],"constant_162be7":[1453031,4],"constant_15b8c3":[1423555,4],"constant_16492f":[1460527,4],"constant_15b4f7":[1422583,4],"constant_164a47":[1460807,8],"actor":[-122027,315],"constant_15ba67":[1423975,4],"constant_15e5ab":[1435051,4],"constant_162c1b":[1453083,4],"constant_163cbf":[1457343,8],"constant_163caf":[1457327,16],"npc_position":[-199395,18],"npc_mode":[-200925,44],"actor_model_visibility":[487799,78],"model_draw_flag":[990943,34],"player_update_gate":[449205,11],"player_flags":[440389,24],"player_engine_tail":[434073,16],"npc_engine_stop":[-199485,34],"engine_stop":[422595,62],"fade_start":[-171867,48],"fade_fraction":[-171761,74],"constant_162747":[1451847,4],"fade_active":[-171523,14],"route_points":[1457327,24]},"armv7":{"initial":[-310,310],"update":[13576,366],"station_request":[18758,68],"actor":[-119120,310],"actor_model_visibility":[430486,60],"model_draw_flag":[1761546,32],"player_update_gate":[400264,10],"npc_position":[-190822,16],"npc_mode":[-192014,28],"player_flags":[394182,16],"player_engine_tail":[389186,16],"npc_engine_stop":[-190870,24],"engine_stop":[379354,48],"fade_start":[-165694,32],"fade_fraction":[-165618,92],"fade_active":[-165370,8],"route_points":[2345162,24],"update_literals":[13942,16],"camera_literal":[13962,8],"fade_alpha_literal":[-165374,4]}}
+
+const MAC_ALTERNATE := {"initial":[446,307],"constant_16490b":[1435555,4],"constant_16490f":[1435559,4],"constant_1648f7":[1435535,4],"constant_164913":[1435563,4],"constant_162c8b":[1428259,4],"update":[21236,383],"constant_162bbb":[1428051,4],"constant_162be7":[1428095,4],"constant_15b8c3":[1398539,4],"constant_16492f":[1435591,4],"constant_15b4f7":[1397567,4],"constant_164a47":[1435871,8],"actor":[-122027,315],"constant_15ba67":[1398959,4],"constant_15e5ab":[1410051,4],"constant_162c1b":[1428147,4],"constant_163cbf":[1432407,8],"constant_163caf":[1432391,16],"npc_position":[-199395,18],"npc_mode":[-200925,44],"player_update_gate":[449741,11],"player_flags":[440925,24],"player_engine_tail":[434609,16],"npc_engine_stop":[-199485,34],"engine_stop":[423131,62],"fade_start":[-171867,48],"fade_fraction":[-171761,74],"constant_162747":[1426911,4],"fade_active":[-171523,14],"route_points":[1432391,24],"actor_engine_visibility":[488347,78],"engine_draw_flag":[990631,34],"model_default_draw":[-853090,8],"instance_default_draw":[943749,7],"child_attachment":[-852423,49],"instance_lookup":[1041239,89],"instance_draw_gate":[1021740,45],"whole_model_visibility":[-850391,14],"whole_model_draw_gate":[-850365,27],"factory_model_request":[-43314,112],"ordinary_model":[-340584,1136],"body_detail_children":[-849877,312],"glow_detail_children":[-849565,310],"light_detail_children":[-850253,282]}
 
 static func parameters(data: Variant) -> bool:
 	return _parameters(data,VALUES)
@@ -25,7 +28,8 @@ static func validate(data: Variant, executable_bytes: int, architecture: String,
 	# Historical packs remain readable for supported content. Native rescue
 	# owners require parameters(), which excludes the old whole-ship hide error.
 	var spans:=SPANS
-	if not parameters(data):
+	var current:=parameters(data)
+	if not current:
 		if require_current or not _parameters(data,LEGACY_VALUES):return "Unsupported rescue staging declarations"
 		spans=LEGACY_SPANS
 	if not spans.has(architecture):return "Unsupported rescue staging architecture"
@@ -33,8 +37,6 @@ static func validate(data: Variant, executable_bytes: int, architecture: String,
 	var initial: Variant=staging.get("provenance",{}).get("initial")
 	if not Fonts.extent(initial,"offset","bytes",[366 if architecture=="x86_64" else 320],executable_bytes):return "Rescue staging lacks its source anchor"
 	if data.provenance.size()!=spans[architecture].size():return "Invalid rescue staging provenance"
-	for key in spans[architecture]:
-		var rule: Array=spans[architecture][key]
-		var span: Variant=data.provenance.get(key)
-		if not Fonts.extent(span,"offset","bytes",[rule[1]],executable_bytes) or int(span.offset)!=int(initial.offset)+int(rule[0]):return "Disconnected rescue staging declaration"
-	return ""
+	var layouts: Array=[spans[architecture]]
+	if current and architecture=="x86_64":layouts.append(MAC_ALTERNATE)
+	return "" if Layouts.matches(data.provenance,int(initial.offset),executable_bytes,layouts) else "Disconnected rescue staging declaration"

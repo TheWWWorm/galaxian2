@@ -23,6 +23,8 @@ static func validate(data: Variant, executable_bytes: int, architecture: String)
 	elif architecture == "armv7": sizes = {"declaration": 438, "switch_table": 22}
 	var provenance: Variant = data.get("provenance")
 	if sizes.is_empty() or not provenance is Dictionary or provenance.size() != sizes.size(): return "Missing text alias provenance"
+	if architecture == "x86_64" and provenance.get("declaration") is Dictionary and provenance.declaration.get("bytes") == 543:
+		sizes.declaration = 543
 	for key in sizes:
 		var row: Variant = provenance.get(key)
 		if not row is Dictionary or row.get("bytes") != sizes[key] or not Numbers.integer(row.get("offset"), 0, executable_bytes - sizes[key]): return "Invalid text alias source extent"

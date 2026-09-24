@@ -145,7 +145,8 @@ func verify_pack(pack: String, lib: RefCounted, bindings: RefCounted):
 		file=FileAccess.open(directory.path_join("bindings.json"),FileAccess.WRITE);file.store_string(JSON.stringify(metadata));file.close()
 		check(bindings.open(pack,lib.manifest),bindings.error)
 		var accepted: bool=bindings.open(directory,lib.manifest)
-		if scenario=="empty":check(accepted and bindings.arrival_actor_motion.is_empty() and not bindings.arrival_environment.is_empty(),"Explicit unsupported actor capability rejected")
+		# A retained rescue session requires the removed motion capability.
+		if scenario=="empty" and changed.get("arrival_session",{}).is_empty():check(accepted and bindings.arrival_actor_motion.is_empty() and not bindings.arrival_environment.is_empty(),"Explicit unsupported actor capability rejected: "+bindings.error)
 		else:check(not accepted and bindings.arrival_actor_motion.is_empty() and bindings.arrival_environment.is_empty(),"Rejected pack retained actor motion: "+scenario)
 	check(bindings.open(pack,lib.manifest),bindings.error)
 	DirAccess.remove_absolute(directory.path_join("registrations.json"));DirAccess.remove_absolute(directory.path_join("bindings.json"));DirAccess.remove_absolute(directory)
