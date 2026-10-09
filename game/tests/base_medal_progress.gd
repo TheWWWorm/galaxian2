@@ -198,5 +198,10 @@ func _initialize() -> void:
 	check(refusal.decline(7),refusal.error)
 	check(refusal.snapshot().rejected_jobs==51 and refusal.snapshot().base_medals.levels[32]==1,"A real explicit refusal did not bank Naysayer gold")
 	held=refusal.snapshot();check(not refusal.decline(8) and refusal.snapshot()==held,"An unavailable job changed the refusal history")
+	# Harum-Scarum (Achievements::initCheckEquipmentAndWeapons): at docking from
+	# campaign mission 8, no weapon or no equipment fitted.
+	var gun:={"category":0};var rocket:={"category":1};var shield:={"category":3}
+	for row in [[7,[],false],[8,[],true],[8,[gun,null],true],[8,[null,shield],true],[8,[gun,shield],false],[8,[rocket,shield],false],[8,[{"category":4}],true]]:
+		check(Medals.harum_scarum(row[0],row[1])==row[2],"Harum-Scarum at cursor %d with %s should be %s"%row)
 	print("Base medal progress: %d checks; %d failures"%[checks,failures])
 	quit(1 if failures else 0)

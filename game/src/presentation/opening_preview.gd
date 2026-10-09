@@ -11,6 +11,7 @@ const ArrivalSession = preload("res://src/presentation/arrival_session.gd")
 const StationSession = preload("res://src/presentation/station_session.gd")
 const FirstFlightSession = preload("res://src/presentation/first_flight_session.gd")
 const EliteMedals=preload("res://src/simulation/elite_medal_progress.gd")
+const BaseMedals=preload("res://src/simulation/base_medal_progress.gd")
 const Selected40Session = preload("res://src/presentation/selected40_session.gd")
 const MissionSession = preload("res://src/presentation/mission_session.gd")
 const StationPanel = preload("res://src/presentation/station_dialogue_panel.gd")
@@ -508,6 +509,7 @@ func bank_career_stats(arrived:=false,target: Node=null) -> void:
 	var cargo: Variant=state.get("cargo")
 	if cargo is Dictionary and cargo.get("capacity") is int and cargo.get("used") is int:observed.max_free_cargo=maxi(0,cargo.capacity-cargo.used)
 	if arrived and _last_flight_hull_percent>=0:observed.min_arrival_hull_percent=_last_flight_hull_percent
+	if arrived and BaseMedals.harum_scarum(int(state.get("campaign_cursor",0)),state.get("loadout",{}).get("slots",[])):observed.unarmed_departures=1
 	if docked._world.record_stats(observed):_career_play_ms-=int(_career_play_ms);_career_cloak_ms-=int(_career_cloak_ms)
 	if not _hints.pending().is_empty():
 		if docked._world.record_hints(_hints.pending()):_hints.banked()
@@ -1494,7 +1496,6 @@ func request_departure() -> bool:
 	if owner!=null:
 		var career: Dictionary=owner.snapshot().get("contracts",{})
 		_elite_tracker.owned=EliteMedals.earned(career);_elite_tracker.capital_kills=int(career.get("progress",{}).get("capital_ship_kills",0))
-	if session._world!=null and session._world.has_contracts() and state.get("loadout",{}).get("slots",[]).all(func(slot):return slot==null):session._world.record_stats({"unarmed_departures":1})
 	var packet: Dictionary=session.prepare_departure(bindings,cat)
 	if packet.is_empty():status.text=session.error;return false
 	if not _launch_dialog.present_departure(library,bindings,visuals,packet):status.text=_launch_dialog.error;return false

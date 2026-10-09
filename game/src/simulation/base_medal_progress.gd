@@ -49,6 +49,14 @@ const STICKY:=[25,28]
 const FIXED_THRESHOLDS:={0:[0],28:[1],30:[0],35:[0]}
 const STAT_KEYS:=["play_ms","cloak_ms","alien_remains","unarmed_departures","max_primaries","max_free_cargo","accepted_jobs"]
 
+## Harum-Scarum (Achievements::initCheckEquipmentAndWeapons, checked at
+## docking): from campaign mission 8, a ship with no weapon (categories 0-2)
+## or no equipment (category 3) fitted.
+static func harum_scarum(cursor: int,slots: Array) -> bool:
+	if cursor<8:return false
+	var categories:=slots.filter(func(slot):return slot is Dictionary).map(func(slot):return int(slot.get("category",-1)))
+	return not categories.any(func(category):return category in [0,1,2]) or not categories.has(3)
+
 static func booze_type_bit(item_id: int) -> int:
 	if item_id<BOOZE_FIRST_ID or item_id>BOOZE_LAST_ID:return 0
 	return 1 << (item_id-BOOZE_FIRST_ID)
