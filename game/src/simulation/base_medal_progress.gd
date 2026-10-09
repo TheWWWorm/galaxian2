@@ -89,7 +89,7 @@ static func _tier(value: int,rule: Dictionary) -> int:
 	for index in rule.thresholds.size():
 		var limit: int=int(rule.thresholds[index])*int(rule.get("scale",1))
 		if rule.get("below",false):
-			if value>=0 and value<limit:return index+1
+			if value>=0 and value<=limit:return index+1
 			continue
 		var reached: bool=value>limit if rule.strict else value>=limit
 		if reached:return index+1

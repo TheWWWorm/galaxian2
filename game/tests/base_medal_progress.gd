@@ -37,6 +37,11 @@ func _initialize() -> void:
 	for id in [2,3,4,5,6,7,10,16,17,18,20,24,26,29,32]:check(first.levels[id]==0,"A below-threshold counter awarded medal %d"%id)
 	for id in [8,9,11,12,28]:
 		check(first.levels[id]==Medals.UNKNOWN,"Missing history was invented for medal %d"%id)
+	# Survivor (Achievements::checkForNewMedal): arrival hull percent <= 5 / 15 / 30.
+	for row in [[4,1],[5,1],[6,2],[15,2],[30,3],[31,0]]:
+		var survivor:=career();survivor.stats={"min_arrival_hull_percent":row[0]}
+		var level: int=Medals.observe(survivor).levels[1]
+		check(level==row[1],"Arriving with %d%% hull gave Survivor level %d"%[row[0],level])
 	# Station-observed stats start counting from zero when absent.
 	for id in [1,15,19,21,22,23,25,27,31,33,34]:check(first.levels[id]==0,"An absent stat awarded medal %d"%id)
 	check(native==before,"Observing medals mutated the career")
