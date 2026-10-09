@@ -595,6 +595,9 @@ func reset() -> void:
 	if _toll_dialog!=null:_toll_dialog.clear()
 	_toll_notice=false
 	_hints.reset()
+	# Unbanked play and cloak time, the last arrival hull and add-on streaks
+	# belong to the career being left; the original restores them from the save.
+	_career_play_ms=0.0;_career_cloak_ms=0.0;_last_flight_hull_percent=-1;_elite_tracker=preload("res://src/simulation/elite_medal_tracker.gd").new()
 	_cloak_generation=0;_cloak_failure_serial=0
 	cancel_departure()
 	if map_panel!=null:map_panel.clear()

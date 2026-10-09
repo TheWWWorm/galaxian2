@@ -44,6 +44,11 @@ func run_application() -> void:
 			await verify_application_kind(kind,args)
 			if failures:break
 		check(completed_cases==[0,4,7,12,11],"The application did not verify all four contract flights and the passenger capacity guard")
+		# An in-game Load leaves the abandoned career's unbanked time, arrival
+		# hull and add-on streaks behind (#23).
+		app._career_play_ms=600000.0;app._career_cloak_ms=60000.0;app._last_flight_hull_percent=4;app._elite_tracker._latch(38)
+		app.reset()
+		check(app._career_play_ms==0.0 and app._career_cloak_ms==0.0 and app._last_flight_hull_percent==-1 and app._elite_tracker.reached().is_empty(),"Reset kept the abandoned career's play time, cloak time, arrival hull or add-on streaks")
 	if is_instance_valid(app):app.free()
 	print("Lounge application: %d checks; cases %s; %d failures"%[checks,str(completed_cases),failures])
 	quit(1 if failures else 0)
