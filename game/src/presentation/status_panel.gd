@@ -292,6 +292,11 @@ func handle_event(event: InputEvent) -> bool:
 	if not visible:return false
 	if event.is_action_pressed("ui_cancel") or (event is InputEventJoypadButton and event.pressed and event.button_index==JOY_BUTTON_B):
 		close_requested.emit();return true
+	# Nothing is focused when Status opens: the first arrow, D-pad or stick move
+	# enters the medal grid, which then scrolls with the focus.
+	var focused:=get_viewport().gui_get_focus_owner()
+	if (focused==null or not is_ancestor_of(focused)) and ["ui_up","ui_down","ui_left","ui_right"].any(func(action):return event.is_action_pressed(action)):
+		_medal_buttons[0].grab_focus();return true
 	return false
 
 func set_mobile_layout(value: bool) -> void:

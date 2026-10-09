@@ -74,6 +74,23 @@ func verify() -> void:
 	check(not pause.snapshot().buttons.has(s[128]) and not pause.snapshot().buttons.has(s[165]),"the challenge shows Missions or Cargo "+str(pause.snapshot().buttons))
 	pause.present({"campaign_cursor":154,"contracts":{},"cargo":{},"alien_orbit":true})
 	check(not pause.snapshot().buttons.has(s[128]) and pause.snapshot().buttons.has(s[165]),"the alien world gating is wrong "+str(pause.snapshot().buttons))
+	# Status: arrows, D-pad and stick reach the medal grid, which scrolls with
+	# the focus (#19). The station hands Status every unhandled event.
+	var levels:=[];levels.resize(36);levels.fill(0);levels[0]=1
+	status.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	check(status.present({"contracts":{"base_medals":{"version":1,"levels":levels}},"loadout":{"ship_id":0}}),"status present: "+status.error)
+	for frame in 2:await process_frame
+	var scroll: ScrollContainer=status._medal_grid.get_parent()
+	var arrow:=InputEventKey.new();arrow.keycode=KEY_DOWN;arrow.physical_keycode=KEY_DOWN;arrow.pressed=true
+	check(status.handle_event(arrow) and status._medal_buttons[0].has_focus(),"Down did not reach the Status medals")
+	status._medal_buttons[0].release_focus()
+	var pad:=InputEventJoypadButton.new();pad.button_index=JOY_BUTTON_DPAD_DOWN;pad.pressed=true
+	check(status.handle_event(pad) and status._medal_buttons[0].has_focus(),"The D-pad did not reach the Status medals")
+	for step in 14:
+		for pressed in [true,false]:
+			var move:=pad.duplicate();move.pressed=pressed;get_root().push_input(move,true);await process_frame
+	check(scroll.scroll_vertical>0 and status._medal_buttons.find(get_root().gui_get_focus_owner())>=36,"The Status medals did not scroll with the D-pad: %d"%scroll.scroll_vertical)
+	status.clear()
 	# Action Freeze: orbit around the ship within 1500..20000, Back restores.
 	var world:=Node3D.new();get_root().add_child(world)
 	var camera:=Camera3D.new();world.add_child(camera);camera.global_position=Vector3(0,200,800)
