@@ -38,12 +38,25 @@ var _no: Button
 var _back: Button
 var _key: Button
 var _bounds_points: Array[Vector3]=[]
+## System view orientation in the source's units, 65536 per turn (StarMap
+## +0x188 yaw, +0x18c pitch), starting from the source's parent rotation.
+const TURN:=65536.0
+var _yaw:=0.0
+var _pitch:=0.0
+var _spin:=Vector2.ZERO
+var _last_drag:=Vector2.ZERO
+var _held:=false
+var _turn_to:=-1
+var _stick:={}
+var _fit:={}
 var _sprites:={}
 var _styles:={}
 var _font: FontFile
 
 class MapCanvas extends Control:
 	signal selected(station_id: int)
+	signal held(pressed: bool,moved: bool)
+	signal dragged(relative: Vector2)
 	var rows:=[]
 	var selected_id:=-1
 	var mobile:=false
@@ -51,12 +64,22 @@ class MapCanvas extends Control:
 	var sprites:={}
 	var rules:={}
 	var font: FontFile
+	var _press:=Vector2.ZERO
+	var _down:=false
+	var _moved:=false
+	# StarMap::OnTouchBegin/Move/End: dragging turns the system; a press that
+	# moved no more than 3 points selects on release.
 	func _gui_input(event: InputEvent) -> void:
 		if not active:return
-		var point:=Vector2.ZERO
-		if event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_LEFT:point=event.position
-		elif event is InputEventScreenTouch and event.pressed:point=event.position
-		else:return
+		if (event is InputEventMouseMotion or event is InputEventScreenDrag) and _down:
+			if event.position.distance_to(_press)>3:_moved=true
+			dragged.emit(event.relative);accept_event();return
+		if not (event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT or event is InputEventScreenTouch):return
+		if event.pressed:_press=event.position;_down=true;_moved=false;held.emit(true,false);accept_event();return
+		if not _down:return
+		_down=false;held.emit(false,_moved);accept_event()
+		if _moved:return
+		var point:=_press
 		var nearest:=-1;var distance:=36.0 if mobile else 25.0
 		for row in rows:
 			var away: float=point.distance_to(row.pixels)
@@ -119,6 +142,7 @@ func _init() -> void:
 	_world.add_child(_camera)
 	_canvas=MapCanvas.new();_field.add_child(_canvas);_canvas.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_canvas.selected.connect(select_station)
+	_canvas.held.connect(_hold);_canvas.dragged.connect(_drag)
 	_faction_icon=texture_rect(_panel)
 	_title=label(_panel);_faction=label(_panel);_security=label(_panel)
 	_void_warning=label(_panel);_void_warning.visible=false
@@ -192,6 +216,7 @@ func configure(library: RefCounted, bindings: RefCounted, visuals: RefCounted, c
 		model.set_meta("source_resource_id",int(art.background_model_ids[index]))
 	stage.add_child(sun);resources.clear()
 	clear();_navigation=navigation;_sprites=sprites;_font=font;_system=system;_world.add_child(stage)
+	_yaw=fposmod(float(art.parent_rotation[1])/TAU*TURN,TURN);_pitch=float(art.parent_rotation[0])/TAU*TURN
 	for model in system.get_children():
 		if not model.has_meta("source_station_id"):continue
 		for surface in model.surfaces:
@@ -258,7 +283,7 @@ func select_station(station_id: int) -> void:
 	if state.confirmation_visible:return
 	if int(state.selected_station_id)==station_id:request_confirmation();return
 	if not _navigation.select_station(station_id):set_error(_navigation.error);return
-	error=""
+	error="";_turn_to=station_id;_spin=Vector2.ZERO
 	_present();Sounds.event(self,Sounds.MAP_STATION)
 
 func request_confirmation() -> void:
@@ -299,6 +324,7 @@ func handle_event(event: InputEvent) -> bool:
 		elif key in [KEY_Q,KEY_E]:action="system_previous" if key==KEY_Q else "system_next"
 		elif key in [KEY_LEFT,KEY_UP,KEY_A,KEY_W]:action="previous"
 		elif key in [KEY_RIGHT,KEY_DOWN,KEY_D,KEY_S,KEY_TAB]:action="next"
+	elif event is InputEventJoypadMotion and event.axis in [JOY_AXIS_RIGHT_X,JOY_AXIS_RIGHT_Y]:_stick[event.axis]=event.axis_value
 	elif event is InputEventJoypadButton and event.pressed:
 		if event.button_index in [JOY_BUTTON_B,JOY_BUTTON_LEFT_SHOULDER]:action="back"
 		elif event.button_index==JOY_BUTTON_A:action="confirm"
@@ -311,7 +337,7 @@ func handle_event(event: InputEvent) -> bool:
 		if _navigation.snapshot().confirmation_visible:confirm_destination()
 		else:request_confirmation()
 	elif not action.is_empty() and not _navigation.snapshot().confirmation_visible:
-		_navigation.move_selection(-1 if action=="previous" else 1);_present()
+		_navigation.move_selection(-1 if action=="previous" else 1);_turn_to=int(_navigation.snapshot().selected_station_id);_spin=Vector2.ZERO;_present()
 	return true
 
 func set_active(value: bool) -> void:
@@ -384,13 +410,28 @@ func _relayout() -> void:
 	_legend.position=Vector2(size.x-_legend.size.x-8,size.y-footer_height-_legend.size.y-8)
 	_project()
 
-func _project() -> void:
+func _project(refit: bool=true) -> void:
 	if _navigation==null or not is_instance_valid(_system) or _field.size.x<1 or _field.size.y<1:return
 	var state: Dictionary=_navigation.snapshot()
-	var angles: Array=state.visuals.parent_rotation
-	# The source camera faces +Z after its Y-pi turn; Godot faces -Z.
-	var rotation:=Basis(Vector3.UP,PI)*Basis.from_euler(Vector3(angles[0],angles[1],angles[2]),EULER_ORDER_XYZ)
-	_system.basis=rotation.scaled(Vector3.ONE*float(state.visuals.parent_scale))
+	# A turn keeps the framing chosen for the source orientation.
+	if refit or _fit.is_empty():
+		_system.basis=_orientation(float(state.visuals.parent_rotation[1])/TAU*TURN,float(state.visuals.parent_rotation[0])/TAU*TURN).scaled(Vector3.ONE*float(state.visuals.parent_scale))
+		_fit=_framing(state)
+	_system.basis=_orientation(_yaw,_pitch).scaled(Vector3.ONE*float(state.visuals.parent_scale))
+	var focal: float=_fit.focal;var half: Vector2=_fit.half;var distance: float=_fit.distance
+	_camera.position=Vector3(0,float(_fit.offset)*distance/focal,distance)
+	var projected:=[]
+	for row in state.rows:
+		var point: Vector3=_system.transform*row.position
+		row.pixels=half+Vector2(point.x,_camera.position.y-point.y)*focal/(distance-point.z);projected.append(row)
+	_canvas.rows=projected;_canvas.queue_redraw()
+
+## The source camera faces +Z after its Y-pi turn; Godot faces -Z.
+func _orientation(yaw: float,pitch: float) -> Basis:
+	var angles: Array=_navigation.snapshot().visuals.parent_rotation
+	return Basis(Vector3.UP,PI)*Basis.from_euler(Vector3(pitch/TURN*TAU,yaw/TURN*TAU,angles[2]),EULER_ORDER_XYZ)
+
+func _framing(state: Dictionary) -> Dictionary:
 	var focal:=_field.size.y*0.5/tan(deg_to_rad(_camera.fov)*0.5)
 	var half:=_field.size*0.5;var padding:=48.0 if _mobile else 62.0
 	# Landscape phones retain the orbital plane and fit between the target-frame
@@ -411,15 +452,55 @@ func _project() -> void:
 		var above:=half.y-top_margin;var below:=half.y-bottom_margin
 		distance=maxf(distance,(point.y*focal+above*point.z)/maxf(1,above+center_offset))
 		distance=maxf(distance,(-point.y*focal+below*point.z)/maxf(1,below-center_offset))
-	_camera.position=Vector3(0,center_offset*distance/focal,distance)
-	var projected:=[]
-	for row in state.rows:
-		var point: Vector3=_system.transform*row.position
-		row.pixels=half+Vector2(point.x,_camera.position.y-point.y)*focal/(distance-point.z);projected.append(row)
-	_canvas.rows=projected;_canvas.queue_redraw()
+	return {"focal":focal,"half":half,"distance":distance,"offset":center_offset}
+
+func _hold(pressed: bool,moved: bool) -> void:
+	_held=pressed
+	if pressed:_spin=Vector2.ZERO;_last_drag=Vector2.ZERO;_turn_to=-1;return
+	# StarMap::OnTouchEnd: the last move keeps spinning unless it was tiny.
+	_spin=Vector2(_last_drag.x if moved and absf(_last_drag.x)>3.0 else 0.0,_last_drag.y if moved and absf(_last_drag.y)>3.0 else 0.0)
+
+## StarMap::OnTouchMove: 50 units per point. The source scales points by its
+## layout; taken here as the original 480-point screen width (an assumption).
+func _drag(relative: Vector2) -> void:
+	_last_drag=Vector2(relative.x,-relative.y)*50.0*480.0/maxf(1.0,_field.size.x)
+	_turn(_last_drag)
+
+func _turn(units: Vector2) -> void:
+	_yaw=fposmod(_yaw+units.x,TURN);_pitch=clampf(_pitch+units.y,-8192.0,8192.0);_project(false)
+
+## StarMap::update, its per-update factors taken at 30 updates per second (an
+## assumption): a spin decays by 0.9 per update while above 0.5 units; a
+## selected planet turns to the front by a quarter of the remaining angle,
+## at pitch -3096. The right stick (a remake addition) turns it as Action
+## Freeze turns its camera: 1.8 radians per second, 0.2 deadzone.
+func _process(delta: float) -> void:
+	if not _active or _navigation==null or _fit.is_empty():return
+	var stick:=Vector2(_stick.get(JOY_AXIS_RIGHT_X,0.0),-_stick.get(JOY_AXIS_RIGHT_Y,0.0))
+	if stick.length()>0.2:_turn_to=-1;_spin=Vector2.ZERO;_turn(stick*1.8/TAU*TURN*delta);return
+	if _held:return
+	var steps:=delta*30.0
+	if _turn_to>=0:
+		var yaw:=fposmod(_front_yaw(_turn_to)-_yaw+TURN*0.5,TURN)-TURN*0.5;var pitch:=-3096.0-_pitch
+		if absf(yaw)<11.0 and absf(pitch)<11.0:_turn_to=-1;return
+		_turn(Vector2(yaw,pitch)*(1.0-pow(0.75,steps)))
+	elif _spin!=Vector2.ZERO:
+		_spin*=pow(0.9,steps)
+		_spin=Vector2(_spin.x if absf(_spin.x)>0.5 else 0.0,_spin.y if absf(_spin.y)>0.5 else 0.0)
+		if _spin!=Vector2.ZERO:_turn(_spin*steps)
+
+## The yaw at which a station is nearest the camera at the front pitch: its
+## depth is a sinusoid of the yaw.
+func _front_yaw(station_id: int) -> float:
+	var rows: Array=_navigation.snapshot().rows.filter(func(row):return int(row.station_id)==station_id)
+	if rows.is_empty():return _yaw
+	var depth:=func(yaw: float) -> float:return (_orientation(yaw,-3096.0)*Vector3(rows[0].position)).z
+	var middle: float=(depth.call(0.0)+depth.call(TURN*0.5))*0.5
+	return fposmod(atan2(depth.call(TURN*0.25)-middle,depth.call(0.0)-middle)/TAU*TURN,TURN)
 
 func clear() -> void:
 	visible=false;_active=false;error="";_navigation=null;_system=null;_canvas.rows=[];_canvas.sprites={};_canvas.font=null
+	_fit={};_stick={};_spin=Vector2.ZERO;_last_drag=Vector2.ZERO;_held=false;_turn_to=-1
 	_bounds_points.clear()
 	for child in _world.get_children():
 		if child!=_camera:child.free()

@@ -100,6 +100,7 @@ func verify():
 	check(panel.handle_event(controller) and confirmed.is_empty() and panel.snapshot().confirmation_visible,"Controller skipped its first confirmation")
 	check(panel.handle_event(controller) and confirmed==[79],"Controller did not confirm the original destination")
 	panel.back()
+	await verify_turning(panel)
 	var phone:=SubViewport.new();phone.size=Vector2i(800,450);phone.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(phone)
 	panel.reparent(phone);panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);panel.set_mobile_layout(true)
 	for i in 8:await process_frame
@@ -194,3 +195,40 @@ func capture(directory: String, name: String, canvas: Viewport=root):
 
 func finish() -> void:
 	print("Local map: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
+
+## The system view turns (StarMap::OnTouchMove, OnTouchEnd and update; #20).
+func verify_turning(panel: Control) -> void:
+	var yaw: float=panel._yaw;var pitch: float=panel._pitch;var selected: int=panel.snapshot().selected_station_id
+	var start: Vector2=panel._canvas.rows[4].pixels;var units: float=50.0*480.0/panel._field.size.x
+	await drag(Vector2(300,320),Vector2(30,0))
+	check(is_equal_approx(panel._last_drag.x,30*units) and panel._canvas.rows[4].pixels!=start,"Dragging did not turn the system view")
+	check(panel.snapshot().selected_station_id==selected,"A drag selected a planet")
+	for i in 300:
+		await process_frame
+		if panel._spin==Vector2.ZERO:break
+	var turned: float=fposmod(panel._yaw-yaw,65536.0)
+	check(panel._spin==Vector2.ZERO and turned>30*units+1 and is_equal_approx(panel._pitch,pitch),"The released system view did not keep spinning and come to rest: %.1f"%turned)
+	await drag(Vector2(300,320),Vector2(0,4000))
+	check(is_equal_approx(panel._pitch,-8192.0),"The system view tilted beyond 45 degrees")
+	panel.select_station(76)
+	for i in 600:
+		await process_frame
+		if panel._turn_to<0:break
+	var row: Dictionary=panel._navigation.snapshot().rows.filter(func(row):return int(row.station_id)==76)[0]
+	var depth:=func(at: float) -> float:return (panel._orientation(at,-3096.0)*Vector3(row.position)).z
+	check(panel._turn_to<0 and absf(panel._pitch+3096.0)<11.0 and depth.call(panel._yaw)>=depth.call(panel._yaw+2000.0) and depth.call(panel._yaw)>=depth.call(panel._yaw-2000.0),"The selected planet did not turn to the front")
+	var stick:=InputEventJoypadMotion.new();stick.axis=JOY_AXIS_RIGHT_X;stick.axis_value=1.0
+	panel.handle_event(stick);var before: float=panel._yaw
+	for i in 10:await process_frame
+	check(not is_equal_approx(panel._yaw,before),"The right stick did not turn the system view")
+	stick.axis_value=0.0;panel.handle_event(stick);await process_frame;before=panel._yaw
+	for i in 5:await process_frame
+	check(is_equal_approx(panel._yaw,before),"The system view kept turning after the stick was released")
+
+func drag(from: Vector2,by: Vector2) -> void:
+	var button:=InputEventMouseButton.new();button.button_index=MOUSE_BUTTON_LEFT;button.pressed=true;button.position=from;button.global_position=from
+	root.push_input(button,true)
+	var move:=InputEventMouseMotion.new();move.button_mask=MOUSE_BUTTON_MASK_LEFT;move.relative=by;move.position=from+by;move.global_position=move.position
+	root.push_input(move,true)
+	button.pressed=false;button.position=move.position;button.global_position=move.position;root.push_input(button,true)
+	await process_frame
