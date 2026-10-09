@@ -158,6 +158,18 @@ func inspect_contact(bindings: RefCounted,cat: RefCounted,context: Dictionary,co
 		return true
 	return reject("The inspected contact has no retained lounge")
 
+## Marks a contact of this lounge as met; true only the first time
+## (SpaceLounge::startChat: Agent::isKnown).
+func meet(station_id: int,contact_id: int) -> bool:
+	_read={}
+	for entry in _state.locations:
+		if entry.station_id!=station_id or not entry.population.contacts.any(func(contact):return contact.contact_id==contact_id):continue
+		var known: Array=entry.get("known",[])
+		if contact_id in known:return false
+		known.append(contact_id);known.sort();entry.known=known
+		return true
+	return false
+
 func restore_dialogues(bindings: RefCounted,cat: RefCounted,library: RefCounted,station_id: int,records: Variant) -> bool:
 	_read={};error=""
 	if not Dialogue.available(bindings) or not records is Dictionary or records.is_empty():return reject("Invalid saved social dialogue")

@@ -103,11 +103,18 @@ func verify_requested_offer(station: RefCounted,bindings: RefCounted,cat: RefCou
 	var inspected: Dictionary=branch.snapshot();var quote: Dictionary=inspected.contracts.offers[id].offer
 	check(quote.mission.kind==8 and quote.mission.station_id==original.loadout.station_id and quote.context.rank==original.contracts.rank,"Inspection lost the local goods request or current rank")
 	check(inspected.contracts.population==original.contracts.population and inspected.cargo==original.cargo and inspected.contracts.mission==original.contracts.mission,"Inspection rewrote the generated population or changed the accepted job")
+	# Chatterbox (SpaceLounge::startChat): a generated contact counts on the
+	# first chat only, an authored contact on every chat (#15).
+	check(inspected.contracts.conversations==int(original.contracts.get("conversations",0))+1,"The first chat with a generated contact did not count toward the Chatterbox medal")
 	check(branch.inspect_contract_contact(id,bindings),branch.error)
 	var revisited: Dictionary=branch.snapshot()
-	check(revisited.contracts.conversations==int(inspected.contracts.conversations)+1,"Talking to the contact again did not count toward the Chatterbox medal")
-	revisited.contracts.conversations=inspected.contracts.conversations
-	check(revisited==inspected,"Inspecting the same contact rerolled its goods or reward")
+	check(revisited==inspected,"Talking to the same contact again counted toward the Chatterbox medal or rerolled its goods or reward")
+	var authored: Array=original.contracts.population.contacts.filter(func(contact):return not contact.get("generated",true))
+	check(not authored.is_empty(),"The earned station has no authored contact")
+	if not authored.is_empty():
+		var talk: RefCounted=station.fork()
+		for time in 2:check(talk.inspect_contract_contact(int(authored[0].contact_id),bindings),talk.error)
+		check(talk.snapshot().contracts.conversations==int(original.contracts.get("conversations",0))+2,"An authored contact stopped counting after the first chat")
 	inspected=branch.snapshot()
 	var file=load("res://src/simulation/station_save_file.gd").new();var archive=load("res://src/simulation/station_archive.gd").new()
 	var path:="user://purchase-request.gof2save"
@@ -116,6 +123,16 @@ func verify_requested_offer(station: RefCounted,bindings: RefCounted,cat: RefCou
 	var restored: RefCounted=archive.restore(bindings,cat,library,document)
 	if restored==null:check(false,file.error+archive.error);return
 	check(restored.snapshot().contracts.offers==inspected.contracts.offers,"Resume lost or rerolled an inspected, unaccepted request")
+	# Met contacts survive Resume; a malformed record is refused.
+	var met: Array=document.locations.locations.filter(func(row):return row.has("known"))
+	check(met.size()==1 and met[0].known==[id],"The save lost the met lounge contact")
+	var again: RefCounted=restored.fork()
+	check(again.inspect_contract_contact(id,bindings) and again.snapshot().contracts.conversations==inspected.contracts.conversations,"Resume forgot the met lounge contact")
+	for bad in [[id,id],[999]]:
+		var malformed:=document.duplicate(true)
+		for row in malformed.locations.locations:
+			if row.has("known"):row.known=bad
+		check(archive.restore(bindings,cat,library,malformed)==null,"A save that met %s was accepted"%str(bad))
 	if not restored.accept_contract(id,true,bindings):check(false,restored.error);return
 	var accepted: Dictionary=restored.snapshot()
 	if not file.save(path,restored,bindings,cat,library):check(false,file.error);return

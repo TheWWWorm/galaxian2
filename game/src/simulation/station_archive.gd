@@ -240,7 +240,7 @@ func _locations(bindings: RefCounted,cat: RefCounted,library: RefCounted,data: V
 	if not random.restore(data.get("random")):return reject(random.error)
 	for index in data.locations.size():
 		var row: Variant=data.locations[index]
-		if not _keys(row,["station_id","population","offers","stock","market_items","market_ships","requested_offers","medal_progress","purchased_goods","dialogues","used_diplomats"]) or not row.get("population") is Dictionary or not row.get("offers") is Dictionary or not row.get("medal_progress",{}) is Dictionary:return reject("Invalid saved lounge entry")
+		if not _keys(row,["station_id","population","offers","stock","market_items","market_ships","requested_offers","medal_progress","purchased_goods","dialogues","used_diplomats","known"]) or not row.get("population") is Dictionary or not row.get("offers") is Dictionary or not row.get("medal_progress",{}) is Dictionary:return reject("Invalid saved lounge entry")
 		var stock:=Stock.new();var contacts:=Contacts.new()
 		var generation_context: RefCounted=null if station_context==null else station_context.historical(bindings,row.population.get("context",{}).get("campaign_cursor"))
 		if not stock.restore(bindings,cat,row.get("stock")) or not contacts.restore(bindings,cat,library,row.population,generation_context):return reject(stock.error+contacts.error)
@@ -267,6 +267,10 @@ func _locations(bindings: RefCounted,cat: RefCounted,library: RefCounted,data: V
 			for id in row.used_diplomats:
 				var response: Variant=row.used_diplomats[id]
 				if not id is int or not response is int or response<843 or response>845 or not cache.consume_diplomat(row.station_id,id,response):return reject("The saved service lost its diplomat or response")
+		if row.has("known"):
+			if not row.known is Array or row.known.is_empty() or row.known.size()>row.population.contacts.size():return reject("Invalid met lounge contacts")
+			for id in row.known:
+				if not id is int or not cache.meet(row.station_id,id):return reject("The saved lounge met an absent contact or one twice")
 		if row.has("market_items"):
 			if not Shopping.valid_stock(row.market_items,cat.tables.items.size()):return reject("Invalid mutable station stock")
 			cache._state.locations.back().market_items=row.market_items.duplicate(true)

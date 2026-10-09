@@ -1329,8 +1329,13 @@ func inspect_contact(bindings: RefCounted,contact_id: int,library: RefCounted=nu
 	var cache: RefCounted=_lounges.fork()
 	var context:={"station_id":_state.station_id,"campaign_cursor":_state.campaign_cursor,"rank":_state.rank,"reputation":_state.reputation.duplicate(true)}
 	if not cache.inspect_contact(bindings,_catalogues,context,contact_id,_station_context,library):return reject(cache.error)
-	_lounges=cache;_state.offers=cache.location(int(_state.station_id)).offers
-	_state.conversations=int(conversations)+1
+	# SpaceLounge::startChat counts a generated contact on the first chat only;
+	# authored contacts and diplomats count on every chat.
+	var location: Dictionary=cache.location(int(_state.station_id))
+	var contact: Dictionary=location.population.contacts.filter(func(row):return row.contact_id==contact_id)[0]
+	var first: bool=cache.meet(int(_state.station_id),contact_id)
+	_lounges=cache;_state.offers=location.offers
+	if first or not contact.get("generated",true) or not cache.diplomat_contact(int(_state.station_id),contact_id).is_empty():_state.conversations=int(conversations)+1
 	return true
 
 func decline(offer_id: int) -> bool:
