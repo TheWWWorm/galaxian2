@@ -75,6 +75,7 @@ func verify_application_kind(kind: int,args: PackedStringArray) -> void:
 	check(app.lounge_panel.visible and not app._launch_button.visible,"Opening the lounge did not select the retained contacts")
 	check(app.lounge_panel.label_text(850)=="Accept this mission?" and app.lounge_panel.label_text(753)=="#C reward.","The lounge used another source's confirmation or reward text")
 	check(app.lounge_panel.label_text(847)=="Okay." and app.lounge_panel.label_text(848)=="No thanks.","The lounge used another source's action labels")
+	check(app.lounge_panel.label_text(837)=="Great! Thank you!" and app.lounge_panel.label_text(844)=="Thanks again, Mr. Maxwell.","The lounge used another source's deal lines")
 	if session.lounge_scene==null:check(false,"The lounge has no original room");return
 	for tick in 30:
 		if not application_step():return
@@ -119,6 +120,13 @@ func verify_application_kind(kind: int,args: PackedStringArray) -> void:
 	check(accepted.contracts.credits==before.contracts.credits and accepted.completed_side_missions==0 and accepted.mission==before.mission,"Acceptance paid, counted or replaced the story")
 	check(accepted.contracts.accepted_contact.has("portrait"),"The original client portrait was not retained")
 	check(not session.contract_action("accept",fixture.contact_id,app.lounge_panel) and session.snapshot()==accepted,"Repeated acceptance changed the accepted station")
+	# The taken job (SpaceLounge::onKeyPress, startChat): the deal's own line,
+	# then the known contact's line when selected again (#18).
+	var deal: String=app.lounge_panel.label_text(843 if kind==12 else 841)
+	check(app.lounge_panel.snapshot().body.ends_with(deal),"The accepted job lost its acceptance line: "+app.lounge_panel.snapshot().body.right(80))
+	app.lounge_panel.select_contact(fixture.contact_id)
+	var known: String=app.lounge_panel.label_text(846 if kind==12 else 845)
+	check(known==("See you outside, Mr. Maxwell." if kind==12 else "I don't have anything left, sorry.") and app.lounge_panel.snapshot().body.ends_with(known),"Selected again, the job's client said: "+app.lounge_panel.snapshot().body.right(80))
 	app.lounge_panel.back()
 	check(not app.lounge_panel.visible and not session.snapshot().lounge_open,"Back failed to release the lounge")
 	if not app.request_departure():check(false,app.status.text);return

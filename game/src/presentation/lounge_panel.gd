@@ -7,7 +7,7 @@ const Portraits=preload("res://src/presentation/portrait_compositor.gd")
 const Recipe=preload("res://src/content/mission_recipe.gd")
 const Dialogue=preload("res://src/simulation/lounge_dialogue.gd")
 const ContractOffer=preload("res://src/simulation/contract_offer.gd")
-const MAC_LABEL_IDS={614:616,753:755,754:756,841:843,847:849,848:850,850:852,855:857,856:858,857:859}
+const MAC_LABEL_IDS={614:616,753:755,754:756,837:839,838:840,839:841,841:843,843:845,844:846,845:847,846:848,847:849,848:850,850:852,855:857,856:858,857:859}
 var error:=""
 var _art: RefCounted
 var _library: RefCounted
@@ -24,6 +24,8 @@ var _client_definition:={}
 var _client_portrait: Texture2D
 var _selected:=-1
 var _confirming:=false
+## The contact whose offer was taken while selected; selecting it again is a revisit.
+var _taken:=-1
 var _panel: PanelContainer
 var _title: Label
 var _balance: Label
@@ -123,7 +125,7 @@ func present(state: Dictionary) -> bool:
 			var composite: Dictionary=composer.compose_definition(_library,_bindings,_visuals,contact.contact_id,"large",contact.portrait)
 			if composite.is_empty():return reject(composer.error)
 			portraits[contact.contact_id]=ImageTexture.create_from_image(composite.image)
-		_population=population.duplicate(true);_portraits=portraits;_selected=-1;_confirming=false
+		_population=population.duplicate(true);_portraits=portraits;_selected=-1;_confirming=false;_taken=-1
 		_contact_ids=[]
 		for contact in population.get("contacts",[]):_contact_ids.append(int(contact.contact_id))
 		refresh=true
@@ -140,7 +142,7 @@ func select_contact(id: int) -> void:
 	if not _active or not visible or not _state.pending_result.is_empty():return
 	if not _portraits.has(id):return
 	action_requested.emit("select",id)
-	_selected=id;_confirming=false;_body.scroll_to_line(0)
+	_selected=id;_confirming=false;_taken=-1;_body.scroll_to_line(0)
 	if is_instance_valid(_scene):_scene.select_contact(id)
 	_refresh();_layout()
 
@@ -151,6 +153,14 @@ func label_text(id: int) -> String:
 	# and replacement notices already carry their own original text IDs.
 	if _bindings.early_contracts.get("briefing_text_base")==775:id=int(MAC_LABEL_IDS.get(id,id))
 	return text(id)
+
+## A taken offer (SpaceLounge::onKeyPress, startChat). Right after the deal a
+## seller says one of 837-839 (the source picks at random) and a job client
+## 841, or 843 for a Challenge. Selected again, a purchase client says 844, a
+## Challenge client 846, everyone else 845.
+func taken_text(kind: int=-1,job: bool=false) -> String:
+	if _taken==_selected:return label_text((843 if kind==12 else 841) if job else 837+_selected%3)
+	return label_text(844 if kind==8 else 846 if kind==12 else 845)
 func money(value: int) -> String:return str(value)+"$"
 
 ## The result the player is looking at (empty when none is open).
@@ -197,7 +207,7 @@ func _refresh() -> void:
 			var item_name:=text(int(_bindings.station_equipment.item_text_offset)+int(service.item_id))
 			var offer_text:=label_text(855).replace("#Q",str(service.quantity)).replace("#P",item_name).replace("#C",money(int(service.total_price)))
 			_body.text=offer_text
-			if service.consumed:_body.text+="\n\n"+label_text(841)
+			if service.consumed:_body.text+="\n\n"+taken_text()
 			elif service.can_accept:
 				show_yes=true
 				if _confirming:_yes.text=text(133);show_no=true;_no.text=text(134)
@@ -222,7 +232,7 @@ func _refresh() -> void:
 		elif service.get("kind")=="coordinates":
 			var system_name: String=_catalogues.tables.systems[int(service.system_id)].name
 			_body.text=label_text(857).replace("#S",system_name).replace("#C",money(int(service.total_price)))
-			if service.consumed:_body.text=label_text(841)
+			if service.consumed:_body.text=taken_text()
 			elif service.can_accept:
 				show_yes=true
 				if _confirming:_yes.text=text(133);show_no=true;_no.text=text(134)
@@ -230,14 +240,16 @@ func _refresh() -> void:
 		elif service.get("kind")=="blueprint":
 			var item_name:=text(int(_bindings.station_equipment.item_text_offset)+int(service.item_id))
 			_body.text=label_text(856).replace("#P",item_name).replace("#C",money(int(service.total_price)))
-			if service.consumed:_body.text=label_text(841)
+			if service.consumed:_body.text=taken_text()
 			elif service.can_accept:
 				show_yes=true
 				if _confirming:_yes.text=text(133);show_no=true;_no.text=text(134)
 			else:_body.text+="\n\n"+text(192).replace("#C",money(int(service.missing_credits)))
 		elif service.get("kind")=="wingmen":
 			_body.text=text(int(service.intro_text_id)).replace("#C",money(int(service.total_price)))
-			if service.busy:_body.text=text(774)
+			# Hired wingmen share the Challenge client's line (startChat, offer 6).
+			if service.get("consumed",false):_body.text=taken_text(12)
+			elif service.busy:_body.text=text(774)
 			elif service.can_accept:
 				show_yes=true
 				if _confirming:
@@ -268,7 +280,7 @@ func _refresh() -> void:
 			if int(mission.bonus)>0 and row.offer.get("context") is Dictionary:
 				credits+=" "+label_text(754).replace("#P",str(int(ContractOffer.standing_ratio(_bindings.early_contracts,row.offer.context)*100.0)))
 			_body.text=format_job(text(brief),mission)+"\n\n"+label_text(753).replace("#C",credits)
-			if row.consumed:_body.text+="\n\n"+label_text(841)
+			if row.consumed:_body.text+="\n\n"+taken_text(int(mission.kind),true)
 			else:
 				var preview: Dictionary=_previews.get(_selected,{})
 				if preview.get("can_accept",false):
@@ -289,6 +301,7 @@ func confirm() -> void:
 	var preview: Dictionary=_previews.get(_selected,{})
 	if not preview.get("can_accept",false):return
 	if not _confirming:_confirming=true;_refresh();return
+	_taken=_selected
 	if preview.get("kind")=="merchant":action_requested.emit("buy_goods",_selected)
 	elif preview.get("kind")=="kaamo":action_requested.emit("buy_kaamo",_selected)
 	elif preview.get("kind")=="coordinates":action_requested.emit("buy_coordinates",_selected)
@@ -370,7 +383,7 @@ func snapshot() -> Dictionary:
 	return {"visible":visible,"selected":_selected,"confirming":_confirming,"panel_rect":Rect2(_panel.position,_panel.size),"title":_title.text,"body":_body.text,"accept_visible":_yes.visible,"pending_result":_state.get("pending_result",{}).duplicate(true)}
 func show_error(message: String) -> void:_body.text=message
 func clear() -> void:
-	visible=false;_state={};_confirming=false;_selected=-1
+	visible=false;_state={};_confirming=false;_selected=-1;_taken=-1
 	if is_instance_valid(_scene):_scene.select_contact(-1)
 	_scene=null
 func reject(message: String) -> bool:error=message;return false

@@ -1146,16 +1146,20 @@ func wingman_preview(bindings: RefCounted,contact_id: int,equipment: RefCounted)
 	if active.is_empty():return fail("This contact has no valid wingman roster")
 	var retained: Dictionary=_state.get("wingmen",{"hired_total":0,"active":{}})
 	var busy: bool=not retained.active.is_empty()
+	var hired: bool=contact_id in _lounges.location(int(_state.station_id)).get("purchased_goods",[])
 	var count: int=active.names.size()
 	var price: int=active.price
 	return {"kind":"wingmen","contract":active,"crew_size":count,"total_price":price,
-		"intro_text_id":767+count,"busy":busy,"missing_credits":maxi(0,price-int(_state.credits)),
-		"can_accept":not busy and price<=int(_state.credits) and int(retained.hired_total)<=2147483647-count}
+		"intro_text_id":767+count,"busy":busy,"consumed":hired,"missing_credits":maxi(0,price-int(_state.credits)),
+		"can_accept":not hired and not busy and price<=int(_state.credits) and int(retained.hired_total)<=2147483647-count}
 
 func hire_lounge_wingmen(bindings: RefCounted,contact_id: int,equipment: RefCounted) -> bool:
 	var quote:=wingman_preview(bindings,contact_id,equipment)
 	if quote.is_empty():return false
-	if not quote.can_accept:return reject("Another wingman roster is active or this hire exceeds the current credits")
+	if not quote.can_accept:return reject("This captain was hired already, another wingman roster is active or this hire exceeds the current credits")
+	var cache: RefCounted=_lounges.fork()
+	if not cache.consume_wingmen(int(_state.station_id),contact_id):return reject(cache.error)
+	_lounges=cache
 	var hired: int=_state.get("wingmen",{}).get("hired_total",0)
 	_state.wingmen={"hired_total":hired+int(quote.crew_size),"active":quote.contract.duplicate(true)}
 	_state.credits-=int(quote.total_price)

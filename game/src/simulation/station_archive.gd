@@ -261,7 +261,8 @@ func _locations(bindings: RefCounted,cat: RefCounted,library: RefCounted,data: V
 		if row.has("purchased_goods"):
 			if not row.purchased_goods is Array or row.purchased_goods.is_empty() or row.purchased_goods.size()>row.population.contacts.size():return reject("Invalid purchased lounge goods")
 			for id in row.purchased_goods:
-				if not id is int or not (cache.consume_kaamo(row.station_id,id) if not cache.kaamo_contact(row.station_id,id).is_empty() else cache.consume_goods(row.station_id,id)):return reject("The saved purchase lost its merchant or was repeated")
+				var captain: bool=row.population.contacts.any(func(contact):return contact.contact_id==id and contact.get("role")==6)
+				if not id is int or not (cache.consume_kaamo(row.station_id,id) if not cache.kaamo_contact(row.station_id,id).is_empty() else cache.consume_wingmen(row.station_id,id) if captain else cache.consume_goods(row.station_id,id)):return reject("The saved purchase lost its merchant or was repeated")
 		if row.has("used_diplomats"):
 			if not row.used_diplomats is Dictionary or row.used_diplomats.is_empty() or row.used_diplomats.size()>row.population.contacts.size():return reject("Invalid saved diplomat services")
 			for id in row.used_diplomats:

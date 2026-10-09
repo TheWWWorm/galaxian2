@@ -304,6 +304,18 @@ func consume_goods(station_id: int,contact_id: int) -> bool:
 			return true
 	return reject("The merchant lost its retained lounge")
 
+## A hired wingman captain has taken his offer (SpaceLounge::onKeyPress, offer
+## 6: Agent::setOfferAccepted); kept with the lounge's purchases.
+func consume_wingmen(station_id: int,contact_id: int) -> bool:
+	_read={};error=""
+	for entry in _state.locations:
+		if entry.station_id!=station_id:continue
+		if contact_id in entry.get("purchased_goods",[]) or not entry.population.contacts.any(func(contact):return contact.contact_id==contact_id and contact.get("role")==6):return reject("This wingman captain is absent or already hired")
+		if not entry.has("purchased_goods"):entry.purchased_goods=[]
+		entry.purchased_goods.append(contact_id)
+		return true
+	return reject("The wingmen lost their retained lounge")
+
 func location(station_id: int) -> Dictionary:
 	for entry in _state.get("locations",[]):
 		if entry.station_id==station_id:return entry.duplicate(true)

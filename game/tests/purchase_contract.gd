@@ -22,6 +22,7 @@ func verify(args: PackedStringArray) -> void:
 	if station==null:check(false,file.error+archive.error);return
 	var source: Dictionary=station.snapshot();var contracts: RefCounted=station.contract_owner().fork()
 	verify_requested_offer(station,bindings,cat,library)
+	verify_wingman_once(station,bindings,cat,library)
 	if failures:return
 	var quote:=quoted_fixture(bindings,cat,contracts,118)
 	if quote.is_empty():return
@@ -91,6 +92,27 @@ func verify(args: PackedStringArray) -> void:
 	var replaced: RefCounted=replacement.accept(3,ready,true,bindings)
 	check(replaced!=null and replaced.snapshot().cargo==ready.snapshot().cargo and replacement.snapshot().completed_side_missions==accepted.completed_side_missions and replacement.snapshot().credits==accepted.credits,"Replacing Purchase deleted owned goods or paid the discarded job")
 	check(station.snapshot()==source,"Detached Purchase checks changed the earned station")
+
+## Commander (SpaceLounge::onKeyPress, offer 6: Agent::setOfferAccepted): a
+## wingman captain is hired once, also after his crew has gone (#23).
+func verify_wingman_once(station: RefCounted,bindings: RefCounted,cat: RefCounted,library: RefCounted) -> void:
+	var captains: Array=station.snapshot().contracts.population.contacts.filter(func(contact):return contact.role==6)
+	if captains.is_empty():print("This earned station has no wingman captain; Commander checks skipped");return
+	var id:=int(captains[0].contact_id);var branch: RefCounted=station.fork()
+	var funded: RefCounted=branch._contracts.fork();funded._state.credits=10000000;branch._contracts=funded
+	if not branch.inspect_contract_contact(id,bindings):check(false,branch.error);return
+	var quote: Dictionary=branch.wingman_preview(id,bindings)
+	check(quote.get("can_accept",false) and not quote.get("consumed",false),"The earned captain cannot be hired: "+branch.error)
+	if not branch.hire_lounge_wingmen(id,bindings):check(false,branch.error);return
+	var hired: Dictionary=branch.snapshot().contracts.wingmen
+	var gone: RefCounted=branch._contracts.fork();gone._state.wingmen={"hired_total":hired.hired_total,"active":{}};branch._contracts=gone
+	var again: Dictionary=branch.wingman_preview(id,bindings)
+	check(again.get("consumed",false) and not again.get("can_accept",true) and not branch.hire_lounge_wingmen(id,bindings) and branch.snapshot().contracts.wingmen.hired_total==hired.hired_total,"A wingman captain was hired twice")
+	var file=load("res://src/simulation/station_save_file.gd").new();var archive=load("res://src/simulation/station_archive.gd").new()
+	var path:="user://wingmen-hired.gof2save"
+	if not file.save(path,branch,bindings,cat,library):check(false,file.error);return
+	var restored: RefCounted=archive.restore(bindings,cat,library,file.load_document(path,bindings,cat,library))
+	check(restored!=null and restored.wingman_preview(id,bindings).get("consumed",false),"Resume forgot the hired captain: "+archive.error)
 
 func verify_requested_offer(station: RefCounted,bindings: RefCounted,cat: RefCounted,library: RefCounted) -> void:
 	var original: Dictionary=station.snapshot()
