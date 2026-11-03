@@ -48,6 +48,16 @@ func enable_space_fog(library: RefCounted,visuals: RefCounted,bindings: RefCount
 	if bindings.base_content_id!=selection.base_content_id or bindings.binding_id!=selection.binding_id:
 		error="Space clouds belong to another background identity";return false
 	var sky_index:=int(catalogues.tables.systems[int(selection.system_id)].sky_index)
+	var cursor:=int(selection.get("campaign_cursor",-1))
+	# Level::initParticleSystems: in the supernova system (Ginoya before 158) the
+	# clouds are tinted x0.5 and, except at the blast (89), drift away from the sun.
+	if load("res://src/content/valkyrie_world_definitions.gd").supernova_sun_scale(int(selection.system_id),cursor)!=1.0:
+		var station: Dictionary=catalogues.tables.stations[int(selection.station_id)]
+		var placement=load("res://src/simulation/sun_placement.gd").new()
+		var sun: Dictionary=placement.for_station(int(selection.station_id),int(station.get("planet_type",0)))
+		if sun.is_empty():error=placement.error;return false
+		var wind:=Vector3.ZERO if cursor==89 else -Vector3(sun.direction_to_sun)*2000.0
+		return _build_space_fog(library,visuals,bindings,sky_index,int(selection.station_id),wind,0.5)
 	return _build_space_fog(library,visuals,bindings,sky_index,int(selection.station_id))
 
 ## A fixed fog cloud around one world object, in this exterior's cloud material.

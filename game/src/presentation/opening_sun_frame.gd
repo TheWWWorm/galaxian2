@@ -66,7 +66,7 @@ func evaluate(view: Dictionary,viewport_size: Vector2i,previous_intensity: Varia
 	if viewport_size.x<2 or viewport_size.y<2 or viewport_size.x>32767 or viewport_size.y>32767:
 		return failure("Sun frame requires a supported viewport")
 	var sun: Dictionary=_layout.entries[0]
-	var poses:=poses_for_view(sun.origin,sun.scale,view.pose,previous_intensity)
+	var poses:=poses_for_view(sun.origin,sun.scale,view.pose,previous_intensity,_layout.has("sun_swell"))
 	if poses.has("error"):return failure(poses.error)
 	var projection:=TargetProjection.new()
 	if not projection.configure(_perspective,viewport_size):return failure(projection.error)
@@ -86,7 +86,10 @@ func evaluate(view: Dictionary,viewport_size: Vector2i,previous_intensity: Varia
 		"screen_position":projected.screen_position,"camera_position":projected.camera_position,
 		"in_view":projected.in_view,"color":selection.color.duplicate(),"color_type":selection.color_type}
 
-static func poses_for_view(origin: Vector3,base_scale: float,camera: Transform3D,previous_intensity: Variant) -> Dictionary:
+## `supernova`: the original's StarSystem::render in the supernova system
+## (Ginoya before 158) faces the sun with world X as up and does not swell it;
+## the streak keeps the swollen camera-up pose.
+static func poses_for_view(origin: Vector3,base_scale: float,camera: Transform3D,previous_intensity: Variant,supernova:=false) -> Dictionary:
 	if not origin.is_finite() or not Geometry.valid_pose(camera) or not is_finite(base_scale) or base_scale<=0:
 		return {"error":"Invalid source sun pose"}
 	if (not previous_intensity is float and not previous_intensity is int) or not is_finite(previous_intensity) or previous_intensity>80:
@@ -105,6 +108,9 @@ static func poses_for_view(origin: Vector3,base_scale: float,camera: Transform3D
 	var extra:=Vector3(single(single(single(base+delta)+1.0)*delta),
 		single(base/single(single(single(1.0-delta)*6.0)+6.0)),base)
 	var secondary:=Basis(Vectors.scaled(primary.x,extra.x),Vectors.scaled(primary.y,extra.y),Vectors.scaled(primary.z,extra.z))
+	if supernova:
+		var fixed_right:=Vectors.normalized(Vectors.cross(Vector3.RIGHT,backward))
+		primary=Basis(Vectors.scaled(fixed_right,base),Vectors.scaled(Vectors.cross(backward,fixed_right),base),Vectors.scaled(backward,base))
 	if not position.is_finite() or not primary.is_finite() or not secondary.is_finite():return {"error":"Sun poses exceed source precision"}
 	return {"primary":Transform3D(primary,position),"secondary":Transform3D(secondary,position),"delta":delta}
 
