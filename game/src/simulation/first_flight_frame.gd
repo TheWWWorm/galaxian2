@@ -1256,6 +1256,11 @@ func _advance_tractor(delta_ms: int) -> bool:
 	# Preserve this one player-phase sample for presentation and sound.
 	_tractor_frame=operation.frame
 	if _tractor_frame.phase=="pickup" and _equipment!=null and not _equipment.retain_flight_cargo(_cargo.snapshot()):return reject(_equipment.error)
+	# Hud::catchCargo: green "Nt <item>", or "Cargo hold is full" (notice 27) in red.
+	# ponytail: special mission cargo (text 537 with #N/#Q) shows nothing yet.
+	for event in _tractor_frame.events if _notices!=null else []:
+		if event.kind!="cargo_notification" or event.special or not (event.rejected or _notices._item_names.has(int(event.item_id))):continue
+		if not (_notices.enqueue(27) if event.rejected else _notices.enqueue_scanned_cargo([event],Notices.CAUGHT_RGB)):return reject(_notices.error)
 	return true
 
 func _advance_scenery_hud(delta_ms: int,enabled: bool,camera: Transform3D,aim: Dictionary) -> bool:
@@ -1462,7 +1467,7 @@ func _advance_gas(delta_ms: int,turret_active: bool) -> bool:
 	for item in result.picked:taken.append({"item_id":int(item),"quantity":int(result.picked[item])})
 	# The HUD shows the caught plasma like any caught cargo ("1t <plasma>").
 	if not taken.is_empty() and _notices!=null:
-		if not _notices.enqueue_scanned_cargo(taken):return reject(_notices.error)
+		if not _notices.enqueue_scanned_cargo(taken,Notices.CAUGHT_RGB):return reject(_notices.error)
 	# A spark caught with a full hold is lost: "Cargo hold is full." (notice 27).
 	if int(result.get("lost",0))>0 and taken.is_empty() and _notices!=null:
 		if not _notices.enqueue(27):return reject(_notices.error)

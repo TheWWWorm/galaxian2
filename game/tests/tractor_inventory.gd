@@ -302,6 +302,10 @@ func verify_scenery_hud(bindings: RefCounted,cat: RefCounted,library: RefCounted
 	check(frame._targeting.snapshot().recovery_object_index==-1 and frame._tractor.snapshot().request_actor_id==index,"An active request was overwritten by a second scenery acquisition")
 	if not frame._advance_tractor(100) or not frame._advance_tractor(0):check(false,frame.error);return
 	check(frame._tractor_frame.phase=="pickup" and frame._tractor_frame.transfer.accepted_quantity==3 and frame._equipment.snapshot().cargo==frame._cargo.snapshot(),"Connected scenery HUD/player phases failed to retain the actual accepted cargo")
+	# Hud::catchCargo shows the caught cargo as green "3t <item>".
+	var pending: Array=frame._notices.snapshot().get("pending",[]) if frame._notices!=null else []
+	var caught: Dictionary=pending.back() if not pending.is_empty() else {}
+	check(caught.get("text")=="3t "+library.strings[int(bindings.station_equipment.item_text_offset)+int(frame._tractor_frame.transfer.item_id)] and caught.get("rgb")==[0,237,0],"The pickup lost its green caught-cargo notice: "+str(caught))
 	check(frame._encounter.combat_snapshot().actors==encounter.combat_snapshot().actors and scenery.snapshot()==initial,"Scenery HUD recovery changed the NPC population or the retained parent field")
 
 func verify_hud_recovery(bindings: RefCounted,cat: RefCounted,library: RefCounted,encounter: RefCounted,selected: int,construction: RefCounted,career: RefCounted,station: RefCounted) -> void:

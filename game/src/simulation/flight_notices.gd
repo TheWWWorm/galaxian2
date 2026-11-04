@@ -181,7 +181,10 @@ func enqueue_scanner(events: Array,encounter: RefCounted) -> bool:
 			if not enqueue_scanned_cargo(entries):return false
 	return true
 
-func enqueue_scanned_cargo(entries: Array) -> bool:
+## Caught cargo uses the same "Nt <item>" text in green (Hud::catchCargo type 2).
+const CAUGHT_RGB:=[0,237,0]
+
+func enqueue_scanned_cargo(entries: Array,rgb:=[255,255,255]) -> bool:
 	error=""
 	if _rules.is_empty():return reject("Configure flight notices before inspecting cargo")
 	if entries.is_empty():return enqueue(22)
@@ -193,7 +196,7 @@ func enqueue_scanned_cargo(entries: Array) -> bool:
 	var item: Dictionary=_item_names[row.item_id]
 	var message:={"source_id":-1,"item_id":row.item_id,"quantity":row.quantity,
 		"text_ids":[item.text_id],"display_text_ids":[item.text_id],
-		"text":"%dt %s"%[row.quantity,item.name],"rgb":[255,255,255]}
+		"text":"%dt %s"%[row.quantity,item.name],"rgb":rgb.duplicate()}
 	if _pending.size()<int(_rules.pending_capacity):_pending.append(message)
 	return true
 
