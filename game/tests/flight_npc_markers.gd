@@ -45,6 +45,16 @@ func verify(content: String, pack: String, pixels: String) -> void:
 	check(not hud.present(bad) and hud._sample==before,"Foreign sample replaced marker art")
 	bad=sample.duplicate(true);bad.selected_target.name_text_id=library.strings.size()
 	check(not hud.present(bad) and hud._sample==before and hud.information_snapshot()==information,"Invalid selected identity replaced the accepted target display")
+	var junk:=sample.duplicate(true);junk.selected_target.actor_kind=-1
+	check(hud.present(junk) and hud.information_snapshot().is_empty(),"A selected Junk container halted or drew a ship panel: "+hud.error)
+	for kind in [11,-2]:
+		bad=sample.duplicate(true);bad.selected_target.actor_kind=kind
+		check(not hud.present(bad),"Selected kind %d was accepted"%kind)
+	hud.present(sample)
+	var scanner=preload("res://src/simulation/opening_npc_scanner.gd")
+	for row in [["debris",0,true,false],["debris",4,true,false],["debris",4,false,false],["ship",0,true,true]]:
+		var actor:={"population_group":row[0],"actor_mode":row[1],"active":row[2]}
+		check(scanner.scannable(actor)==row[3],"Scanner eligibility wrong for %s"%str(row))
 	bad=sample.duplicate(true);bad.animation_frame=25
 	check(not hud.present(bad) and hud._sample==before,"Out-of-range animation replaced marker art")
 	check(hud.present({}) and not hud.visible,"Missing capability retained markers")

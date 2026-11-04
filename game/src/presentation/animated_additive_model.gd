@@ -1,6 +1,7 @@
 extends RefCounted
 ## Shared material and surface adapter for source type-2 animated weapon models.
 const ShaderSource=preload("res://src/presentation/effect_additive.gdshader")
+const AlphaSource=preload("res://src/presentation/effect_alpha.gdshader")
 const Sampler=preload("res://src/presentation/scenery_animation.gd")
 const Colors=preload("res://src/presentation/effect_color.gd")
 const Tracks=preload("res://src/content/animation_tracks.gd")
@@ -17,17 +18,18 @@ func _init() -> void:
 func use_two_sided() -> void:
 	two_sided=Shader.new();two_sided.code=ShaderSource.code.replace("cull_back","cull_disabled")
 
-func prepare_model(model: Node3D) -> bool:
+func prepare_model(model: Node3D,alpha:=false) -> bool:
 	error=""
 	for i in model.surfaces.size():
 		var surface: Dictionary=model.surfaces[i]
 		if not supported_surface(surface):
 			error="Unsupported additive model vertex or UV animation layout";return false
-		var material:=ShaderMaterial.new();material.shader=ShaderSource
+		var material:=ShaderMaterial.new();material.shader=AlphaSource if alpha else ShaderSource
 		material.set_shader_parameter("diffuse_texture",model.materials[i].get_shader_parameter("diffuse_texture"))
 		material.set_shader_parameter("vertex_colors",not surface.colors.is_empty())
 		model.materials[i]=material;model.instances[i].material_override=material
 		model.instances[i].top_level=true
+	model.set_meta("alpha_blend",alpha)
 	return true
 
 static func supported_surface(surface: Dictionary) -> bool:
@@ -60,6 +62,6 @@ func apply_surfaces(model: Node3D, surfaces: Array, darken: float) -> void:
 	for i in model.instances.size():
 		var row: Dictionary=surfaces[i]
 		model.instances[i].transform=row.pose
-		model.materials[i].shader=two_sided if two_sided!=null else (reflected if row.pose.basis.determinant()<0 else ShaderSource)
+		model.materials[i].shader=AlphaSource if model.get_meta("alpha_blend",false) else two_sided if two_sided!=null else (reflected if row.pose.basis.determinant()<0 else ShaderSource)
 		model.materials[i].set_shader_parameter("effect_tint",row.tint)
 		model.materials[i].set_shader_parameter("darken_value",darken)

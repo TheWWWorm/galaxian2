@@ -87,7 +87,8 @@ func present(sample: Dictionary,suppress_information:=false) -> bool:
 	var information:={}
 	var selected: Variant=sample.get("selected_target",{})
 	if not selected is Dictionary:return fail("Invalid selected NPC information")
-	if sample.visible and not suppress_information and not selected.is_empty():
+	# Junk (kind -1) has no scanner panel; the tractor and the pickup message handle its crate.
+	if sample.visible and not suppress_information and not selected.is_empty() and selected.get("actor_kind")!=-1:
 		if not Numbers.integer(selected.get("actor_kind"),0,10) or not Numbers.integer(selected.get("name_text_id"),-1,_strings.size()-1) or not Numbers.integer(selected.get("hull_percent"),0,100):return fail("Selected NPC identity or hull is invalid")
 		var named: bool=selected.name_text_id>=0
 		var id: int=selected.name_text_id if named else 395+int(selected.actor_kind)
@@ -135,6 +136,12 @@ func _draw() -> void:
 					draw_string(_font,position,text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size,Color.WHITE)
 	if _sample.animation_frame>=0:_centered(_frames[_sample.animation_frame],Vector2(_sample.aim_pixels),HudStyle.art(mobile_layout))
 	_draw_information(HudStyle.art(mobile_layout))
+
+## The target panel's rect in this control, or an empty rect without a target.
+func information_rect() -> Rect2:
+	if _information.is_empty() or not _information_art.has(1220):return Rect2()
+	var extent: Vector2=_information_art[1220].get_size()*HudStyle.art(mobile_layout)
+	return Rect2(Vector2((size.x-extent.x)*0.5,3.0*(1.0 if mobile_layout else 0.5)),extent)
 
 func _draw_information(art_scale: float) -> void:
 	if _information.is_empty():return

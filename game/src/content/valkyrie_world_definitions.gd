@@ -90,7 +90,10 @@ const SUPERNOVA:={"system_id":27,"until_cursor":157,"intro_cursor":89,"intro_sky
 	# Sun size factor: [up to cursor, scale] (it swells at 106).
 	"sun_scales":[[105,0.9918],[157,1.3733]],
 	# Flares: [up to cursor, animation speed]; they start 1 s into their loop.
-	"overlay_speeds":[[106,1.0],[157,1.5]],"overlay_start_ms":1000}
+	"overlay_speeds":[[106,1.0],[157,1.5]],"overlay_start_ms":1000,
+	# StarSystem's streak mesh texture in the supernova system (sn_sun_011): the
+	# glare sprite and the streak.
+	"glare_texture":11742}
 
 ## The Naneroh implosion bomb (105, LevelScript stages 11-13), times from the
 ## launch 2.5 s after "Bombs away!": the bomb (model 14247, sound 14) flies on

@@ -153,6 +153,9 @@ func verify_mission_readout(hud: Control,flight: Dictionary) -> void:
 	hud.set_active(true)
 	var invalid:=sample.duplicate(true);invalid.mission_readout.player=-1
 	check(not hud.present(invalid) and hud._cargo_text.text=="2 : 3","An invalid contest score replaced the accepted display")
+	sample.mission_readout={"kind":"score","score":4106}
+	check(hud.present(sample) and hud._cargo_text.text=="0004106" and hud.counter_rect().has_area(),"The kill score did not take the counter plate")
+	check(hud.counter_rect().position.x>hud.size.x*0.5,"The counter plate left the top-right corner")
 	check(hud.present(flight) and hud._cargo_text.text=="1 / 25t","Retiring the readout did not restore cargo")
 
 ## Hit arcs, the shield hit badge and the arrival orbit information.

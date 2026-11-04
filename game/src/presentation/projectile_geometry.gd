@@ -46,7 +46,7 @@ func build(owner: RefCounted, library: RefCounted, visuals: RefCounted, bindings
 			var model: Node3D=resources.instantiate(row.resource)
 			if model==null:resources.clear();return reject(resources.error)
 			add_child(model);slots.append(model);model.visible=false
-			if not _surface.prepare_model(model):resources.clear();return reject(_surface.error)
+			if not _surface.prepare_model(model,int(bindings.material_for_mesh(row.resource,"high").get("render_type"))==1):resources.clear();return reject(_surface.error)
 		guns.append({"key":row.key,"slots":slots})
 		if row.has("thermal"):
 			var trail:=Trail.new();add_child(trail)

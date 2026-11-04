@@ -70,7 +70,7 @@ func play(args: PackedStringArray,directory: String) -> void:
 	# Fight like a player, then let the clock run out.
 	app.set_process(false)
 	var pilot:=Pilot.new();var now_us:=Time.get_ticks_usec();var voices:=[];var combo_seen:=false;var respawned:=false
-	var dead:={};var finished:={};var combo_kills:=0;var before: Dictionary={}
+	var dead:={};var finished:={};var combo_kills:=0;var before: Dictionary={};var targeted:=false
 	for tick in 2000:
 		var state: Dictionary=app.session.snapshot()
 		var score: Dictionary=state.get("kill_score",{})
@@ -91,6 +91,17 @@ func play(args: PackedStringArray,directory: String) -> void:
 		voices.append_array(app.session.flight_owner().snapshot().get("kill_score_voice",[]))
 		app.present_session()
 		var shown: Dictionary=app.session.snapshot().get("kill_score",{})
+		# The score is in the top-right counter plate, clear of the target panel (#38).
+		check(app.flight_vitals._cargo_text.text=="%07d"%int(shown.get("score",-1)),"The kill score is not in the counter plate")
+		var markers: Control=app.session.scene.npc_markers
+		var panel: Rect2=markers.information_rect()
+		if panel.has_area() and app._challenge_hud!=null:
+			targeted=true
+			# The panel is drawn in the flight viewport, the plate in the host UI: compare screen fractions.
+			var view: Vector2=markers.get_viewport().get_visible_rect().size;var host: Vector2=app.get_viewport().get_visible_rect().size
+			var target:=Rect2((panel.position+markers.global_position)/view,panel.size/view)
+			var plate: Rect2=app.flight_vitals.counter_rect();var rows: Rect2=app._challenge_hud._column.get_global_rect()
+			check(plate.has_area() and not Rect2(plate.position/host,plate.size/host).intersects(target) and not Rect2(rows.position/host,rows.size/host).intersects(target),"The kill score overlaps the target panel")
 		# A kill while the combo clock still runs earns a combo voice line.
 		if not before.is_empty() and int(shown.kills)>int(before.kills) and int(before.combo_clock_ms)>0:combo_kills+=1
 		before=shown
@@ -104,6 +115,7 @@ func play(args: PackedStringArray,directory: String) -> void:
 	check(int(finished.get("kills",0))>=2 and int(finished.get("score",0))>=2000,"The run scored too few kills")
 	check(voices.size()>=combo_kills and voices.all(func(id):return int(id)>=2282 and int(id)<=2291),"Combo kills %d but voice lines %s"%[combo_kills,str(voices)])
 	check(respawned,"No destroyed Void came back")
+	check(targeted,"No target panel appeared to test the score layout against")
 	# The host reports the end; the frontend shows the result window.
 	for frame in 4:await process_frame
 	var score:=int(finished.get("score",0))

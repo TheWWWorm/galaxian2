@@ -90,6 +90,33 @@ func run() -> void:
 			check(moved_count>first.positions.size()/2,"Void clouds did not drift on their fixed world axis")
 			check(sky.apply_view({"pose":Transform3D(Basis(Vector3.UP,0.7),camera.position)},{},500) and sky.space_fog.snapshot()==flowing,"Camera rotation advanced or redirected Void clouds")
 			check(not sky.apply_view({"pose":camera.global_transform},{},499) and sky.space_fog.snapshot()==flowing,"A rejected Void time damaged the accepted field")
+	# Ginoya (supernova system, no cursor = burning): clouds dimmed x0.5 and drifting away from the sun.
+	var ginoya:=-1
+	for index in catalogues.tables.stations.size():
+		if int(catalogues.tables.stations[index].get("system_id",-1))==27:ginoya=index;break
+	if ginoya>=0:
+		sky.clear()
+		check(sky.build_station(library,visuals,bindings,catalogues,ginoya) and sky.enable_space_fog(library,visuals,bindings,catalogues),"Ginoya clouds: "+sky.error)
+		if sky.space_fog!=null:
+			var nova: Dictionary=sky.space_fog.snapshot()
+			var sun: Dictionary=load("res://src/simulation/sun_placement.gd").new().for_station(ginoya,int(catalogues.tables.stations[ginoya].get("planet_type",0)))
+			var expected:=Field.new();expected.configure(int(catalogues.tables.systems[27].sky_index),0,Vector3.ZERO,0.5)
+			check(nova.velocity.is_equal_approx(-Vector3(sun.direction_to_sun)*2000.0),"Ginoya clouds do not drift away from the sun")
+			check(nova.tint==expected.tint,"Ginoya clouds kept the ordinary x0.6 tint")
+		# The nova flares (step 130): mipmapped, and scrolling so the bands flow out of the sun (#40, #41).
+		var lounge:=-1
+		for index in range(ginoya,catalogues.tables.stations.size()):
+			if int(catalogues.tables.stations[index].get("system_id",-1))==27 and sky.build_lounge(library,visuals,bindings,catalogues,index,130):lounge=index;break
+		check(lounge>=0 and sky._flares.size()==2,"No Ginoya lounge sky with nova flares: "+sky.error)
+		if lounge>=0 and sky._flares.size()==2:
+			var material: ShaderMaterial=sky._flares[0].model.materials[0]
+			var texture: Texture2D=material.get_shader_parameter("diffuse_texture")
+			check(texture!=null and texture.get_image().has_mipmaps(),"Nova flares lost their mipmaps")
+			var offsets:=[]
+			for elapsed in [20000,20500]:
+				check(sky.apply_view({"pose":camera.global_transform},{},elapsed),sky.error)
+				offsets.append(Vector2(material.get_shader_parameter("uv_offset")).x)
+			check(offsets[1]<offsets[0],"Nova flares scroll into the sun")
 	viewport.free()
 	print("Space clouds: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
 

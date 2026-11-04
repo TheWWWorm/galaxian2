@@ -191,7 +191,7 @@ func _advance(combat: Dictionary, player: Transform3D, camera: Transform3D, aim:
 			var pixel: Vector2i=projected.pixels
 			var inside: bool=projected.in_view and pixel.x>lower_pixels.x and pixel.x<upper_pixels.x and pixel.y>lower_pixels.y and pixel.y<upper_pixels.y
 			if inside and offset.length()<Beams.AIM_DISTANCE:weapon_targets.append(int(actor.actor_id))
-			if _equipment<0:continue
+			if _equipment<0 or not scannable(actor):continue
 			markers.append({"actor_id":actor.actor_id,"pixels":pixel,"near":near,"selected":actor.actor_id==selected,
 				"hostile":actor.hostile,"hull_percent":int(actor.hull_percent),"in_scan_window":inside,"in_view":projected.in_view,"position":actor.pose.origin})
 			if found<0 and inside:found=int(actor.actor_id)
@@ -235,6 +235,10 @@ func valid_mode(actor_id: int,mode: Variant) -> bool:
 
 static func selectable(actor: Dictionary) -> bool:
 	return actor.active and not selection_retired(actor)
+
+## Junk is a weapon target only; its dropped crate is locked by the tractor, never the scanner.
+static func scannable(actor: Dictionary) -> bool:
+	return selectable(actor) and actor.get("population_group")!="debris"
 
 static func selection_retired(actor: Dictionary) -> bool:
 	# Junk removes its body immediately. A dropped container keeps the same
