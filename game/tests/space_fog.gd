@@ -103,6 +103,20 @@ func run() -> void:
 			var expected:=Field.new();expected.configure(int(catalogues.tables.systems[27].sky_index),0,Vector3.ZERO,0.5)
 			check(nova.velocity.is_equal_approx(-Vector3(sun.direction_to_sun)*2000.0),"Ginoya clouds do not drift away from the sun")
 			check(nova.tint==expected.tint,"Ginoya clouds kept the ordinary x0.6 tint")
+		# The nova flares (step 130): mipmapped, and scrolling so the bands flow out of the sun (#40, #41).
+		var lounge:=-1
+		for index in range(ginoya,catalogues.tables.stations.size()):
+			if int(catalogues.tables.stations[index].get("system_id",-1))==27 and sky.build_lounge(library,visuals,bindings,catalogues,index,130):lounge=index;break
+		check(lounge>=0 and sky._flares.size()==2,"No Ginoya lounge sky with nova flares: "+sky.error)
+		if lounge>=0 and sky._flares.size()==2:
+			var material: ShaderMaterial=sky._flares[0].model.materials[0]
+			var texture: Texture2D=material.get_shader_parameter("diffuse_texture")
+			check(texture!=null and texture.get_image().has_mipmaps(),"Nova flares lost their mipmaps")
+			var offsets:=[]
+			for elapsed in [20000,20500]:
+				check(sky.apply_view({"pose":camera.global_transform},{},elapsed),sky.error)
+				offsets.append(Vector2(material.get_shader_parameter("uv_offset")).x)
+			check(offsets[1]<offsets[0],"Nova flares scroll into the sun")
 	viewport.free()
 	print("Space clouds: %d checks; %d failures"%[checks,failures]);quit(1 if failures else 0)
 

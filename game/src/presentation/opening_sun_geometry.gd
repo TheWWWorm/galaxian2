@@ -1,6 +1,6 @@
 extends Node3D
-## Two original plane draws plus the following screen composition. Preparation
-## is pure; committing a successful frame is the only presentation mutation.
+## Two original plane draws (three in the supernova system) plus the following
+## screen composition. Preparation is pure; committing a successful frame is the only presentation mutation.
 const Frame=preload("res://src/presentation/opening_sun_frame.gd")
 const FlareLayout=preload("res://src/presentation/sun_flare_layout.gd")
 const FlareCanvas=preload("res://src/presentation/sun_flare_canvas.gd")
@@ -14,6 +14,8 @@ var selection:={}
 var frame:={}
 var primary: Node3D
 var secondary: Node3D
+## Supernova system only (sn_sun_011 glare sprite).
+var glare: Node3D
 var flares: Control
 var _owner: RefCounted
 var _image_sizes: Array=[]
@@ -52,12 +54,25 @@ func _build_models(library: RefCounted,visuals: RefCounted,bindings: RefCounted)
 	primary=Model.new();primary.name="SunBackground";add_child(primary)
 	primary.build(decoded,image,null,2)
 	secondary=Model.new();secondary.name="SunWorldFlare";add_child(secondary)
-	secondary.copy_from(primary)
+	var glare_image: Image=null
+	if chosen.has("glare_texture_path"):
+		glare_image=visuals.load_image(chosen.glare_texture_path)
+		if glare_image==null:return reject(visuals.error)
+		secondary.build(decoded,glare_image,null,2)
+	else:secondary.copy_from(primary)
 	for material in primary.materials:material.shader=SHADER;material.render_priority=-126
 	# This tail draw retains world depth testing. It must not shine through hulls.
 	for material in secondary.materials:material.render_priority=2
-	for model in [primary,secondary]:
-		model.set_meta("source_resource_id",chosen.mesh_id);model.set_meta("source_texture_id",chosen.texture_id)
+	var models:=[primary,secondary]
+	if glare_image!=null:
+		# Supernova system: the glare is drawn with the background, after the sun.
+		glare=Model.new();glare.name="SunGlare";add_child(glare)
+		glare.build(decoded,glare_image,null,2)
+		for material in glare.materials:material.shader=SHADER;material.render_priority=-125
+		models.append(glare)
+	for model in models:
+		var texture_id: int=chosen.glare_texture_id if model!=primary and glare_image!=null else chosen.texture_id
+		model.set_meta("source_resource_id",chosen.mesh_id);model.set_meta("source_texture_id",texture_id)
 		for instance in model.instances:
 			instance.custom_aabb=AABB(Vector3.ONE*-1e9,Vector3.ONE*2e9)
 			instance.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -101,6 +116,7 @@ func commit_frame(prepared: Dictionary) -> void:
 	# The zero-width source strip draws no pixels. Hide it to avoid submitting a
 	# singular transform to Godot's normal-matrix calculation.
 	secondary.visible=prepared.delta>0
+	if glare!=null:glare.global_transform=prepared.glare_pose
 	flares.size=Vector2(prepared.viewport_size);flares.apply_frame(prepared.composition,prepared.color)
 	frame=prepared.duplicate(true)
 
@@ -117,7 +133,7 @@ func restore_camera() -> void:
 
 func clear() -> void:
 	for child in get_children():child.free()
-	selection.clear();frame.clear();_image_sizes.clear();_owner=null;primary=null;secondary=null;flares=null;error=""
+	selection.clear();frame.clear();_image_sizes.clear();_owner=null;primary=null;secondary=null;glare=null;flares=null;error=""
 func reject(message: String) -> bool:
 	clear();error=message;return false
 func failure(message: String) -> Dictionary:

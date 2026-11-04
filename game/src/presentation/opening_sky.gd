@@ -217,6 +217,10 @@ func _build_layers(library: RefCounted,visuals: RefCounted,bindings: RefCounted,
 		if int(decoded.keyframes)!=0 and not animated: return reject("Animated opening sky is not supported")
 		var image: Image = visuals.load_image(texture_path)
 		if image==null: return reject(visuals.error)
+		if animated:
+			# The flare bands converge on the sun at the sphere's pole; without
+			# mipmaps they alias into sharp spikes there instead of a soft glow.
+			image=image.duplicate();image.generate_mipmaps()
 		var model := Model.new()
 		model.build(decoded,image,null,descriptor.mode,cache)
 		model.name="Stars" if descriptor.mode==0 else ("Nebula" if layers.size()==1 else "ArrivalNebula")
@@ -300,8 +304,12 @@ func commit_view(prepared: Dictionary) -> void:
 	for fog in static_fogs:fog.visible=Quality.effects_enabled()
 	var World=load("res://src/content/valkyrie_world_definitions.gd")
 	for flare in _flares:
-		# Looping animation (assumed to loop, as the sun's).
-		flare.model.set_source_time(fmod(float(World.SUPERNOVA.overlay_start_ms)+float(prepared.get("elapsed_ms",0))*float(flare.speed),float(flare.length)))
+		# Looping animation (assumed to loop, as the sun's), played backward:
+		# footage of the original shows the bands flowing out of the sun, and
+		# the U scroll moves them toward the sun's pole when played forward.
+		# Only the U offset is animated (whole periods, so the loop is seamless).
+		var forward:=fmod(float(World.SUPERNOVA.overlay_start_ms)+float(prepared.get("elapsed_ms",0))*float(flare.speed),float(flare.length))
+		flare.model.set_source_time(float(flare.length)+float(World.SUPERNOVA.overlay_start_ms)-forward)
 	if foreground_particles!=null:
 		foreground_particles.commit_view(prepared.particles);foreground_particles.visible=Quality.effects_enabled()
 
