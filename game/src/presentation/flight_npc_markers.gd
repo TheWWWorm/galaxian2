@@ -137,6 +137,12 @@ func _draw() -> void:
 	if _sample.animation_frame>=0:_centered(_frames[_sample.animation_frame],Vector2(_sample.aim_pixels),HudStyle.art(mobile_layout))
 	_draw_information(HudStyle.art(mobile_layout))
 
+## The target panel's rect in this control, or an empty rect without a target.
+func information_rect() -> Rect2:
+	if _information.is_empty() or not _information_art.has(1220):return Rect2()
+	var extent: Vector2=_information_art[1220].get_size()*HudStyle.art(mobile_layout)
+	return Rect2(Vector2((size.x-extent.x)*0.5,3.0*(1.0 if mobile_layout else 0.5)),extent)
+
 func _draw_information(art_scale: float) -> void:
 	if _information.is_empty():return
 	var panel: Texture2D=_information_art[1220]

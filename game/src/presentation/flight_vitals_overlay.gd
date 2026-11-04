@@ -224,6 +224,9 @@ static func _mission_text(readout: Variant) -> Variant:
 		"contest":
 			if not readout.get("player") is int or not readout.get("other") is int or readout.player<0 or readout.other<0:return null
 			return "%d : %d"%[readout.player,readout.other]
+		"score":
+			if not readout.get("score") is int or readout.score<0:return null
+			return "%07d"%readout.score
 	return null
 
 func _process(_delta: float) -> void:
@@ -334,6 +337,10 @@ func clear() -> void:
 	if not _sprites.is_empty():_shield_badge.texture=_sprites.shield_badge
 	_throttle_frame.hide();_throttle_text.hide()
 	for label in [_hull_text,_armor_text,_shield_text]:label.text=""
+
+## The top-right counter plate (cargo, timer, contest or score), global coordinates.
+func counter_rect() -> Rect2:
+	return _cargo_frame.get_global_rect() if visible and _cargo_frame.visible else Rect2()
 
 func top_inset() -> float:
 	var bottom: Control=_instability_frame if _instability_visible else (_gamma_badge if _gamma_visible else _hull_badge)

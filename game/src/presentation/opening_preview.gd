@@ -2231,6 +2231,6 @@ func _present_challenge(readout: Dictionary) -> void:
 	if _challenge_hud==null:
 		_challenge_hud=preload("res://src/presentation/kill_score_overlay.gd").new();flight_vitals.get_parent().add_child(_challenge_hud)
 		_challenge_hud.configure(flight_vitals.theme.default_font,int(readout.get("window_ms",7500)),_mobile_layout)
-	_challenge_hud.present(readout)
+	_challenge_hud.present(readout,flight_vitals.counter_rect())
 	if readout.get("finished",false) and not _challenge_done:
 		_challenge_done=true;hold_paused(true);challenge_finished.emit(int(readout.score))

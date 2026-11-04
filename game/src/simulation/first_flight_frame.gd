@@ -3363,6 +3363,9 @@ func snapshot(shared_scenery:=false) -> Dictionary:
 		if not _gas.is_empty():state.gas_clouds=Gas.snapshot_for_view(_gas)
 		var left:=_countdown_end-int(_briefing.read_state().world_elapsed_ms)
 		if _countdown_end>=0 and left>0 and state.mission_readout.is_empty():state.mission_readout={"kind":"countdown","remaining_ms":left}
+		# Kill score: in the top-right counter plate, left of pause, where the
+		# original shows the freelance Challenge count (clear of the target panel).
+		if _kill_score!=null and state.mission_readout.is_empty():state.mission_readout={"kind":"score","score":int(state.kill_score.score)}
 		state.station_return_supported=not _return_rules.is_empty()
 	if _entry.campaign_cursor in [10,11,12,26,36] or _entry.has("dekato_context") or _objective is ContractObjective:state.station_response_flags=station_response_flags()
 	if _station!=null:
